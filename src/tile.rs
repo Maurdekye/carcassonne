@@ -1,4 +1,4 @@
-mod tile_definitions;
+pub mod tile_definitions;
 
 use ggez::{
     glam::{vec2, Vec2},
@@ -9,7 +9,32 @@ use tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD};
 
 use crate::util::refit_to_rect;
 
-#[derive(Clone)]
+#[derive(Clone, Copy)]
+pub enum Orientation {
+    North,
+    East,
+    South,
+    West,
+}
+
+impl Orientation {
+    fn opposite(self) -> Orientation {
+        use Orientation::*;
+        match self {
+            North => South,
+            East => West,
+            South => North,
+            West => East,
+        }
+    }
+}
+
+pub struct MountingPair {
+    from_segment: usize,
+    to_segment: usize,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 enum SegmentType {
     Field,
     City,
@@ -35,6 +60,34 @@ enum Mount {
     Full,
 }
 
+enum MountAlignment {
+    Disjoint,
+    Misaligned,
+    Aligned,
+}
+
+impl Mount {
+    fn compare(&self, rhs: &Mount) -> MountAlignment {
+        use Mount::*;
+        use MountAlignment::*;
+        match (self, rhs) {
+            (Beginning, End) => Aligned,
+            (Middle, Middle) => Aligned,
+            (End, Beginning) => Aligned,
+            (Full, Full) => Aligned,
+            (Beginning, BegginingAndEnd) => Aligned,
+            (Middle, BegginingAndEnd) => Disjoint,
+            (End, BegginingAndEnd) => Aligned,
+            (BegginingAndEnd, Beginning) => Aligned,
+            (BegginingAndEnd, Middle) => Disjoint,
+            (BegginingAndEnd, End) => Aligned,
+            (_, Full) => Misaligned,
+            (Full, _) => Misaligned,
+            _ => Disjoint,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Mounts {
     north: Option<Mount>,
@@ -56,6 +109,16 @@ impl Mounts {
             east: north,
             south: east,
             west: south,
+        }
+    }
+
+    fn by_orientation(&self, orientation: Orientation) -> &Option<Mount> {
+        use Orientation::*;
+        match orientation {
+            North => &self.north,
+            East => &self.east,
+            South => &self.south,
+            West => &self.west,
         }
     }
 }
@@ -97,11 +160,44 @@ impl Tile {
     pub fn rotate(&mut self) {
         for vert in &mut self.verts {
             *vert = vec2(1.0 - vert.y, vert.x);
+            // *vert = vec2(vert.y, 1.0 - vert.x);
         }
-        
+
         for segment in &mut self.segments {
             segment.mounts = segment.mounts.clone().rotate();
         }
+    }
+
+    pub fn validate_mounting(
+        &self,
+        adjacent: &Tile,
+        location: Orientation,
+    ) -> Option<Vec<MountingPair>> {
+        let mut pairs = Vec::new();
+        for (i, segment) in self.segments.iter().enumerate() {
+            if let Some(mount) = &segment.mounts.by_orientation(location) {
+                for (j, adj_segment) in adjacent.segments.iter().enumerate() {
+                    if let Some(adj_mount) = &adj_segment.mounts.by_orientation(location.opposite())
+                    {
+                        match mount.compare(adj_mount) {
+                            MountAlignment::Disjoint => {}
+                            MountAlignment::Misaligned => return None,
+                            MountAlignment::Aligned => {
+                                if segment.stype == adj_segment.stype {
+                                    pairs.push(MountingPair {
+                                        from_segment: i,
+                                        to_segment: j,
+                                    });
+                                } else {
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some(pairs)
     }
 }
 
