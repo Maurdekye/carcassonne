@@ -1,8 +1,11 @@
+mod tile_definitions;
+
 use ggez::{
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     Context, GameError,
 };
+use tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD};
 
 use crate::util::refit_to_rect;
 
@@ -33,9 +36,6 @@ enum Mount {
 }
 
 #[derive(Clone)]
-struct Poly(Vec<usize>);
-
-#[derive(Clone)]
 struct Mounts {
     north: Option<Mount>,
     east: Option<Mount>,
@@ -43,87 +43,75 @@ struct Mounts {
     west: Option<Mount>,
 }
 
+impl Mounts {
+    fn rotate(self) -> Mounts {
+        let Mounts {
+            north,
+            east,
+            south,
+            west,
+        } = self;
+        Mounts {
+            north: west,
+            east: north,
+            south: east,
+            west: south,
+        }
+    }
+}
+
 #[derive(Clone)]
 struct Segment {
     stype: SegmentType,
-    poly_ids: Vec<usize>,
+    poly: Vec<usize>,
     mounts: Mounts,
 }
 
 #[derive(Clone)]
 pub struct Tile {
     verts: Vec<Vec2>,
-    polys: Vec<Poly>,
     segments: Vec<Segment>,
 }
 
 impl Tile {
-    pub fn render(&self, ctx: &Context, canvas: &mut Canvas, bounds: Rect) -> Result<(), GameError> {
+    pub fn render(
+        &self,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        bounds: Rect,
+    ) -> Result<(), GameError> {
         for segment in &self.segments {
-            for pid in &segment.poly_ids {
-                let verts: Vec<Vec2> = self.polys[*pid]
-                    .0
-                    .iter()
-                    .map(|i| refit_to_rect(self.verts[*i], bounds))
-                    .collect();
-                canvas.draw(
-                    &Mesh::new_polygon(ctx, DrawMode::fill(), &verts, segment.stype.color())?,
-                    DrawParam::default(),
-                );
-            }
+            let verts: Vec<Vec2> = segment
+                .poly
+                .iter()
+                .map(|i| refit_to_rect(self.verts[*i], bounds))
+                .collect();
+            canvas.draw(
+                &Mesh::new_polygon(ctx, DrawMode::fill(), &verts, segment.stype.color())?,
+                DrawParam::default(),
+            );
         }
         Ok(())
+    }
+
+    pub fn rotate(&mut self) {
+        for vert in &mut self.verts {
+            *vert = vec2(1.0 - vert.y, vert.x);
+        }
+        
+        for segment in &mut self.segments {
+            segment.mounts = segment.mounts.clone().rotate();
+        }
     }
 }
 
 pub fn get_tile_library() -> Vec<Tile> {
-    vec![Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-            vec2(0.0, 0.45),
-            vec2(0.0, 0.55),
-            vec2(1.0, 0.45),
-            vec2(1.0, 0.55),
-        ],
-        polys: vec![
-            Poly(vec![0, 3, 6, 4]),
-            Poly(vec![4, 6, 7, 5]),
-            Poly(vec![5, 7, 2, 1]),
-        ],
-        segments: vec![
-            Segment {
-                stype: SegmentType::Field,
-                poly_ids: vec![0],
-                mounts: Mounts {
-                    north: Some(Mount::Full),
-                    east: Some(Mount::Beginning),
-                    south: None,
-                    west: Some(Mount::End),
-                },
-            },
-            Segment {
-                stype: SegmentType::Road,
-                poly_ids: vec![1],
-                mounts: Mounts {
-                    north: None,
-                    east: Some(Mount::Middle),
-                    south: None,
-                    west: Some(Mount::Middle),
-                },
-            },
-            Segment {
-                stype: SegmentType::Field,
-                poly_ids: vec![2],
-                mounts: Mounts {
-                    north: None,
-                    east: Some(Mount::End),
-                    south: Some(Mount::Full),
-                    west: Some(Mount::Beginning),
-                },
-            },
-        ],
-    }]
+    vec![
+        STRAIGHT_ROAD.clone(),
+        L_CURVE_ROAD.clone(),
+        STRAIGHT_ROAD.clone(),
+        L_CURVE_ROAD.clone(),
+        STRAIGHT_ROAD.clone(),
+        L_CURVE_ROAD.clone(),
+    ]
 }

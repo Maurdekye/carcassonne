@@ -4,6 +4,7 @@ use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
+    input::keyboard::KeyCode,
     mint::Point2,
     Context, ContextBuilder, GameError, GameResult,
 };
@@ -37,7 +38,7 @@ struct Game {
 impl Game {
     fn new() -> Self {
         Self {
-            library: get_tile_library().into_iter().cycle().take(10).collect(),
+            library: get_tile_library(),
             placed_tiles: Vec::new(),
             selected_square: None,
             held_tile: None,
@@ -67,7 +68,11 @@ impl EventHandler<GameError> for Game {
         let mouse = ctx.mouse.position();
         let grid_pos = screen_pos_to_grid_pos(mouse, ctx);
         self.selected_square = Some(grid_pos);
-        if let Some(tile) = &self.held_tile {
+        if let Some(tile) = &mut self.held_tile {
+            if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
+                tile.rotate();
+            }
+
             if ctx.mouse.button_just_pressed(event::MouseButton::Left)
                 && !self.placed_tiles.iter().any(|(pos, _)| pos == &grid_pos)
             {
