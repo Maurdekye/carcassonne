@@ -1,9 +1,10 @@
 use ggez::glam::vec2;
 use lazy_static::lazy_static;
 
-use crate::tile::{Mount, Mounts, Segment, SegmentType};
+use crate::tile::{Mounts, Segment, SegmentType};
 
 use super::Tile;
+use SegmentType::*;
 
 lazy_static! {
     pub static ref STRAIGHT_ROAD: Tile = Tile {
@@ -19,36 +20,24 @@ lazy_static! {
         ],
         segments: vec![
             Segment {
-                stype: SegmentType::Field,
+                stype: Field,
                 poly: vec![0, 3, 6, 4],
-                mounts: Mounts {
-                    north: Some(Mount::Full),
-                    east: Some(Mount::Beginning),
-                    south: None,
-                    west: Some(Mount::End),
-                },
             },
             Segment {
-                stype: SegmentType::Road,
+                stype: Road,
                 poly: vec![4, 6, 7, 5],
-                mounts: Mounts {
-                    north: None,
-                    east: Some(Mount::Middle),
-                    south: None,
-                    west: Some(Mount::Middle),
-                },
             },
             Segment {
-                stype: SegmentType::Field,
+                stype: Field,
                 poly: vec![5, 7, 2, 1],
-                mounts: Mounts {
-                    north: None,
-                    east: Some(Mount::End),
-                    south: Some(Mount::Full),
-                    west: Some(Mount::Beginning),
-                },
             },
         ],
+        mounts: Mounts {
+            north: [0, 0, 0],
+            east: [0, 1, 2],
+            south: [2, 2, 2],
+            west: [2, 1, 0]
+        }
     };
     pub static ref L_CURVE_ROAD: Tile = Tile {
         verts: vec![
@@ -65,35 +54,83 @@ lazy_static! {
         ],
         segments: vec![
             Segment {
-                stype: SegmentType::Field,
+                stype: Field,
                 poly: vec![0, 6, 8, 4],
-                mounts: Mounts {
-                    north: Some(Mount::Beginning),
-                    east: None,
-                    south: None,
-                    west: Some(Mount::End)
-                }
             },
             Segment {
-                stype: SegmentType::Field,
-                poly: vec![5, 9, 7, 3, 2, 1],
-                mounts: Mounts {
-                    north: Some(Mount::End),
-                    east: Some(Mount::Full),
-                    south: Some(Mount::Full),
-                    west: Some(Mount::Beginning),
-                }
-            },
-            Segment {
-                stype: SegmentType::Road,
+                stype: Road,
                 poly: vec![4, 8, 6, 7, 9, 5],
-                mounts: Mounts {
-                    north: Some(Mount::Middle),
-                    east: None,
-                    south: None,
-                    west: Some(Mount::Middle)
-                }
+            },
+            Segment {
+                stype: Field,
+                poly: vec![5, 9, 7, 3, 2, 1],
+            },
+        ],
+        mounts: Mounts {
+            north: [0, 1, 2],
+            east: [2, 2, 2],
+            south: [2, 2, 2],
+            west: [2, 1, 0]
+        }
+    };
+    pub static ref CORNER_CITY: Tile = Tile {
+        verts: vec![
+            vec2(0.0, 0.0),
+            vec2(0.0, 1.0),
+            vec2(1.0, 1.0),
+            vec2(1.0, 0.0),
+        ],
+        segments: vec![
+            Segment {
+                stype: City,
+                poly: vec![0, 3, 1]
+            },
+            Segment {
+                stype: Field,
+                poly: vec![1, 3, 2]
+            },
+        ],
+        mounts: Mounts {
+            north: [0, 0, 0],
+            east: [1, 1, 1],
+            south: [1, 1, 1],
+            west: [0, 0, 0]
+        }
+    };
+    pub static ref CITY_ENTRANCE: Tile = Tile {
+        verts: vec![
+            vec2(0.0, 0.0),
+            vec2(0.0, 1.0),
+            vec2(1.0, 1.0),
+            vec2(1.0, 0.0),
+            vec2(0.45, 0.3),
+            vec2(0.55, 0.3),
+            vec2(0.45, 1.0),
+            vec2(0.55, 1.0),
+        ],
+        segments: vec![
+            Segment {
+                stype: City,
+                poly: vec![0, 3, 5, 4]
+            },
+            Segment {
+                stype: Road,
+                poly: vec![4, 5, 7, 6]
+            },
+            Segment {
+                stype: Field,
+                poly: vec![0, 4, 6, 1]
+            },
+            Segment {
+                stype: Field,
+                poly: vec![5, 3, 2, 7]
             }
-        ]
+        ],
+        mounts: Mounts {
+            north: [0, 0, 0],
+            east: [3, 3, 3],
+            south: [3, 1, 2],
+            west: [2, 2, 2]
+        }
     };
 }

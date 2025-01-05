@@ -54,9 +54,9 @@ impl Game {
             let mut is_adjacent_tile = false;
             use tile::Orientation::*;
             for (orientation, offset) in [North, East, South, West].into_iter().zip([
-                Pos(0, 1),
-                Pos(1, 0),
                 Pos(0, -1),
+                Pos(1, 0),
+                Pos(0, 1),
                 Pos(-1, 0),
             ]) {
                 let adjacent_pos = *selected_square + offset;
