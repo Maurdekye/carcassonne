@@ -1,42 +1,22 @@
 // use std::io::{stdout, Write};
 
-use std::{collections::HashMap, ops::Add};
+use std::collections::HashMap;
 
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
-    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
+    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh},
     input::keyboard::KeyCode,
-    mint::Point2,
     Context, ContextBuilder, GameError, GameResult,
 };
+use pos::Pos;
 use tile::{get_tile_library, tile_definitions::STRAIGHT_ROAD, Tile};
 
+pub mod pos;
 mod tile;
 mod util;
 
 const GRID_SIZE: f32 = 0.1;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-struct Pos(i32, i32);
-
-impl Pos {
-    fn rect(&self, ctx: &Context) -> Rect {
-        let resolution = ctx.gfx.window().inner_size();
-        let width = resolution.width as f32 * GRID_SIZE;
-        let height = resolution.height as f32 * GRID_SIZE;
-        let near_corner = grid_pos_to_screen_pos(*self, ctx);
-        Rect::new(near_corner.x, near_corner.y, width, height)
-    }
-}
-
-impl Add<Pos> for Pos {
-    type Output = Pos;
-
-    fn add(self, rhs: Pos) -> Self::Output {
-        Pos(self.0 + rhs.0, self.1 + rhs.1)
-    }
-}
 
 struct Game {
     library: Vec<Tile>,
@@ -102,27 +82,10 @@ impl Game {
     }
 }
 
-fn screen_pos_to_grid_pos(screen_pos: Point2<f32>, ctx: &Context) -> Pos {
-    let res = ctx.gfx.window().inner_size();
-    let uv = Point2 {
-        x: screen_pos.x / res.width as f32,
-        y: screen_pos.y / res.height as f32,
-    };
-    Pos((uv.x / GRID_SIZE) as i32, (uv.y / GRID_SIZE) as i32)
-}
-
-fn grid_pos_to_screen_pos(grid_pos: Pos, ctx: &Context) -> Point2<f32> {
-    let res = ctx.gfx.window().inner_size();
-    Point2 {
-        x: (grid_pos.0 as f32 * GRID_SIZE) * res.width as f32,
-        y: (grid_pos.1 as f32 * GRID_SIZE) * res.height as f32,
-    }
-}
-
 impl EventHandler<GameError> for Game {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse = ctx.mouse.position();
-        let grid_pos = screen_pos_to_grid_pos(mouse, ctx);
+        let grid_pos = Pos::from_screen_pos(mouse, ctx);
         self.selected_square = Some(grid_pos);
         if self.selected_square != self.last_selected_square {
             self.reevaluate_selected_square();
