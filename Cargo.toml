@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 ggez = "0.9.3"
 lazy_static = "1.5.0"
+slotmap = "1.0.7"

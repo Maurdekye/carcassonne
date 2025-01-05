@@ -7,7 +7,7 @@ use ggez::{
 };
 use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD};
 
-use crate::util::refit_to_rect;
+use crate::{pos::Pos, util::refit_to_rect};
 
 #[cfg(test)]
 mod test;
@@ -34,16 +34,23 @@ impl Orientation {
             West => East,
         }
     }
+
+    pub fn iter_with_offsets() -> impl Iterator<Item = (Orientation, Pos)> {
+        use Orientation::*;
+        [North, East, South, West]
+            .into_iter()
+            .zip([Pos(0, -1), Pos(1, 0), Pos(0, 1), Pos(-1, 0)])
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct MountingPair {
-    from_segment: usize,
-    to_segment: usize,
+    pub from_segment: usize,
+    pub to_segment: usize,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum SegmentType {
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SegmentType {
     Field,
     City,
     Road,
@@ -95,15 +102,15 @@ impl Mounts {
 }
 
 #[derive(Clone, Debug)]
-struct Segment {
-    stype: SegmentType,
+pub struct Segment {
+    pub stype: SegmentType,
     poly: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Tile {
     verts: Vec<Vec2>,
-    segments: Vec<Segment>,
+    pub segments: Vec<Segment>,
     mounts: Mounts,
 }
 
@@ -171,6 +178,10 @@ impl Tile {
 
 pub fn get_tile_library() -> Vec<Tile> {
     vec![
+        CITY_ENTRANCE.clone(),
+        STRAIGHT_ROAD.clone(),
+        CORNER_CITY.clone(),
+        L_CURVE_ROAD.clone(),
         CITY_ENTRANCE.clone(),
         STRAIGHT_ROAD.clone(),
         CORNER_CITY.clone(),

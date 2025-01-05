@@ -10,13 +10,22 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::Pos;
-use tile::{get_tile_library, tile_definitions::STRAIGHT_ROAD, Tile};
+use slotmap::{DefaultKey, SlotMap};
+use tile::{get_tile_library, tile_definitions::STRAIGHT_ROAD, Orientation, SegmentType, Tile};
 
 pub mod pos;
 mod tile;
 mod util;
 
 const GRID_SIZE: f32 = 0.1;
+
+type SegmentIdentifier = (Pos, usize);
+
+#[derive(Debug)]
+struct SegmentGroup {
+    gtype: SegmentType,
+    segments: Vec<SegmentIdentifier>,
+}
 
 struct Game {
     library: Vec<Tile>,
@@ -25,18 +34,104 @@ struct Game {
     held_tile: Option<Tile>,
     last_selected_square: Option<Pos>,
     placement_is_valid: bool,
+    groups: SlotMap<DefaultKey, SegmentGroup>,
+    group_associations: HashMap<SegmentIdentifier, DefaultKey>,
 }
 
 impl Game {
     fn new() -> Self {
-        Self {
+        let mut this = Self {
             library: get_tile_library(),
-            placed_tiles: HashMap::from([(Pos(5, 5), STRAIGHT_ROAD.clone())]),
+            placed_tiles: HashMap::new(),
             selected_square: None,
             held_tile: None,
             last_selected_square: None,
             placement_is_valid: false,
+            groups: SlotMap::new(),
+            group_associations: HashMap::new(),
+        };
+        this.place_tile(STRAIGHT_ROAD.clone(), Pos(5, 5)).unwrap();
+        this
+    }
+
+    fn place_tile(&mut self, tile: Tile, pos: Pos) -> Result<(), GameError> {
+        let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<DefaultKey>> = HashMap::new();
+        let mut uninserted_segments: Vec<_> = (0..tile.segments.len()).map(|_| true).collect();
+
+        // evaluate mountings with neighboring tiles
+        for (orientation, offset) in Orientation::iter_with_offsets() {
+            let adjacent_pos = pos + offset;
+            let Some(adjacent_tile) = self.placed_tiles.get(&adjacent_pos) else {
+                continue;
+            };
+
+            let Some(mounts) = tile.validate_mounting(adjacent_tile, orientation) else {
+                return Err(GameError::CustomError(
+                    "Attempt to place invalid tile!".to_string(),
+                ));
+            };
+
+            for mount in mounts {
+                let seg_id: SegmentIdentifier = (pos, mount.from_segment);
+                let adj_seg_id: SegmentIdentifier = (adjacent_pos, mount.to_segment);
+                let group_key = self
+                    .group_associations
+                    .get(&adj_seg_id)
+                    .expect("All placed segments have associated groups");
+                new_group_insertions
+                    .entry(seg_id)
+                    .and_modify(|groups| groups.push(*group_key))
+                    .or_insert(vec![*group_key]);
+                uninserted_segments[mount.from_segment] = false;
+            }
         }
+
+        // insert segments into existing connected groups
+        for (seg_id, additions) in new_group_insertions {
+            #[allow(clippy::comparison_chain)]
+            if additions.len() == 1 {
+                self.groups
+                    .get_mut(additions[0])
+                    .unwrap()
+                    .segments
+                    .push(seg_id);
+            } else if additions.len() > 1 {
+                let mut new_segment_list: Vec<_> = additions
+                    .iter()
+                    .flat_map(|key| self.groups.remove(*key).unwrap().segments)
+                    .collect();
+                new_segment_list.push(seg_id);
+                let new_segment_group = SegmentGroup {
+                    gtype: tile.segments[seg_id.1].stype,
+                    segments: new_segment_list,
+                };
+                let key = self.groups.insert(new_segment_group);
+                for seg_id in &self.groups.get(key).unwrap().segments {
+                    self.group_associations.insert(*seg_id, key);
+                }
+            } else {
+                panic!("entry in insertions map with no values??");
+            }
+        }
+
+        // create new groups for disconnected tile segments
+        for i in uninserted_segments
+            .into_iter()
+            .enumerate()
+            .filter_map(|(i, x)| x.then_some(i))
+        {
+            let segment = &tile.segments[i];
+            let seg_id = (pos, i);
+            let key = self.groups.insert(SegmentGroup {
+                gtype: segment.stype,
+                segments: vec![seg_id],
+            });
+            self.group_associations.insert(seg_id, key);
+        }
+
+        self.placed_tiles.insert(pos, tile);
+
+        Ok(())
     }
 
     fn reevaluate_selected_square(&mut self) {
@@ -52,13 +147,7 @@ impl Game {
 
         if let Some(held_tile) = &self.held_tile {
             let mut is_adjacent_tile = false;
-            use tile::Orientation::*;
-            for (orientation, offset) in [North, East, South, West].into_iter().zip([
-                Pos(0, -1),
-                Pos(1, 0),
-                Pos(0, 1),
-                Pos(-1, 0),
-            ]) {
+            for (orientation, offset) in Orientation::iter_with_offsets() {
                 let adjacent_pos = *selected_square + offset;
                 let Some(adjacent_tile) = self.placed_tiles.get(&adjacent_pos) else {
                     continue;
@@ -99,10 +188,11 @@ impl EventHandler<GameError> for Game {
             }
         }
 
-        if let Some(tile) = &mut self.held_tile {
+        if self.held_tile.is_some() {
             if ctx.mouse.button_just_pressed(event::MouseButton::Left) && self.placement_is_valid {
-                self.placed_tiles.insert(grid_pos, tile.clone());
-                self.held_tile = None;
+                let tile = self.held_tile.take().unwrap();
+                self.place_tile(tile, grid_pos)?;
+                // dbg!(&self.groups);
                 self.reevaluate_selected_square();
             }
         } else {
