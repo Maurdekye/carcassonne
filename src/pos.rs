@@ -9,18 +9,18 @@ pub struct Pos(pub i32, pub i32);
 
 impl Pos {
     pub fn rect(&self, ctx: &Context) -> Rect {
-        let resolution = ctx.gfx.window().inner_size();
-        let width = resolution.width as f32 * GRID_SIZE;
-        let height = resolution.height as f32 * GRID_SIZE;
+        let (width, height) = ctx.gfx.drawable_size();
+        let width = width * GRID_SIZE;
+        let height = height * GRID_SIZE;
         let near_corner = self.to_screen_pos(ctx);
         Rect::new(near_corner.x, near_corner.y, width, height)
     }
 
     pub fn from_screen_pos(screen_pos: Point2<f32>, ctx: &Context) -> Pos {
-        let res = ctx.gfx.window().inner_size();
+        let (width, height) = ctx.gfx.drawable_size();
         let uv = Point2 {
-            x: screen_pos.x / res.width as f32,
-            y: screen_pos.y / res.height as f32,
+            x: screen_pos.x / width,
+            y: screen_pos.y / height,
         };
         Pos((uv.x / GRID_SIZE) as i32, (uv.y / GRID_SIZE) as i32)
     }

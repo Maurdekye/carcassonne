@@ -1,13 +1,17 @@
-use game::Game;
+use std::io::{stdout, Write};
+
+use game::{Game, SegmentIdentifier};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
+    glam::Vec2,
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh},
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::Pos;
 use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
+use util::{point_in_polygon, refit_to_rect};
 
 mod game;
 pub mod pos;
@@ -16,11 +20,19 @@ mod util;
 
 const GRID_SIZE: f32 = 0.1;
 
+#[derive(Clone, Copy)]
+enum PlacementMode {
+    Tile,
+    Meeple,
+}
+
 struct Client {
     held_tile: Option<Tile>,
     selected_square: Option<Pos>,
     last_selected_square: Option<Pos>,
+    selected_segment: Option<SegmentIdentifier>,
     placement_is_valid: bool,
+    placement_mode: PlacementMode,
     game: Game,
 }
 
@@ -30,7 +42,9 @@ impl Client {
             selected_square: None,
             held_tile: None,
             last_selected_square: None,
+            selected_segment: None,
             placement_is_valid: false,
+            placement_mode: PlacementMode::Tile,
             game: Game::new(),
         }
     }
@@ -76,27 +90,67 @@ impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse = ctx.mouse.position();
         let grid_pos = Pos::from_screen_pos(mouse, ctx);
-        self.selected_square = Some(grid_pos);
-        if self.selected_square != self.last_selected_square {
-            self.reevaluate_selected_square();
-            self.last_selected_square = self.selected_square;
+
+        if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
+            use PlacementMode::*;
+            self.placement_mode = match self.placement_mode {
+                Tile => Meeple,
+                Meeple => Tile,
+            };
         }
 
-        if let Some(tile) = &mut self.held_tile {
-            if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
-                tile.rotate();
-                self.reevaluate_selected_square();
-            }
-        }
+        match self.placement_mode {
+            PlacementMode::Tile => {
+                self.selected_square = Some(grid_pos);
 
-        if self.held_tile.is_some() {
-            if ctx.mouse.button_just_pressed(event::MouseButton::Left) && self.placement_is_valid {
-                let tile = self.held_tile.take().unwrap();
-                self.game.place_tile(tile, grid_pos)?;
-                self.reevaluate_selected_square();
+                if self.selected_square != self.last_selected_square {
+                    self.reevaluate_selected_square();
+                    self.last_selected_square = self.selected_square;
+                }
+
+                if let Some(tile) = &mut self.held_tile {
+                    if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
+                        tile.rotate();
+                        self.reevaluate_selected_square();
+                    }
+                }
+
+                if self.held_tile.is_some() {
+                    if ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                        && self.placement_is_valid
+                    {
+                        let tile = self.held_tile.take().unwrap();
+                        self.game.place_tile(tile, grid_pos)?;
+                        self.reevaluate_selected_square();
+                    }
+                } else {
+                    self.held_tile = self.game.library.pop();
+                }
             }
-        } else {
-            self.held_tile = self.game.library.pop();
+            PlacementMode::Meeple => {
+                let corner = grid_pos.to_screen_pos(ctx);
+                let subgrid_pos = Vec2::from(mouse) - Vec2::from(corner);
+                let subgrid_pos = subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
+
+                'segment_locate: {
+                    if let Some(tile) = self.game.placed_tiles.get(&grid_pos) {
+                        for (i, segment) in tile.segments.iter().enumerate() {
+                            if point_in_polygon(
+                                subgrid_pos,
+                                &segment
+                                    .poly
+                                    .iter()
+                                    .map(|i| tile.verts[*i])
+                                    .collect::<Vec<_>>(),
+                            ) {
+                                self.selected_segment = Some((grid_pos, i));
+                                break 'segment_locate;
+                            }
+                        }
+                    }
+                    self.selected_segment = None;
+                }
+            }
         }
 
         Ok(())
@@ -109,26 +163,50 @@ impl EventHandler<GameError> for Client {
             tile.render(ctx, &mut canvas, pos.rect(ctx))?;
         }
 
-        if let Some(pos) = self.selected_square {
-            let rect = pos.rect(ctx);
-            let cursor_color = if !self.placement_is_valid {
-                Color::RED
-            } else {
-                Color::GREEN
-            };
-            if !self.game.placed_tiles.contains_key(&pos) {
-                if let Some(tile) = &self.held_tile {
-                    tile.render(ctx, &mut canvas, rect)?;
-                }
-            }
-            canvas.draw(
-                &Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?,
-                DrawParam::default(),
-            )
-        }
-
         ctx.gfx
             .set_window_title(&format!("Carcassone: {:.2} fps", ctx.time.fps()));
+
+        match self.placement_mode {
+            PlacementMode::Tile => {
+                if let Some(pos) = self.selected_square {
+                    let rect = pos.rect(ctx);
+                    let cursor_color = if !self.placement_is_valid {
+                        Color::RED
+                    } else {
+                        Color::GREEN
+                    };
+                    if !self.game.placed_tiles.contains_key(&pos) {
+                        if let Some(tile) = &self.held_tile {
+                            tile.render(ctx, &mut canvas, rect)?;
+                        }
+                    }
+                    canvas.draw(
+                        &Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?,
+                        DrawParam::default(),
+                    )
+                }
+            }
+            PlacementMode::Meeple => {
+                if let Some(group) = self
+                    .selected_segment
+                    .and_then(|seg_id| self.game.group_associations.get(&seg_id))
+                    .and_then(|key| self.game.groups.get(*key))
+                {
+                    for (pos, tile, i) in group.segments.iter().filter_map(|(pos, i)| {
+                        self.game.placed_tiles.get(pos).map(|tile| (pos, tile, i))
+                    }) {
+                        let rect = pos.rect(ctx);
+                        tile.render_segment(
+                            *i,
+                            ctx,
+                            &mut canvas,
+                            rect,
+                            Some(Color::from_rgb(200, 20, 70)),
+                        )?;
+                    }
+                }
+            }
+        }
 
         canvas.finish(ctx)
     }

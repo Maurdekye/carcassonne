@@ -104,12 +104,12 @@ impl Mounts {
 #[derive(Clone, Debug)]
 pub struct Segment {
     pub stype: SegmentType,
-    poly: Vec<usize>,
+    pub poly: Vec<usize>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Tile {
-    verts: Vec<Vec2>,
+    pub verts: Vec<Vec2>,
     pub segments: Vec<Segment>,
     mounts: Mounts,
 }
@@ -121,17 +121,35 @@ impl Tile {
         canvas: &mut Canvas,
         bounds: Rect,
     ) -> Result<(), GameError> {
-        for segment in &self.segments {
-            let verts: Vec<Vec2> = segment
-                .poly
-                .iter()
-                .map(|i| refit_to_rect(self.verts[*i], bounds))
-                .collect();
-            canvas.draw(
-                &Mesh::new_polygon(ctx, DrawMode::fill(), &verts, segment.stype.color())?,
-                DrawParam::default(),
-            );
+        for i in 0..self.segments.len() {
+            self.render_segment(i, ctx, canvas, bounds, None)?;
         }
+        Ok(())
+    }
+
+    pub fn render_segment(
+        &self,
+        seg_id: usize,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        bounds: Rect,
+        color: Option<Color>,
+    ) -> Result<(), GameError> {
+        let segment = &self.segments[seg_id];
+        let verts: Vec<Vec2> = segment
+            .poly
+            .iter()
+            .map(|i| refit_to_rect(self.verts[*i], bounds))
+            .collect();
+        canvas.draw(
+            &Mesh::new_polygon(
+                ctx,
+                DrawMode::fill(),
+                &verts,
+                color.unwrap_or_else(|| segment.stype.color()),
+            )?,
+            DrawParam::default(),
+        );
         Ok(())
     }
 

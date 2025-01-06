@@ -5,25 +5,21 @@ use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
     pos::Pos,
-    tile::{
-        get_tile_library,
-        tile_definitions::{CITY_ENTRANCE, CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD},
-        Orientation, SegmentType, Tile,
-    },
+    tile::{get_tile_library, Orientation, SegmentType, Tile},
 };
 
-type SegmentIdentifier = (Pos, usize);
+pub type SegmentIdentifier = (Pos, usize);
 
 #[derive(Debug)]
-struct SegmentGroup {
-    gtype: SegmentType,
-    segments: Vec<SegmentIdentifier>,
+pub struct SegmentGroup {
+    pub gtype: SegmentType,
+    pub segments: Vec<SegmentIdentifier>,
 }
 
 pub struct Game {
     pub library: Vec<Tile>,
     pub placed_tiles: HashMap<Pos, Tile>,
-    groups: SlotMap<DefaultKey, SegmentGroup>,
+    pub groups: SlotMap<DefaultKey, SegmentGroup>,
     pub group_associations: HashMap<SegmentIdentifier, DefaultKey>,
 }
 
@@ -145,6 +141,7 @@ impl Game {
 
 #[test]
 fn test_group_coallating() {
+    use crate::tile::tile_definitions::*;
     let mut game = Game::new();
     game.place_tile(STRAIGHT_ROAD.clone(), Pos(0, 0)).unwrap();
     game.place_tile(L_CURVE_ROAD.clone().rotated(), Pos(-1, 0))
