@@ -133,4 +133,50 @@ lazy_static! {
             west: [2, 2, 2]
         }
     };
+    pub static ref DEAD_END_ROAD: Tile = Tile {
+        verts: vec![
+            vec2(0.0, 0.0),
+            vec2(0.0, 1.0),
+            vec2(1.0, 1.0),
+            vec2(1.0, 0.0),
+            vec2(0.45, 1.0),
+            vec2(0.55, 1.0),
+            vec2(0.45, 0.45),
+            vec2(0.55, 0.45),
+        ],
+        segments: vec![
+            Segment {
+                stype: Field,
+                poly: vec![0, 3, 2, 5, 7, 6, 4, 1]
+            },
+            Segment {
+                stype: Road,
+                poly: vec![4, 6, 7, 5]
+            }
+        ],
+        mounts: Mounts {
+            north: [0, 0, 0],
+            east: [0, 0, 0],
+            south: [0, 1, 0],
+            west: [0, 0, 0]
+        }
+    };
+    pub static ref FIELD: Tile = Tile {
+        verts: vec![
+            vec2(0.0, 0.0),
+            vec2(0.0, 1.0),
+            vec2(1.0, 1.0),
+            vec2(1.0, 0.0),
+        ],
+        segments: vec![Segment {
+            stype: Field,
+            poly: vec![0, 1, 2, 3]
+        }],
+        mounts: Mounts {
+            north: [0, 0, 0],
+            east: [0, 0, 0],
+            south: [0, 0, 0],
+            west: [0, 0, 0]
+        }
+    };
 }

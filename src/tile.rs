@@ -5,7 +5,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     Context, GameError,
 };
-use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD};
+use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, DEAD_END_ROAD, L_CURVE_ROAD, STRAIGHT_ROAD};
 
 use crate::{pos::Pos, util::refit_to_rect};
 
@@ -144,6 +144,11 @@ impl Tile {
         self.mounts = self.mounts.clone().rotate();
     }
 
+    pub fn rotated(mut self) -> Self {
+        self.rotate();
+        self
+    }
+
     pub fn validate_mounting(
         &self,
         adjacent: &Tile,
@@ -186,5 +191,6 @@ pub fn get_tile_library() -> Vec<Tile> {
         STRAIGHT_ROAD.clone(),
         CORNER_CITY.clone(),
         L_CURVE_ROAD.clone(),
+        DEAD_END_ROAD.clone(),
     ]
 }
