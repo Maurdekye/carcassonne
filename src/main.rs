@@ -1,6 +1,6 @@
 use std::io::{stdout, Write};
 
-use game::{Game, SegmentIdentifier};
+use game::{Game, GroupIdentifier, SegmentIdentifier};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
@@ -10,8 +10,11 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::Pos;
-use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
-use util::{point_in_polygon, refit_to_rect};
+use tile::{
+    tile_definitions::{DEAD_END_ROAD, STRAIGHT_ROAD},
+    Orientation, Tile,
+};
+use util::point_in_polygon;
 
 mod game;
 pub mod pos;
@@ -31,6 +34,7 @@ struct Client {
     selected_square: Option<Pos>,
     last_selected_square: Option<Pos>,
     selected_segment: Option<SegmentIdentifier>,
+    selected_group: Option<GroupIdentifier>,
     placement_is_valid: bool,
     placement_mode: PlacementMode,
     game: Game,
@@ -43,6 +47,7 @@ impl Client {
             held_tile: None,
             last_selected_square: None,
             selected_segment: None,
+            selected_group: None,
             placement_is_valid: false,
             placement_mode: PlacementMode::Tile,
             game: Game::new(),
@@ -144,11 +149,15 @@ impl EventHandler<GameError> for Client {
                                     .collect::<Vec<_>>(),
                             ) {
                                 self.selected_segment = Some((grid_pos, i));
+                                self.selected_group = Some(
+                                    *self.game.group_associations.get(&(grid_pos, i)).unwrap(),
+                                );
                                 break 'segment_locate;
                             }
                         }
                     }
                     self.selected_segment = None;
+                    self.selected_group = None;
                 }
             }
         }
@@ -188,9 +197,8 @@ impl EventHandler<GameError> for Client {
             }
             PlacementMode::Meeple => {
                 if let Some(group) = self
-                    .selected_segment
-                    .and_then(|seg_id| self.game.group_associations.get(&seg_id))
-                    .and_then(|key| self.game.groups.get(*key))
+                    .selected_group
+                    .and_then(|key| self.game.groups.get(key))
                 {
                     for (pos, tile, i) in group.segments.iter().filter_map(|(pos, i)| {
                         self.game.placed_tiles.get(pos).map(|tile| (pos, tile, i))
@@ -219,5 +227,8 @@ fn main() -> GameResult {
         .build()?;
     let mut client = Client::new();
     client.game.place_tile(STRAIGHT_ROAD.clone(), Pos(5, 5))?;
+    client
+        .game
+        .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
     event::run(ctx, event_loop, client);
 }

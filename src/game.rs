@@ -9,6 +9,7 @@ use crate::{
 };
 
 pub type SegmentIdentifier = (Pos, usize);
+pub type GroupIdentifier = DefaultKey;
 
 #[derive(Debug)]
 pub struct SegmentGroup {
@@ -19,8 +20,8 @@ pub struct SegmentGroup {
 pub struct Game {
     pub library: Vec<Tile>,
     pub placed_tiles: HashMap<Pos, Tile>,
-    pub groups: SlotMap<DefaultKey, SegmentGroup>,
-    pub group_associations: HashMap<SegmentIdentifier, DefaultKey>,
+    pub groups: SlotMap<GroupIdentifier, SegmentGroup>,
+    pub group_associations: HashMap<SegmentIdentifier, GroupIdentifier>,
 }
 
 impl Game {
@@ -34,7 +35,8 @@ impl Game {
     }
 
     pub fn place_tile(&mut self, tile: Tile, pos: Pos) -> Result<(), GameError> {
-        let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<DefaultKey>> = HashMap::new();
+        let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<GroupIdentifier>> =
+            HashMap::new();
         let mut uninserted_segments: Vec<_> = (0..tile.segments.len()).map(|_| true).collect();
         // dbg!(&self.groups);
         // dbg!(&self.group_associations);
@@ -97,10 +99,16 @@ impl Game {
 
         // dbg!(&coallations);
         // combine disconnected groups that were connected together by the new segment
+        let mut rewrites = HashMap::new();
         for (seg_id, additions) in coallations {
             let mut new_segment_list: Vec<_> = additions
                 .iter()
-                .flat_map(|key| self.groups.remove(*key).unwrap().segments)
+                .flat_map(|key| {
+                    self.groups
+                        .remove(*rewrites.get(key).unwrap_or(key))
+                        .unwrap()
+                        .segments
+                })
                 .collect();
             new_segment_list.push(seg_id);
             let new_segment_group = SegmentGroup {
@@ -108,9 +116,15 @@ impl Game {
                 segments: new_segment_list,
             };
             let key = self.groups.insert(new_segment_group);
-            for seg_id in &self.groups.get(key).unwrap().segments {
-                self.group_associations.insert(*seg_id, key);
-            }
+            self.group_associations.extend(
+                self.groups
+                    .get(key)
+                    .unwrap()
+                    .segments
+                    .iter()
+                    .map(|seg_id| (*seg_id, key)),
+            );
+            rewrites.extend(additions.iter().map(|k| (*k, key)));
         }
 
         // dbg!(&uninserted_segments);
@@ -149,4 +163,14 @@ fn test_group_coallating() {
     game.place_tile(CORNER_CITY.clone().rotated(), Pos(0, -1))
         .unwrap();
     game.place_tile(CITY_ENTRANCE.clone(), Pos(-1, -1)).unwrap();
+}
+
+#[test]
+fn test_group_coallating_2() {
+    use crate::tile::tile_definitions::*;
+    let mut game = Game::new();
+    game.place_tile(STRAIGHT_ROAD.clone(), Pos(0, 0)).unwrap();
+    game.place_tile(DEAD_END_ROAD.clone().rotated(), Pos(2, 0))
+        .unwrap();
+    game.place_tile(STRAIGHT_ROAD.clone(), Pos(1, 0)).unwrap();
 }

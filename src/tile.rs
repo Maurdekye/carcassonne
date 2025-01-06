@@ -210,5 +210,6 @@ pub fn get_tile_library() -> Vec<Tile> {
         CORNER_CITY.clone(),
         L_CURVE_ROAD.clone(),
         DEAD_END_ROAD.clone(),
+        STRAIGHT_ROAD.clone(),
     ]
 }
