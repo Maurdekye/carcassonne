@@ -6,6 +6,7 @@ use slotmap::{DefaultKey, SlotMap};
 use crate::{
     pos::Pos,
     tile::{get_tile_library, Orientation, SegmentType, Tile},
+    util::HashMapBag,
 };
 
 pub type SegmentIdentifier = (Pos, usize);
@@ -40,8 +41,8 @@ impl Game {
         let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<GroupIdentifier>> =
             HashMap::new();
         let mut uninserted_segments: Vec<_> = (0..tile.segments.len()).map(|_| true).collect();
-        let mut closing_edges: HashMap<SegmentIdentifier, Orientation> = HashMap::new();
-        let mut opening_edges: HashMap<SegmentIdentifier, Orientation> = HashMap::new();
+        let mut closing_edges: HashMap<SegmentIdentifier, Vec<Orientation>> = HashMap::new();
+        let mut opening_edges: HashMap<SegmentIdentifier, Vec<Orientation>> = HashMap::new();
         // dbg!(&self.groups);
         // dbg!(&self.group_associations);
 
@@ -51,13 +52,13 @@ impl Game {
             // dbg!(&adjacent_pos);
             let Some(adjacent_tile) = self.placed_tiles.get(&adjacent_pos) else {
                 for seg_index in tile.mounts.by_orientation(orientation) {
-                    opening_edges.insert((pos, *seg_index), orientation);
+                    opening_edges.place((pos, *seg_index), orientation);
                 }
                 continue;
             };
             let opposing_orientation = orientation.opposite();
             for seg_index in adjacent_tile.mounts.by_orientation(opposing_orientation) {
-                closing_edges.insert((adjacent_pos, *seg_index), opposing_orientation);
+                closing_edges.place((adjacent_pos, *seg_index), opposing_orientation);
             }
 
             // dbg!(&adjacent_tile);
@@ -163,13 +164,19 @@ impl Game {
         }
 
         // update open and closed edges for groups
-        for (seg_ident, orientation) in opening_edges {
+        for (seg_ident, orientations) in opening_edges {
             let group = self.group_by_seg_ident(seg_ident).unwrap();
-            group.free_edges.insert((seg_ident.0, orientation));
+            group.free_edges.extend(
+                orientations
+                    .into_iter()
+                    .map(|orientation| (seg_ident.0, orientation)),
+            );
         }
-        for (seg_ident, orientation) in closing_edges {
+        for (seg_ident, orientations) in closing_edges {
             let group = self.group_by_seg_ident(seg_ident).unwrap();
-            group.free_edges.remove(&(seg_ident.0, orientation));
+            for orientation in orientations {
+                group.free_edges.remove(&(seg_ident.0, orientation));
+            }
             if group.free_edges.is_empty() {
                 println!("{:?} group finished!", group.gtype);
             }

@@ -210,7 +210,7 @@ impl EventHandler<GameError> for Client {
                             Some(Color::from_rgb(200, 20, 70)),
                         )?;
                     }
-                    
+
                     for &(pos, orientation) in &group.free_edges {
                         let rect = pos.rect(ctx);
                         let tl = vec2(rect.x, rect.y);
@@ -243,8 +243,8 @@ fn main() -> GameResult {
         .build()?;
     let mut client = Client::new();
     client.game.place_tile(STRAIGHT_ROAD.clone(), Pos(5, 5))?;
-    client
-        .game
-        .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
+    // client
+    //     .game
+    //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
     event::run(ctx, event_loop, client);
 }

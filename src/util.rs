@@ -1,3 +1,5 @@
+use std::collections::{hash_map::Entry, HashMap};
+
 use ggez::{
     glam::{vec2, Vec2},
     graphics::Rect,
@@ -22,4 +24,28 @@ pub fn point_in_polygon(point: Vec2, polygon: &[Vec2]) -> bool {
         }
     }
     crossings % 2 == 1
+}
+
+pub trait HashMapBag<K, V> {
+    fn place(&mut self, key: K, value: V) -> usize;
+}
+
+impl<K, V> HashMapBag<K, V> for HashMap<K, Vec<V>>
+where
+    K: std::hash::Hash + Eq,
+{
+    fn place(&mut self, key: K, value: V) -> usize {
+        match self.entry(key) {
+            Entry::Occupied(occupied_entry) => {
+                let list = occupied_entry.into_mut();
+                list.push(value);
+                list.len()
+            }
+            Entry::Vacant(vacant_entry) => {
+                let key = vacant_entry.into_key();
+                self.insert(key, vec![value]);
+                1
+            }
+        }
+    }
 }
