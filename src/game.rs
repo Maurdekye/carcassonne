@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use ggez::GameError;
 use slotmap::{DefaultKey, SlotMap};
@@ -10,11 +10,13 @@ use crate::{
 
 pub type SegmentIdentifier = (Pos, usize);
 pub type GroupIdentifier = DefaultKey;
+pub type EdgeIdentifier = (Pos, Orientation);
 
 #[derive(Debug)]
 pub struct SegmentGroup {
     pub gtype: SegmentType,
     pub segments: Vec<SegmentIdentifier>,
+    pub free_edges: HashSet<EdgeIdentifier>,
 }
 
 pub struct Game {
@@ -38,6 +40,8 @@ impl Game {
         let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<GroupIdentifier>> =
             HashMap::new();
         let mut uninserted_segments: Vec<_> = (0..tile.segments.len()).map(|_| true).collect();
+        let mut closing_edges: HashMap<SegmentIdentifier, Orientation> = HashMap::new();
+        let mut opening_edges: HashMap<SegmentIdentifier, Orientation> = HashMap::new();
         // dbg!(&self.groups);
         // dbg!(&self.group_associations);
 
@@ -46,8 +50,15 @@ impl Game {
             let adjacent_pos = pos + offset;
             // dbg!(&adjacent_pos);
             let Some(adjacent_tile) = self.placed_tiles.get(&adjacent_pos) else {
+                for seg_index in tile.mounts.by_orientation(orientation) {
+                    opening_edges.insert((pos, *seg_index), orientation);
+                }
                 continue;
             };
+            let opposing_orientation = orientation.opposite();
+            for seg_index in adjacent_tile.mounts.by_orientation(opposing_orientation) {
+                closing_edges.insert((adjacent_pos, *seg_index), opposing_orientation);
+            }
 
             // dbg!(&adjacent_tile);
 
@@ -59,16 +70,16 @@ impl Game {
             // dbg!(&mounts);
 
             for mount in mounts {
-                let seg_id: SegmentIdentifier = (pos, mount.from_segment);
-                let adj_seg_id: SegmentIdentifier = (adjacent_pos, mount.to_segment);
+                let seg_ident: SegmentIdentifier = (pos, mount.from_segment);
+                let adj_seg_ident: SegmentIdentifier = (adjacent_pos, mount.to_segment);
                 // dbg!(&seg_id);
                 // dbg!(&adj_seg_id);
                 let group_key = self
                     .group_associations
-                    .get(&adj_seg_id)
+                    .get(&adj_seg_ident)
                     .expect("All placed segments have associated groups");
                 new_group_insertions
-                    .entry(seg_id)
+                    .entry(seg_ident)
                     .and_modify(|groups| {
                         if !groups.contains(group_key) {
                             groups.push(*group_key)
@@ -88,32 +99,39 @@ impl Game {
 
         // dbg!(&singletons);
         // attach segments to existing groups
-        for (seg_id, additions) in singletons {
+        for (seg_ident, additions) in singletons {
             self.groups
                 .get_mut(additions[0])
                 .unwrap()
                 .segments
-                .push(seg_id);
-            self.group_associations.insert(seg_id, additions[0]);
+                .push(seg_ident);
+            self.group_associations.insert(seg_ident, additions[0]);
         }
 
         // dbg!(&coallations);
         // combine disconnected groups that were connected together by the new segment
         let mut rewrites = HashMap::new();
-        for (seg_id, additions) in coallations {
-            let mut new_segment_list: Vec<_> = additions
+        for (seg_ident, additions) in coallations {
+            let (old_segments, old_free_edges): (Vec<_>, Vec<_>) = additions
                 .iter()
-                .flat_map(|key| {
-                    self.groups
+                .map(|key| {
+                    let group = self
+                        .groups
                         .remove(*rewrites.get(key).unwrap_or(key))
-                        .unwrap()
-                        .segments
+                        .unwrap();
+                    (group.segments, group.free_edges)
                 })
+                .unzip();
+            let new_segment_list = old_segments
+                .into_iter()
+                .flatten()
+                .chain([seg_ident])
                 .collect();
-            new_segment_list.push(seg_id);
+            let new_free_edges = old_free_edges.into_iter().flatten().collect();
             let new_segment_group = SegmentGroup {
-                gtype: tile.segments[seg_id.1].stype,
+                gtype: tile.segments[seg_ident.1].stype,
                 segments: new_segment_list,
+                free_edges: new_free_edges,
             };
             let key = self.groups.insert(new_segment_group);
             self.group_associations.extend(
@@ -122,7 +140,7 @@ impl Game {
                     .unwrap()
                     .segments
                     .iter()
-                    .map(|seg_id| (*seg_id, key)),
+                    .map(|seg_ident| (*seg_ident, key)),
             );
             rewrites.extend(additions.iter().map(|k| (*k, key)));
         }
@@ -135,12 +153,26 @@ impl Game {
             .filter_map(|(i, x)| x.then_some(i))
         {
             let segment = &tile.segments[i];
-            let seg_id = (pos, i);
+            let seg_ident = (pos, i);
             let key = self.groups.insert(SegmentGroup {
                 gtype: segment.stype,
-                segments: vec![seg_id],
+                segments: vec![seg_ident],
+                free_edges: HashSet::new(),
             });
-            self.group_associations.insert(seg_id, key);
+            self.group_associations.insert(seg_ident, key);
+        }
+
+        // update open and closed edges for groups
+        for (seg_ident, orientation) in opening_edges {
+            let group = self.group_by_seg_ident(seg_ident).unwrap();
+            group.free_edges.insert((seg_ident.0, orientation));
+        }
+        for (seg_ident, orientation) in closing_edges {
+            let group = self.group_by_seg_ident(seg_ident).unwrap();
+            group.free_edges.remove(&(seg_ident.0, orientation));
+            if group.free_edges.is_empty() {
+                println!("{:?} group finished!", group.gtype);
+            }
         }
 
         // put tile on board
@@ -150,6 +182,12 @@ impl Game {
         // dbg!(&self.group_associations);
 
         Ok(())
+    }
+
+    fn group_by_seg_ident(&mut self, seg_ident: SegmentIdentifier) -> Option<&mut SegmentGroup> {
+        self.group_associations
+            .get(&seg_ident)
+            .and_then(|key| self.groups.get_mut(*key))
     }
 }
 

@@ -1,10 +1,8 @@
-use std::io::{stdout, Write};
-
 use game::{Game, GroupIdentifier, SegmentIdentifier};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
-    glam::Vec2,
+    glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh},
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
@@ -211,6 +209,24 @@ impl EventHandler<GameError> for Client {
                             rect,
                             Some(Color::from_rgb(200, 20, 70)),
                         )?;
+                    }
+                    
+                    for &(pos, orientation) in &group.free_edges {
+                        let rect = pos.rect(ctx);
+                        let tl = vec2(rect.x, rect.y);
+                        let tr = vec2(rect.right(), rect.y);
+                        let bl = vec2(rect.x, rect.bottom());
+                        let br = vec2(rect.right(), rect.bottom());
+                        let line = match orientation {
+                            Orientation::North => [tl, tr],
+                            Orientation::East => [tr, br],
+                            Orientation::South => [br, bl],
+                            Orientation::West => [bl, tl],
+                        };
+                        canvas.draw(
+                            &Mesh::new_line(ctx, &line, 2.0, Color::CYAN)?,
+                            DrawParam::default(),
+                        );
                     }
                 }
             }

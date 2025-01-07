@@ -14,9 +14,9 @@ mod test;
 
 const MOUNTS_PER_SIDE: usize = 3;
 
-type Mount = [usize; MOUNTS_PER_SIDE];
+pub type Mount = [usize; MOUNTS_PER_SIDE];
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Orientation {
     North,
     East,
@@ -25,7 +25,7 @@ pub enum Orientation {
 }
 
 impl Orientation {
-    fn opposite(self) -> Orientation {
+    pub fn opposite(self) -> Orientation {
         use Orientation::*;
         match self {
             North => South,
@@ -67,7 +67,7 @@ impl SegmentType {
 }
 
 #[derive(Clone, Debug)]
-struct Mounts {
+pub struct Mounts {
     north: Mount,
     east: Mount,
     south: Mount,
@@ -90,7 +90,7 @@ impl Mounts {
         }
     }
 
-    fn by_orientation(&self, orientation: Orientation) -> &Mount {
+    pub fn by_orientation(&self, orientation: Orientation) -> &Mount {
         use Orientation::*;
         match orientation {
             North => &self.north,
@@ -111,7 +111,7 @@ pub struct Segment {
 pub struct Tile {
     pub verts: Vec<Vec2>,
     pub segments: Vec<Segment>,
-    mounts: Mounts,
+    pub mounts: Mounts,
 }
 
 impl Tile {
@@ -129,13 +129,13 @@ impl Tile {
 
     pub fn render_segment(
         &self,
-        seg_id: usize,
+        seg_index: usize,
         ctx: &Context,
         canvas: &mut Canvas,
         bounds: Rect,
         color: Option<Color>,
     ) -> Result<(), GameError> {
-        let segment = &self.segments[seg_id];
+        let segment = &self.segments[seg_index];
         let verts: Vec<Vec2> = segment
             .poly
             .iter()
@@ -173,7 +173,7 @@ impl Tile {
         location: Orientation,
     ) -> Option<Vec<MountingPair>> {
         let mut pairs = Vec::new();
-        for (seg_id, adj_seg_id) in self.mounts.by_orientation(location).iter().cloned().zip(
+        for (seg_index, adj_seg_index) in self.mounts.by_orientation(location).iter().cloned().zip(
             adjacent
                 .mounts
                 .by_orientation(location.opposite())
@@ -181,12 +181,12 @@ impl Tile {
                 .rev()
                 .cloned(),
         ) {
-            let segment = &self.segments[seg_id];
-            let adj_segment = &adjacent.segments[adj_seg_id];
+            let segment = &self.segments[seg_index];
+            let adj_segment = &adjacent.segments[adj_seg_index];
             if segment.stype == adj_segment.stype {
                 let pair = MountingPair {
-                    from_segment: seg_id,
-                    to_segment: adj_seg_id,
+                    from_segment: seg_index,
+                    to_segment: adj_seg_index,
                 };
                 if !pairs.contains(&pair) {
                     pairs.push(pair);
