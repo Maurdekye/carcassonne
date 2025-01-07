@@ -7,7 +7,7 @@ use ggez::{
 };
 use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, DEAD_END_ROAD, L_CURVE_ROAD, STRAIGHT_ROAD};
 
-use crate::{pos::Pos, util::refit_to_rect};
+use crate::{pos::GridPos, util::refit_to_rect};
 
 #[cfg(test)]
 mod test;
@@ -35,11 +35,11 @@ impl Orientation {
         }
     }
 
-    pub fn iter_with_offsets() -> impl Iterator<Item = (Orientation, Pos)> {
+    pub fn iter_with_offsets() -> impl Iterator<Item = (Orientation, GridPos)> {
         use Orientation::*;
         [North, East, South, West]
             .into_iter()
-            .zip([Pos(0, -1), Pos(1, 0), Pos(0, 1), Pos(-1, 0)])
+            .zip([GridPos(0, -1), GridPos(1, 0), GridPos(0, 1), GridPos(-1, 0)])
     }
 }
 

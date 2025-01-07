@@ -4,14 +4,14 @@ use ggez::GameError;
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
-    pos::Pos,
+    pos::GridPos,
     tile::{get_tile_library, Orientation, SegmentType, Tile},
     util::HashMapBag,
 };
 
-pub type SegmentIdentifier = (Pos, usize);
+pub type SegmentIdentifier = (GridPos, usize);
 pub type GroupIdentifier = DefaultKey;
-pub type EdgeIdentifier = (Pos, Orientation);
+pub type EdgeIdentifier = (GridPos, Orientation);
 
 #[derive(Debug)]
 pub struct SegmentGroup {
@@ -22,7 +22,7 @@ pub struct SegmentGroup {
 
 pub struct Game {
     pub library: Vec<Tile>,
-    pub placed_tiles: HashMap<Pos, Tile>,
+    pub placed_tiles: HashMap<GridPos, Tile>,
     pub groups: SlotMap<GroupIdentifier, SegmentGroup>,
     pub group_associations: HashMap<SegmentIdentifier, GroupIdentifier>,
 }
@@ -37,7 +37,7 @@ impl Game {
         }
     }
 
-    pub fn place_tile(&mut self, tile: Tile, pos: Pos) -> Result<(), GameError> {
+    pub fn place_tile(&mut self, tile: Tile, pos: GridPos) -> Result<(), GameError> {
         let mut new_group_insertions: HashMap<SegmentIdentifier, Vec<GroupIdentifier>> =
             HashMap::new();
         let mut uninserted_segments: Vec<_> = (0..tile.segments.len()).map(|_| true).collect();
@@ -202,20 +202,20 @@ impl Game {
 fn test_group_coallating() {
     use crate::tile::tile_definitions::*;
     let mut game = Game::new();
-    game.place_tile(STRAIGHT_ROAD.clone(), Pos(0, 0)).unwrap();
-    game.place_tile(L_CURVE_ROAD.clone().rotated(), Pos(-1, 0))
+    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0)).unwrap();
+    game.place_tile(L_CURVE_ROAD.clone().rotated(), GridPos(-1, 0))
         .unwrap();
-    game.place_tile(CORNER_CITY.clone().rotated(), Pos(0, -1))
+    game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
         .unwrap();
-    game.place_tile(CITY_ENTRANCE.clone(), Pos(-1, -1)).unwrap();
+    game.place_tile(CITY_ENTRANCE.clone(), GridPos(-1, -1)).unwrap();
 }
 
 #[test]
 fn test_group_coallating_2() {
     use crate::tile::tile_definitions::*;
     let mut game = Game::new();
-    game.place_tile(STRAIGHT_ROAD.clone(), Pos(0, 0)).unwrap();
-    game.place_tile(DEAD_END_ROAD.clone().rotated(), Pos(2, 0))
+    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0)).unwrap();
+    game.place_tile(DEAD_END_ROAD.clone().rotated(), GridPos(2, 0))
         .unwrap();
-    game.place_tile(STRAIGHT_ROAD.clone(), Pos(1, 0)).unwrap();
+    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(1, 0)).unwrap();
 }

@@ -5,9 +5,9 @@ use ggez::{graphics::Rect, mint::Point2, Context};
 use crate::GRID_SIZE;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct Pos(pub i32, pub i32);
+pub struct GridPos(pub i32, pub i32);
 
-impl Pos {
+impl GridPos {
     pub fn rect(&self, ctx: &Context) -> Rect {
         let (width, height) = ctx.gfx.drawable_size();
         let width = width * GRID_SIZE;
@@ -16,13 +16,13 @@ impl Pos {
         Rect::new(near_corner.x, near_corner.y, width, height)
     }
 
-    pub fn from_screen_pos(screen_pos: Point2<f32>, ctx: &Context) -> Pos {
+    pub fn from_screen_pos(screen_pos: Point2<f32>, ctx: &Context) -> GridPos {
         let (width, height) = ctx.gfx.drawable_size();
         let uv = Point2 {
             x: screen_pos.x / width,
             y: screen_pos.y / height,
         };
-        Pos((uv.x / GRID_SIZE) as i32, (uv.y / GRID_SIZE) as i32)
+        GridPos((uv.x / GRID_SIZE) as i32, (uv.y / GRID_SIZE) as i32)
     }
 
     pub fn to_screen_pos(self, ctx: &Context) -> Point2<f32> {
@@ -34,10 +34,10 @@ impl Pos {
     }
 }
 
-impl Add<Pos> for Pos {
-    type Output = Pos;
+impl Add<GridPos> for GridPos {
+    type Output = GridPos;
 
-    fn add(self, rhs: Pos) -> Self::Output {
-        Pos(self.0 + rhs.0, self.1 + rhs.1)
+    fn add(self, rhs: GridPos) -> Self::Output {
+        GridPos(self.0 + rhs.0, self.1 + rhs.1)
     }
 }

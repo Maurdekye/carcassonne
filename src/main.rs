@@ -1,4 +1,4 @@
-use game::{Game, GroupIdentifier, SegmentIdentifier};
+use game::{Game, GroupIdentifier};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
@@ -7,11 +7,8 @@ use ggez::{
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
 };
-use pos::Pos;
-use tile::{
-    tile_definitions::{DEAD_END_ROAD, STRAIGHT_ROAD},
-    Orientation, Tile,
-};
+use pos::GridPos;
+use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
 use util::point_in_polygon;
 
 mod game;
@@ -29,9 +26,8 @@ enum PlacementMode {
 
 struct Client {
     held_tile: Option<Tile>,
-    selected_square: Option<Pos>,
-    last_selected_square: Option<Pos>,
-    selected_segment: Option<SegmentIdentifier>,
+    selected_square: Option<GridPos>,
+    last_selected_square: Option<GridPos>,
     selected_group: Option<GroupIdentifier>,
     placement_is_valid: bool,
     placement_mode: PlacementMode,
@@ -44,7 +40,6 @@ impl Client {
             selected_square: None,
             held_tile: None,
             last_selected_square: None,
-            selected_segment: None,
             selected_group: None,
             placement_is_valid: false,
             placement_mode: PlacementMode::Tile,
@@ -92,7 +87,7 @@ impl Client {
 impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse = ctx.mouse.position();
-        let grid_pos = Pos::from_screen_pos(mouse, ctx);
+        let grid_pos = GridPos::from_screen_pos(mouse, ctx);
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
             use PlacementMode::*;
@@ -146,7 +141,6 @@ impl EventHandler<GameError> for Client {
                                     .map(|i| tile.verts[*i])
                                     .collect::<Vec<_>>(),
                             ) {
-                                self.selected_segment = Some((grid_pos, i));
                                 self.selected_group = Some(
                                     *self.game.group_associations.get(&(grid_pos, i)).unwrap(),
                                 );
@@ -154,7 +148,6 @@ impl EventHandler<GameError> for Client {
                             }
                         }
                     }
-                    self.selected_segment = None;
                     self.selected_group = None;
                 }
             }
@@ -242,7 +235,7 @@ fn main() -> GameResult {
         .window_setup(WindowSetup::default().title("Carcassone"))
         .build()?;
     let mut client = Client::new();
-    client.game.place_tile(STRAIGHT_ROAD.clone(), Pos(5, 5))?;
+    client.game.place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
     // client
     //     .game
     //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
