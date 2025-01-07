@@ -3,7 +3,7 @@ use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
     glam::{vec2, Vec2},
-    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh},
+    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
 };
@@ -31,6 +31,7 @@ struct Client {
     selected_group: Option<GroupIdentifier>,
     placement_is_valid: bool,
     placement_mode: PlacementMode,
+    offset: Vec2,
     game: Game,
 }
 
@@ -43,6 +44,7 @@ impl Client {
             selected_group: None,
             placement_is_valid: false,
             placement_mode: PlacementMode::Tile,
+            offset: Vec2::ZERO,
             game: Game::new(),
         }
     }
@@ -82,12 +84,30 @@ impl Client {
 
         self.placement_is_valid = true;
     }
+
+    pub fn from_screen_pos(&self, screen_pos: Vec2, ctx: &Context) -> GridPos {
+        let res: Vec2 = ctx.gfx.drawable_size().into();
+        (((screen_pos - self.offset) / res) / GRID_SIZE).into()
+    }
+
+    pub fn to_screen_pos(&self, pos: GridPos, ctx: &Context) -> Vec2 {
+        let res: Vec2 = ctx.gfx.drawable_size().into();
+        let pos: Vec2 = pos.into();
+        (pos * GRID_SIZE) * res + self.offset
+    }
+
+    pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
+        let res: Vec2 = ctx.gfx.drawable_size().into();
+        let dims = res * GRID_SIZE;
+        let near_corner = self.to_screen_pos(*pos, ctx);
+        Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
+    }
 }
 
 impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        let mouse = ctx.mouse.position();
-        let grid_pos = GridPos::from_screen_pos(mouse, ctx);
+        let mouse: Vec2 = ctx.mouse.position().into();
+        let grid_pos = self.from_screen_pos(mouse, ctx);
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
             use PlacementMode::*;
@@ -95,6 +115,10 @@ impl EventHandler<GameError> for Client {
                 Tile => Meeple,
                 Meeple => Tile,
             };
+        }
+
+        if ctx.mouse.button_pressed(event::MouseButton::Right) {
+            self.offset -= Vec2::from(ctx.mouse.delta());
         }
 
         match self.placement_mode {
@@ -126,7 +150,7 @@ impl EventHandler<GameError> for Client {
                 }
             }
             PlacementMode::Meeple => {
-                let corner = grid_pos.to_screen_pos(ctx);
+                let corner = self.to_screen_pos(grid_pos, ctx);
                 let subgrid_pos = Vec2::from(mouse) - Vec2::from(corner);
                 let subgrid_pos = subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
 
@@ -160,7 +184,7 @@ impl EventHandler<GameError> for Client {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         for (pos, tile) in &self.game.placed_tiles {
-            tile.render(ctx, &mut canvas, pos.rect(ctx))?;
+            tile.render(ctx, &mut canvas, self.grid_pos_rect(pos, ctx))?;
         }
 
         ctx.gfx
@@ -169,7 +193,7 @@ impl EventHandler<GameError> for Client {
         match self.placement_mode {
             PlacementMode::Tile => {
                 if let Some(pos) = self.selected_square {
-                    let rect = pos.rect(ctx);
+                    let rect = self.grid_pos_rect(&pos, ctx);
                     let cursor_color = if !self.placement_is_valid {
                         Color::RED
                     } else {
@@ -194,7 +218,7 @@ impl EventHandler<GameError> for Client {
                     for (pos, tile, i) in group.segments.iter().filter_map(|(pos, i)| {
                         self.game.placed_tiles.get(pos).map(|tile| (pos, tile, i))
                     }) {
-                        let rect = pos.rect(ctx);
+                        let rect = self.grid_pos_rect(pos, ctx);
                         tile.render_segment(
                             *i,
                             ctx,
@@ -205,7 +229,7 @@ impl EventHandler<GameError> for Client {
                     }
 
                     for &(pos, orientation) in &group.free_edges {
-                        let rect = pos.rect(ctx);
+                        let rect = self.grid_pos_rect(&pos, ctx);
                         let tl = vec2(rect.x, rect.y);
                         let tr = vec2(rect.right(), rect.y);
                         let bl = vec2(rect.x, rect.bottom());
@@ -235,7 +259,9 @@ fn main() -> GameResult {
         .window_setup(WindowSetup::default().title("Carcassone"))
         .build()?;
     let mut client = Client::new();
-    client.game.place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
+    client
+        .game
+        .place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
     // client
     //     .game
     //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
