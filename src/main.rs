@@ -87,13 +87,13 @@ impl Client {
 
     pub fn from_screen_pos(&self, screen_pos: Vec2, ctx: &Context) -> GridPos {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        (((screen_pos - self.offset) / res) / GRID_SIZE).into()
+        (((screen_pos + self.offset) / res) / GRID_SIZE).into()
     }
 
     pub fn to_screen_pos(&self, pos: GridPos, ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         let pos: Vec2 = pos.into();
-        (pos * GRID_SIZE) * res + self.offset
+        (pos * GRID_SIZE) * res - self.offset
     }
 
     pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
