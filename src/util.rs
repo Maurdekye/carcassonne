@@ -1,4 +1,7 @@
-use std::collections::{hash_map::Entry, HashMap};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    hash::Hash,
+};
 
 use ggez::{
     glam::{vec2, Vec2},
@@ -47,5 +50,41 @@ where
                 1
             }
         }
+    }
+}
+
+impl<K, V> HashMapBag<K, V> for HashMap<K, HashSet<V>>
+where
+    K: std::hash::Hash + Eq,
+    V: std::hash::Hash + Eq,
+{
+    fn place(&mut self, key: K, value: V) -> usize {
+        match self.entry(key) {
+            Entry::Occupied(occupied_entry) => {
+                let list = occupied_entry.into_mut();
+                list.insert(value);
+                list.len()
+            }
+            Entry::Vacant(vacant_entry) => {
+                let key = vacant_entry.into_key();
+                self.insert(key, HashSet::from([value]));
+                1
+            }
+        }
+    }
+}
+
+pub struct CollectedBag<K, V>(pub HashMap<K, Vec<V>>);
+
+impl<K, V> FromIterator<(K, V)> for CollectedBag<K, V>
+where
+    K: std::hash::Hash + Eq,
+{
+    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+        let mut bag = HashMap::new();
+        for (k, v) in iter {
+            bag.place(k, v);
+        }
+        CollectedBag(bag)
     }
 }

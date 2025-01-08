@@ -1,4 +1,4 @@
-use game::{Game, GroupIdentifier};
+use game::{player::Player, Game, GroupIdentifier, PlayerIdentifier, SegmentIdentifier};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
@@ -9,7 +9,7 @@ use ggez::{
 };
 use pos::GridPos;
 use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
-use util::point_in_polygon;
+use util::{point_in_polygon, refit_to_rect};
 
 mod game;
 pub mod pos;
@@ -28,24 +28,30 @@ struct Client {
     held_tile: Option<Tile>,
     selected_square: Option<GridPos>,
     last_selected_square: Option<GridPos>,
+    selected_segment: Option<SegmentIdentifier>,
     selected_group: Option<GroupIdentifier>,
     placement_is_valid: bool,
     placement_mode: PlacementMode,
+    active_player: PlayerIdentifier,
     offset: Vec2,
     game: Game,
 }
 
 impl Client {
     fn new() -> Self {
+        let mut game = Game::new();
+        let active_player = game.players.insert(Player::new(Color::GREEN));
         Self {
             selected_square: None,
             held_tile: None,
             last_selected_square: None,
             selected_group: None,
+            selected_segment: None,
             placement_is_valid: false,
             placement_mode: PlacementMode::Tile,
             offset: Vec2::ZERO,
-            game: Game::new(),
+            active_player,
+            game,
         }
     }
 
@@ -85,9 +91,9 @@ impl Client {
         self.placement_is_valid = true;
     }
 
-    pub fn from_screen_pos(&self, screen_pos: Vec2, ctx: &Context) -> GridPos {
+    pub fn from_screen_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        (((screen_pos + self.offset) / res) / GRID_SIZE).into()
+        ((screen_pos + self.offset) / res) / GRID_SIZE
     }
 
     pub fn to_screen_pos(&self, pos: GridPos, ctx: &Context) -> Vec2 {
@@ -102,12 +108,56 @@ impl Client {
         let near_corner = self.to_screen_pos(*pos, ctx);
         Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
     }
+
+    pub fn draw_meeple(
+        &self,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        pos: Vec2,
+        color: Color,
+    ) -> Result<(), GameError> {
+        const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
+        const MEEPLE_POINTS: [Vec2; 13] = [
+            vec2(0.025, 1.0),
+            vec2(0.425, 1.0),
+            vec2(0.5, 0.85),
+            vec2(0.575, 1.0),
+            vec2(0.975, 1.0),
+            vec2(0.75, 0.575),
+            vec2(1.0, 0.475),
+            vec2(1.0, 0.35),
+            vec2(0.675, 0.3),
+            vec2(0.325, 0.3),
+            vec2(0.0, 0.35),
+            vec2(0.0, 0.475),
+            vec2(0.25, 0.575),
+        ];
+        const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
+        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * GRID_SIZE - pos);
+        let head_point = (HEAD_POINT - MEEPLE_CENTER) * GRID_SIZE - pos;
+        canvas.draw(
+            &Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?,
+            DrawParam::default(),
+        );
+        canvas.draw(
+            &Mesh::new_circle(
+                ctx,
+                DrawMode::fill(),
+                head_point,
+                GRID_SIZE * 0.175,
+                1.0,
+                color,
+            )?,
+            DrawParam::default(),
+        );
+        Ok(())
+    }
 }
 
 impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse: Vec2 = ctx.mouse.position().into();
-        let grid_pos = self.from_screen_pos(mouse, ctx);
+        let grid_pos: GridPos = self.from_screen_pos(mouse, ctx).into();
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
             use PlacementMode::*;
@@ -168,11 +218,26 @@ impl EventHandler<GameError> for Client {
                                 self.selected_group = Some(
                                     *self.game.group_associations.get(&(grid_pos, i)).unwrap(),
                                 );
+                                self.selected_segment = Some((grid_pos, i));
                                 break 'segment_locate;
                             }
                         }
                     }
                     self.selected_group = None;
+                    self.selected_segment = None;
+                }
+
+                if let (Some(seg_ident), Some(group)) = (
+                    self.selected_segment,
+                    self.selected_group
+                        .and_then(|group_ident| self.game.groups.get(group_ident)),
+                ) {
+                    let player = self.game.players.get(self.active_player).unwrap();
+                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                        if !group.meeples.is_empty() && player.meeples > 0 {
+                            self.game.place_meeple(seg_ident, self.active_player)?;
+                        }
+                    }
                 }
             }
         }
@@ -183,8 +248,26 @@ impl EventHandler<GameError> for Client {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
+        // draw tiles
         for (pos, tile) in &self.game.placed_tiles {
             tile.render(ctx, &mut canvas, self.grid_pos_rect(pos, ctx))?;
+        }
+
+        // draw meeples
+        // this is really slow and needs to be optimized with some memoization probably
+        for &(seg_ident, player) in self.game.groups.values().flat_map(|group| &group.meeples) {
+            let color = self.game.players.get(player).unwrap().color;
+            let (pos, seg_index) = seg_ident;
+            let tile = self.game.placed_tiles.get(&pos).unwrap();
+            let rect = self.grid_pos_rect(&pos, ctx);
+            let segment_center = tile.segments[seg_index]
+                .poly
+                .iter()
+                .map(|i| refit_to_rect(tile.verts[*i], rect))
+                .reduce(|a, b| a + b)
+                .unwrap()
+                / tile.segments[seg_index].poly.len() as f32;
+            self.draw_meeple(ctx, &mut canvas, segment_center, color)?;
         }
 
         ctx.gfx
