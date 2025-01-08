@@ -6,7 +6,7 @@ use ggez::{
     event::{self, EventHandler},
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
-    input::keyboard::KeyCode,
+    input::{keyboard::KeyCode, mouse},
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
@@ -39,6 +39,7 @@ struct Client {
     turn_phase: TurnPhase,
     turn_order: VecDeque<PlayerIdentifier>,
     offset: Vec2,
+    skip_meeple_button: Rect,
     game: Game,
 }
 
@@ -67,6 +68,7 @@ impl Client {
             turn_phase: TurnPhase::TilePlacement(first_tile),
             offset: Vec2::ZERO,
             turn_order: game.players.keys().collect(),
+            skip_meeple_button: Rect::new(180.0, 20.0, 60.0, 40.0),
             game,
         }
     }
@@ -230,11 +232,26 @@ impl Client {
 
         Ok(())
     }
+
+    fn end_turn(&mut self, groups_to_close: Vec<GroupIdentifier>) {
+        for group_ident in groups_to_close {
+            self.game.score_group(group_ident);
+        }
+
+        let player_ident = self.turn_order.pop_front().unwrap();
+        self.turn_order.push_back(player_ident);
+
+        self.turn_phase = match self.game.library.pop() {
+            Some(tile) => TurnPhase::TilePlacement(tile),
+            None => TurnPhase::EndGame,
+        }
+    }
 }
 
 impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse: Vec2 = ctx.mouse.position().into();
+        let res: Vec2 = ctx.gfx.drawable_size().into();
         let focused_pos: GridPos = self.from_screen_pos(mouse, ctx).into();
 
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
@@ -274,7 +291,13 @@ impl EventHandler<GameError> for Client {
                 self.selected_group = None;
                 self.selected_segment = None;
 
-                if *placed_position == focused_pos {
+                self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
+
+                if self.skip_meeple_button.contains(mouse)
+                    && ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                {
+                    self.end_turn(closed_groups.clone());
+                } else if *placed_position == focused_pos {
                     let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
                     let subgrid_pos = mouse - Vec2::from(corner);
                     let subgrid_pos =
@@ -316,18 +339,7 @@ impl EventHandler<GameError> for Client {
                             if group.meeples.is_empty() && player.meeples > 0 {
                                 // place meeple and advance turn
                                 self.game.place_meeple(seg_ident, player_ident)?;
-
-                                for group_ident in closed_groups {
-                                    self.game.score_group(*group_ident);
-                                }
-
-                                let player_ident = self.turn_order.pop_front().unwrap();
-                                self.turn_order.push_back(player_ident);
-
-                                self.turn_phase = match self.game.library.pop() {
-                                    Some(tile) => TurnPhase::TilePlacement(tile),
-                                    None => TurnPhase::EndGame,
-                                }
+                                self.end_turn(closed_groups.clone());
                             }
                         }
                     }
@@ -342,6 +354,7 @@ impl EventHandler<GameError> for Client {
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         ctx.gfx
             .set_window_title(&format!("Carcassone: {:.2} fps", ctx.time.fps()));
+        let mouse: Vec2 = ctx.mouse.position().into();
 
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
@@ -396,20 +409,24 @@ impl EventHandler<GameError> for Client {
                     DrawParam::default(),
                 );
 
-                if let Some((tile_pos, seg_index)) = self.selected_segment {
-                    let tile = self.game.placed_tiles.get(&tile_pos).unwrap();
-                    let sin_time = time.sin() * 0.1 + 1.0;
-                    tile.render_segment(
-                        seg_index,
-                        ctx,
-                        &mut canvas,
-                        rect,
-                        Some(Color::from_rgb(
-                            (200.0 * sin_time) as u8,
-                            (20.0 * sin_time) as u8,
-                            (70.0 * sin_time) as u8,
-                        )),
-                    )?;
+                let on_ui = self.skip_meeple_button.contains(mouse);
+
+                if !on_ui {
+                    if let Some((tile_pos, seg_index)) = self.selected_segment {
+                        let tile = self.game.placed_tiles.get(&tile_pos).unwrap();
+                        let sin_time = time.sin() * 0.1 + 1.0;
+                        tile.render_segment(
+                            seg_index,
+                            ctx,
+                            &mut canvas,
+                            rect,
+                            Some(Color::from_rgb(
+                                (200.0 * sin_time) as u8,
+                                (20.0 * sin_time) as u8,
+                                (70.0 * sin_time) as u8,
+                            )),
+                        )?;
+                    }
                 }
 
                 // if let Some(group) = self
@@ -473,6 +490,22 @@ impl EventHandler<GameError> for Client {
                 false,
             )?;
         }
+
+        canvas.draw(
+            &Mesh::new_rounded_rectangle(
+                ctx,
+                DrawMode::fill(),
+                self.skip_meeple_button,
+                4.0,
+                Color::from_rgb(0, 128, 192),
+            )?,
+            DrawParam::default(),
+        );
+        let Rect { x, y, .. } = self.skip_meeple_button;
+        canvas.draw(
+            &Text::new("Skip meeples"),
+            DrawParam::from(vec2(x, y) + vec2(20.0, 20.0)).color(Color::BLACK),
+        );
 
         canvas.finish(ctx)
     }
