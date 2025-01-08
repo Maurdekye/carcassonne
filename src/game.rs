@@ -54,9 +54,10 @@ impl SegmentGroup {
             .collect::<HashSet<_>>()
             .len();
         let base_score = match self.gtype {
+            SegmentType::City if !self.free_edges.is_empty() => 1,
             SegmentType::City => 2,
             SegmentType::Road => 1,
-            _ => todo!(),
+            SegmentType::Field => 0,
         };
         base_score * tile_span
     }
@@ -198,7 +199,7 @@ impl Game {
 
         // update open and closed edges for groups
         for (seg_ident, orientations) in opening_edges {
-            let group = self.group_by_seg_ident(seg_ident).unwrap();
+            let group = self.group_by_seg_ident_mut(seg_ident).unwrap();
             group.free_edges.extend(
                 orientations
                     .into_iter()
@@ -207,7 +208,7 @@ impl Game {
         }
         let mut closing_groups = Vec::new();
         for (seg_ident, orientations) in closing_edges {
-            let (group, group_ident) = self.group_and_key_by_seg_ident(seg_ident).unwrap();
+            let (group, group_ident) = self.group_and_key_by_seg_ident_mut(seg_ident).unwrap();
             for orientation in orientations {
                 group.free_edges.remove(&(seg_ident.0, orientation));
             }
@@ -222,11 +223,24 @@ impl Game {
         Ok(closing_groups)
     }
 
-    fn group_by_seg_ident(&mut self, seg_ident: SegmentIdentifier) -> Option<&mut SegmentGroup> {
-        self.group_and_key_by_seg_ident(seg_ident).map(|(g, _)| g)
+    fn group_by_seg_ident_mut(
+        &mut self,
+        seg_ident: SegmentIdentifier,
+    ) -> Option<&mut SegmentGroup> {
+        self.group_and_key_by_seg_ident_mut(seg_ident)
+            .map(|(g, _)| g)
     }
 
     fn group_and_key_by_seg_ident(
+        &self,
+        seg_ident: SegmentIdentifier,
+    ) -> Option<(&SegmentGroup, GroupIdentifier)> {
+        self.group_associations
+            .get(&seg_ident)
+            .and_then(|key| self.groups.get(*key).map(|group| (group, *key)))
+    }
+
+    fn group_and_key_by_seg_ident_mut(
         &mut self,
         seg_ident: SegmentIdentifier,
     ) -> Option<(&mut SegmentGroup, GroupIdentifier)> {
@@ -242,40 +256,53 @@ impl Game {
     }
 
     pub fn score_group(&mut self, group_ident: GroupIdentifier) {
-        let group = self.groups.get_mut(group_ident).unwrap();
-        match group.gtype {
-            SegmentType::City | SegmentType::Road => {
-                // compute individual player scores
-                let CollectedBag(meeples_by_player) =
-                    group.meeples.iter().map(|&(k, v)| (v, k)).collect();
-                let highest_count = meeples_by_player.values().map(Vec::len).max().unwrap();
-                let scoring_players: Vec<_> = meeples_by_player
-                    .iter()
-                    .filter_map(|(player_ident, meeples)| {
-                        (meeples.len() == highest_count).then_some(*player_ident)
-                    })
-                    .collect();
-                let group_score = group.score();
-                let per_player_score = group_score / scoring_players.len();
-                let score_remainder = group_score % scoring_players.len();
-                for (i, player_ident) in scoring_players.into_iter().enumerate() {
-                    let player = self.players.get_mut(player_ident).unwrap();
-                    player.score += per_player_score;
-                    if i < score_remainder {
-                        player.score += 1;
+        let group = self.groups.get(group_ident).unwrap();
+
+        // determine which players are earning score for the group
+        let CollectedBag(meeples_by_player) = group.meeples.iter().map(|&(k, v)| (v, k)).collect();
+        let highest_count = meeples_by_player.values().map(Vec::len).max().unwrap();
+        let scoring_players: Vec<_> = meeples_by_player
+            .iter()
+            .filter_map(|(player_ident, meeples)| {
+                (meeples.len() == highest_count).then_some(*player_ident)
+            })
+            .collect();
+
+        let group_score = match group.gtype {
+            SegmentType::City | SegmentType::Road => group.score(),
+            SegmentType::Field => {
+                let mut cities = HashSet::new();
+                for (pos, seg_index) in group.segments.clone() {
+                    let tile = self.placed_tiles.get(&pos).unwrap();
+                    for adj_seg_index in tile
+                        .adjacent_segments(seg_index)
+                        .filter_map(|(i, seg)| (seg.stype == SegmentType::City).then_some(i))
+                        .collect::<Vec<_>>()
+                    {
+                        let (city_group, city_group_ident) = self
+                            .group_and_key_by_seg_ident((pos, adj_seg_index))
+                            .unwrap();
+                        if city_group.free_edges.is_empty() {
+                            cities.insert(city_group_ident);
+                        }
                     }
                 }
-
-                // return and remove meeples
-                for (player_ident, meeples) in meeples_by_player {
-                    let player = self.players.get_mut(player_ident).unwrap();
-                    player.meeples += meeples.len();
-                }
-
-                group.meeples.clear();
+                cities.len() * 3
             }
-            _ => {}
+        };
+
+        for player_ident in scoring_players {
+            let player = self.players.get_mut(player_ident).unwrap();
+            player.score += group_score;
         }
+
+        // return and remove meeples
+        for (player_ident, meeples) in meeples_by_player {
+            let player = self.players.get_mut(player_ident).unwrap();
+            player.meeples += meeples.len();
+        }
+
+        self.groups.get_mut(group_ident).unwrap().meeples.clear();
     }
 
     pub fn place_meeple(
@@ -291,7 +318,7 @@ impl Game {
         }
         player.meeples -= 1;
 
-        let group = self.group_by_seg_ident(seg_ident).unwrap();
+        let group = self.group_by_seg_ident_mut(seg_ident).unwrap();
         group.meeples.push((seg_ident, player_ident));
 
         Ok(())

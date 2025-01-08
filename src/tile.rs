@@ -7,7 +7,7 @@ use ggez::{
 };
 use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, DEAD_END_ROAD, L_CURVE_ROAD, STRAIGHT_ROAD};
 
-use crate::{pos::GridPos, util::refit_to_rect};
+use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
 
 #[cfg(test)]
 mod test;
@@ -199,6 +199,20 @@ impl Tile {
             }
         }
         Some(pairs)
+    }
+
+    pub fn adjacent_segments(
+        &self,
+        seg_index: SegmentIndex,
+    ) -> impl Iterator<Item = (SegmentIndex, &Segment)> {
+        let seg_poly = &self.segments[seg_index].poly;
+        self.segments
+            .iter()
+            .enumerate()
+            .filter_map(move |(i, segment)| {
+                (i != seg_index && segment.poly.iter().any(|j| seg_poly.contains(j)))
+                    .then_some((i, &self.segments[i]))
+            })
     }
 }
 

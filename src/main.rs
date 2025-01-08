@@ -10,7 +10,12 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
+use tile::{
+    tile_definitions::STRAIGHT_ROAD,
+    Orientation,
+    SegmentType::{City, Road},
+    Tile,
+};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -235,7 +240,12 @@ impl Client {
 
     fn end_turn(&mut self, groups_to_close: Vec<GroupIdentifier>) {
         for group_ident in groups_to_close {
-            self.game.score_group(group_ident);
+            use tile::SegmentType::*;
+            let group = self.game.groups.get(group_ident).unwrap();
+            match group.gtype {
+                City | Road => self.game.score_group(group_ident),
+                Field => {}
+            }
         }
 
         let player_ident = self.turn_order.pop_front().unwrap();
@@ -243,8 +253,21 @@ impl Client {
 
         self.turn_phase = match self.game.library.pop() {
             Some(tile) => TurnPhase::TilePlacement(tile),
-            None => TurnPhase::EndGame,
+            None => {
+                self.end_game();
+                return;
+            }
         }
+    }
+
+    fn end_game(&mut self) {
+        for group_ident in self.game.groups.keys().collect::<Vec<_>>() {
+            let group = self.game.groups.get(group_ident).unwrap();
+            if !group.meeples.is_empty() {
+                self.game.score_group(group_ident);
+            }
+        }
+        self.turn_phase = TurnPhase::EndGame;
     }
 }
 
