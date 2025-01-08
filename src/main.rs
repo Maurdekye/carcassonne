@@ -293,8 +293,11 @@ impl EventHandler<GameError> for Client {
 
                 self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
-                if self.skip_meeple_button.contains(mouse)
-                    && ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                let player_ident = *self.turn_order.front().unwrap();
+                let player = self.game.players.get(player_ident).unwrap();
+                if player.meeples == 0
+                    || (self.skip_meeple_button.contains(mouse)
+                        && ctx.mouse.button_just_pressed(event::MouseButton::Left))
                 {
                     self.end_turn(closed_groups.clone());
                 } else if *placed_position == focused_pos {
