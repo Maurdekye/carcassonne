@@ -1,7 +1,4 @@
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use ggez::{
     glam::{vec2, Vec2},
