@@ -40,7 +40,7 @@ struct Client {
 impl Client {
     fn new() -> Self {
         let mut game = Game::new();
-        let active_player = game.players.insert(Player::new(Color::GREEN));
+        let active_player = game.players.insert(Player::new(Color::BLUE));
         Self {
             selected_square: None,
             held_tile: None,
@@ -116,6 +116,7 @@ impl Client {
         pos: Vec2,
         color: Color,
     ) -> Result<(), GameError> {
+        const MEEPLE_SIZE: f32 = 200.0;
         const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
         const MEEPLE_POINTS: [Vec2; 13] = [
             vec2(0.025, 1.0),
@@ -133,8 +134,8 @@ impl Client {
             vec2(0.25, 0.575),
         ];
         const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
-        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * GRID_SIZE - pos);
-        let head_point = (HEAD_POINT - MEEPLE_CENTER) * GRID_SIZE - pos;
+        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * MEEPLE_SIZE * GRID_SIZE + pos);
+        let head_point = (HEAD_POINT - MEEPLE_CENTER) * MEEPLE_SIZE * GRID_SIZE + pos;
         canvas.draw(
             &Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?,
             DrawParam::default(),
@@ -144,7 +145,7 @@ impl Client {
                 ctx,
                 DrawMode::fill(),
                 head_point,
-                GRID_SIZE * 0.175,
+                GRID_SIZE * MEEPLE_SIZE * 0.175,
                 1.0,
                 color,
             )?,
@@ -200,8 +201,8 @@ impl EventHandler<GameError> for Client {
                 }
             }
             PlacementMode::Meeple => {
-                let corner = self.to_screen_pos(grid_pos, ctx);
-                let subgrid_pos = Vec2::from(mouse) - Vec2::from(corner);
+                let corner: GridPos = self.to_screen_pos(grid_pos, ctx).into();
+                let subgrid_pos = mouse - Vec2::from(corner);
                 let subgrid_pos = subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
 
                 'segment_locate: {
@@ -227,14 +228,14 @@ impl EventHandler<GameError> for Client {
                     self.selected_segment = None;
                 }
 
-                if let (Some(seg_ident), Some(group)) = (
-                    self.selected_segment,
-                    self.selected_group
-                        .and_then(|group_ident| self.game.groups.get(group_ident)),
-                ) {
-                    let player = self.game.players.get(self.active_player).unwrap();
-                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                        if !group.meeples.is_empty() && player.meeples > 0 {
+                if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                    if let (Some(seg_ident), Some(group)) = (
+                        self.selected_segment,
+                        self.selected_group
+                            .and_then(|group_ident| self.game.groups.get(group_ident)),
+                    ) {
+                        let player = self.game.players.get(self.active_player).unwrap();
+                        if group.meeples.is_empty() && player.meeples > 0 {
                             self.game.place_meeple(seg_ident, self.active_player)?;
                         }
                     }
