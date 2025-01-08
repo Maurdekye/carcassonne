@@ -37,9 +37,12 @@ impl Orientation {
 
     pub fn iter_with_offsets() -> impl Iterator<Item = (Orientation, GridPos)> {
         use Orientation::*;
-        [North, East, South, West]
-            .into_iter()
-            .zip([GridPos(0, -1), GridPos(1, 0), GridPos(0, 1), GridPos(-1, 0)])
+        [North, East, South, West].into_iter().zip([
+            GridPos(0, -1),
+            GridPos(1, 0),
+            GridPos(0, 1),
+            GridPos(-1, 0),
+        ])
     }
 }
 
@@ -205,11 +208,10 @@ pub fn get_tile_library() -> Vec<Tile> {
         STRAIGHT_ROAD.clone(),
         CORNER_CITY.clone(),
         L_CURVE_ROAD.clone(),
-        CITY_ENTRANCE.clone(),
-        STRAIGHT_ROAD.clone(),
-        CORNER_CITY.clone(),
-        L_CURVE_ROAD.clone(),
         DEAD_END_ROAD.clone(),
-        STRAIGHT_ROAD.clone(),
     ]
+    .into_iter()
+    .cycle()
+    .take(20)
+    .collect()
 }

@@ -190,8 +190,8 @@ impl Client {
         let card_rect = Rect {
             x: pos.x,
             y: pos.y,
-            w: 100.0,
-            h: 40.0,
+            w: 160.0,
+            h: 60.0,
         };
         canvas.draw(
             &Mesh::new_rounded_rectangle(
@@ -205,13 +205,13 @@ impl Client {
         );
         canvas.draw(
             &Text::new(format!("Score: {}", player.score)),
-            DrawParam::default().offset(pos + vec2(5.0, 5.0)),
+            DrawParam::from(pos + vec2(10.0, 10.0)).color(Color::BLACK),
         );
         for i in 0..player.meeples {
             self.draw_meeple(
                 ctx,
                 canvas,
-                pos + vec2(5.0, 25.0) + vec2(20.0, 0.0) * i as f32,
+                pos + vec2(20.0, 40.0) + vec2(20.0, 0.0) * i as f32,
                 player.color,
             )?;
         }
@@ -455,23 +455,23 @@ impl EventHandler<GameError> for Client {
 
         let current_player_ident = *self.turn_order.front().unwrap();
         if ctx.keyboard.is_key_pressed(KeyCode::Tab) {
-            self.render_player_card(
-                ctx,
-                &mut canvas,
-                current_player_ident,
-                vec2(10.0, 10.0),
-                false,
-            )?;
-        } else {
             for (i, &player_ident) in self.turn_order.iter().enumerate() {
                 self.render_player_card(
                     ctx,
                     &mut canvas,
-                    current_player_ident,
-                    vec2(10.0, 10.0) + vec2(0.0, 50.0) * i as f32,
+                    player_ident,
+                    vec2(20.0, 20.0) + vec2(0.0, 80.0) * i as f32,
                     player_ident == current_player_ident,
                 )?;
             }
+        } else {
+            self.render_player_card(
+                ctx,
+                &mut canvas,
+                current_player_ident,
+                vec2(20.0, 20.0),
+                false,
+            )?;
         }
 
         canvas.finish(ctx)
