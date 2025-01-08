@@ -5,7 +5,7 @@ use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
     glam::{vec2, Vec2},
-    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
+    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
 };
@@ -43,10 +43,20 @@ struct Client {
 }
 
 impl Client {
-    fn new() -> Self {
+    fn new(players: usize) -> Self {
         let mut game = Game::new();
-        game.players.insert(Player::new(Color::BLUE));
-        game.players.insert(Player::new(Color::YELLOW));
+        for color in [
+            Color::RED,
+            Color::YELLOW,
+            Color::BLUE,
+            Color::GREEN,
+            Color::BLACK,
+        ]
+        .into_iter()
+        .take(players)
+        {
+            game.players.insert(Player::new(color));
+        }
         let first_tile = game.library.pop().unwrap();
         Self {
             selected_square: None,
@@ -166,6 +176,59 @@ impl Client {
             TurnPhase::TilePlacement(tile) => Some(tile),
             _ => None,
         }
+    }
+
+    fn render_player_card(
+        &self,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        player_ident: PlayerIdentifier,
+        pos: Vec2,
+        highlighted: bool,
+    ) -> Result<(), GameError> {
+        let player = self.game.players.get(player_ident).unwrap();
+        let card_rect = Rect {
+            x: pos.x,
+            y: pos.y,
+            w: 100.0,
+            h: 40.0,
+        };
+        canvas.draw(
+            &Mesh::new_rounded_rectangle(
+                ctx,
+                DrawMode::fill(),
+                card_rect,
+                5.0,
+                Color::from_rgb(192, 192, 192),
+            )?,
+            DrawParam::default(),
+        );
+        canvas.draw(
+            &Text::new(format!("Score: {}", player.score)),
+            DrawParam::default().offset(pos + vec2(5.0, 5.0)),
+        );
+        for i in 0..player.meeples {
+            self.draw_meeple(
+                ctx,
+                canvas,
+                pos + vec2(5.0, 25.0) + vec2(20.0, 0.0) * i as f32,
+                player.color,
+            )?;
+        }
+        if highlighted {
+            canvas.draw(
+                &Mesh::new_rounded_rectangle(
+                    ctx,
+                    DrawMode::stroke(4.0),
+                    card_rect,
+                    5.0,
+                    player.color,
+                )?,
+                DrawParam::default(),
+            );
+        }
+
+        Ok(())
     }
 }
 
@@ -388,20 +451,28 @@ impl EventHandler<GameError> for Client {
             TurnPhase::EndGame => {}
         }
 
-        // draw current player
-        let current_player_ident = *self.turn_order.front().unwrap();
-        let current_player = self.game.players.get(current_player_ident).unwrap();
+        // draw ui
 
-        canvas.draw(
-            &Mesh::new_rounded_rectangle(
+        let current_player_ident = *self.turn_order.front().unwrap();
+        if ctx.keyboard.is_key_pressed(KeyCode::Tab) {
+            self.render_player_card(
                 ctx,
-                DrawMode::fill(),
-                Rect::new(10.0, 10.0, 40.0, 40.0),
-                5.0,
-                current_player.color,
-            )?,
-            DrawParam::default(),
-        );
+                &mut canvas,
+                current_player_ident,
+                vec2(10.0, 10.0),
+                false,
+            )?;
+        } else {
+            for (i, &player_ident) in self.turn_order.iter().enumerate() {
+                self.render_player_card(
+                    ctx,
+                    &mut canvas,
+                    current_player_ident,
+                    vec2(10.0, 10.0) + vec2(0.0, 50.0) * i as f32,
+                    player_ident == current_player_ident,
+                )?;
+            }
+        }
 
         canvas.finish(ctx)
     }
@@ -412,7 +483,7 @@ fn main() -> GameResult {
         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassone"))
         .build()?;
-    let mut client = Client::new();
+    let mut client = Client::new(4);
     client
         .game
         .place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
