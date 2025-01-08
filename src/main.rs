@@ -68,7 +68,7 @@ impl Client {
             turn_phase: TurnPhase::TilePlacement(first_tile),
             offset: Vec2::ZERO,
             turn_order: game.players.keys().collect(),
-            skip_meeple_button: Rect::new(180.0, 20.0, 60.0, 40.0),
+            skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             game,
         }
     }
@@ -403,7 +403,7 @@ impl EventHandler<GameError> for Client {
             TurnPhase::MeeplePlacement {
                 placed_position, ..
             } => {
-                let rect = self.grid_pos_rect(&placed_position, ctx);
+                let rect = self.grid_pos_rect(placed_position, ctx);
                 canvas.draw(
                     &Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?,
                     DrawParam::default(),
@@ -429,41 +429,22 @@ impl EventHandler<GameError> for Client {
                     }
                 }
 
-                // if let Some(group) = self
-                //     .selected_group
-                //     .and_then(|key| self.game.groups.get(key))
-                // {
-                //     for (pos, tile, i) in group.segments.iter().filter_map(|(pos, i)| {
-                //         self.game.placed_tiles.get(pos).map(|tile| (pos, tile, i))
-                //     }) {
-                //         let rect = self.grid_pos_rect(pos, ctx);
-                //         tile.render_segment(
-                //             *i,
-                //             ctx,
-                //             &mut canvas,
-                //             rect,
-                //             Some(Color::from_rgb(200, 20, 70)),
-                //         )?;
-                //     }
-
-                //     for &(pos, orientation) in &group.free_edges {
-                //         let rect = self.grid_pos_rect(&pos, ctx);
-                //         let tl = vec2(rect.x, rect.y);
-                //         let tr = vec2(rect.right(), rect.y);
-                //         let bl = vec2(rect.x, rect.bottom());
-                //         let br = vec2(rect.right(), rect.bottom());
-                //         let line = match orientation {
-                //             Orientation::North => [tl, tr],
-                //             Orientation::East => [tr, br],
-                //             Orientation::South => [br, bl],
-                //             Orientation::West => [bl, tl],
-                //         };
-                //         canvas.draw(
-                //             &Mesh::new_line(ctx, &line, 2.0, Color::CYAN)?,
-                //             DrawParam::default(),
-                //         );
-                //     }
-                // }
+                // draw skip meeples button
+                canvas.draw(
+                    &Mesh::new_rounded_rectangle(
+                        ctx,
+                        DrawMode::fill(),
+                        self.skip_meeple_button,
+                        4.0,
+                        Color::from_rgb(0, 128, 192),
+                    )?,
+                    DrawParam::default(),
+                );
+                let Rect { x, y, .. } = self.skip_meeple_button;
+                canvas.draw(
+                    &Text::new("Skip meeples"),
+                    DrawParam::from(vec2(x, y) + vec2(10.0, 10.0)).color(Color::BLACK),
+                );
             }
             TurnPhase::EndGame => {}
         }
@@ -490,22 +471,6 @@ impl EventHandler<GameError> for Client {
                 false,
             )?;
         }
-
-        canvas.draw(
-            &Mesh::new_rounded_rectangle(
-                ctx,
-                DrawMode::fill(),
-                self.skip_meeple_button,
-                4.0,
-                Color::from_rgb(0, 128, 192),
-            )?,
-            DrawParam::default(),
-        );
-        let Rect { x, y, .. } = self.skip_meeple_button;
-        canvas.draw(
-            &Text::new("Skip meeples"),
-            DrawParam::from(vec2(x, y) + vec2(20.0, 20.0)).color(Color::BLACK),
-        );
 
         canvas.finish(ctx)
     }
