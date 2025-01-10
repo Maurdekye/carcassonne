@@ -244,7 +244,7 @@ impl Client {
             let group = self.game.groups.get(group_ident).unwrap();
             match group.gtype {
                 City | Road => self.game.score_group(group_ident),
-                Field => {}
+                _ => {}
             }
         }
 
@@ -392,20 +392,13 @@ impl EventHandler<GameError> for Client {
         }
 
         // draw meeples
-        // this is really slow and needs to be optimized with some memoization probably
         for &(seg_ident, player) in self.game.groups.values().flat_map(|group| &group.meeples) {
             let color = self.game.players.get(player).unwrap().color;
             let (pos, seg_index) = seg_ident;
             let tile = self.game.placed_tiles.get(&pos).unwrap();
             let rect = self.grid_pos_rect(&pos, ctx);
-            let segment_center = tile.segments[seg_index]
-                .poly
-                .iter()
-                .map(|i| refit_to_rect(tile.verts[*i], rect))
-                .reduce(|a, b| a + b)
-                .unwrap()
-                / tile.segments[seg_index].poly.len() as f32;
-            self.draw_meeple(ctx, &mut canvas, segment_center, color)?;
+            let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
+            self.draw_meeple(ctx, &mut canvas, segment_meeple_spot, color)?;
         }
 
         match &self.turn_phase {
@@ -502,17 +495,54 @@ impl EventHandler<GameError> for Client {
     }
 }
 
-fn main() -> GameResult {
-    let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
-        .window_mode(WindowMode::default().dimensions(800.0, 800.0))
-        .window_setup(WindowSetup::default().title("Carcassone"))
-        .build()?;
-    let mut client = Client::new(4);
-    client
-        .game
-        .place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
-    // client
-    //     .game
-    //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
-    event::run(ctx, event_loop, client);
+fn main() {
+    use crate::tile::{
+        Orientation, SegmentBorderPiece, SegmentDefinition, SegmentEdgePortion, SegmentType, Tile,
+    };
+
+    use Orientation::*;
+    use SegmentBorderPiece::*;
+    use SegmentDefinition::*;
+    use SegmentEdgePortion::*;
+    use SegmentType::*;
+    
+    let tile = Tile::new(
+        vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
+        vec![
+            Segment {
+                stype: Field,
+                edges: vec![Edge(End, West), Edge(Beginning, North), Vert(0)],
+            },
+            Segment {
+                stype: Road,
+                edges: vec![Edge(Middle, West), Vert(0), Edge(Middle, North), Vert(1)],
+            },
+            Segment {
+                stype: Field,
+                edges: vec![
+                    Edge(Beginning, West),
+                    Vert(1),
+                    Edge(End, North),
+                    Edge(Full, East),
+                    Edge(Full, South),
+                ],
+            },
+        ],
+    );
+    dbg!(tile);
 }
+
+// fn main() -> GameResult {
+//     let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
+//         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
+//         .window_setup(WindowSetup::default().title("Carcassone"))
+//         .build()?;
+//     let mut client = Client::new(4);
+//     client
+//         .game
+//         .place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
+//     // client
+//     //     .game
+//     //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
+//     event::run(ctx, event_loop, client);
+// }

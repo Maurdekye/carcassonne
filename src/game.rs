@@ -57,7 +57,7 @@ impl SegmentGroup {
             SegmentType::City if !self.free_edges.is_empty() => 1,
             SegmentType::City => 2,
             SegmentType::Road => 1,
-            SegmentType::Field => 0,
+            _ => 0,
         };
         base_score * tile_span
     }
@@ -289,6 +289,8 @@ impl Game {
                 }
                 cities.len() * 3
             }
+            SegmentType::Monastary => todo!(),
+            SegmentType::Village => 0,
         };
 
         for player_ident in scoring_players {
@@ -336,17 +338,5 @@ fn test_group_coallating() {
     game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
         .unwrap();
     game.place_tile(CITY_ENTRANCE.clone(), GridPos(-1, -1))
-        .unwrap();
-}
-
-#[test]
-fn test_group_coallating_2() {
-    use crate::tile::tile_definitions::*;
-    let mut game = Game::new();
-    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))
-        .unwrap();
-    game.place_tile(DEAD_END_ROAD.clone().rotated(), GridPos(2, 0))
-        .unwrap();
-    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(1, 0))
         .unwrap();
 }

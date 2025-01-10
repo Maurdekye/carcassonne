@@ -1,182 +1,206 @@
 use ggez::glam::vec2;
 use lazy_static::lazy_static;
 
-use crate::tile::{Mounts, Segment, SegmentType};
+use crate::tile::{
+    Orientation, SegmentAttribute, SegmentBorderPiece, SegmentDefinition, SegmentEdgePortion,
+    SegmentType, Tile,
+};
 
-use super::Tile;
+use Orientation::*;
+use SegmentBorderPiece::*;
+use SegmentDefinition::*;
+use SegmentEdgePortion::*;
 use SegmentType::*;
 
 lazy_static! {
-    pub static ref STRAIGHT_ROAD: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-            vec2(0.0, 0.45),
-            vec2(0.0, 0.55),
-            vec2(1.0, 0.45),
-            vec2(1.0, 0.55),
-        ],
-        segments: vec![
+    pub static ref STRAIGHT_ROAD: Tile = Tile::new(
+        vec![],
+        vec![
             Segment {
                 stype: Field,
-                poly: vec![0, 3, 6, 4],
+                edges: vec![Edge(End, West), Edge(Full, North), Edge(Beginning, East)]
             },
             Segment {
                 stype: Road,
-                poly: vec![4, 6, 7, 5],
-            },
-            Segment {
-                stype: Field,
-                poly: vec![5, 7, 2, 1],
-            },
-        ],
-        mounts: Mounts {
-            north: [0, 0, 0],
-            east: [0, 1, 2],
-            south: [2, 2, 2],
-            west: [2, 1, 0]
-        }
-    };
-    pub static ref L_CURVE_ROAD: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-            vec2(0.0, 0.45),
-            vec2(0.0, 0.55),
-            vec2(0.45, 0.0),
-            vec2(0.55, 0.0),
-            vec2(0.45, 0.45),
-            vec2(0.55, 0.55),
-        ],
-        segments: vec![
-            Segment {
-                stype: Field,
-                poly: vec![0, 6, 8, 4],
+                edges: vec![Edge(Middle, West), Edge(Middle, East)]
             },
             Segment {
                 stype: Road,
-                poly: vec![4, 8, 6, 7, 9, 5],
+                edges: vec![Edge(Beginning, West), Edge(End, East), Edge(Full, South)]
+            }
+        ]
+    );
+    pub static ref L_CURVE_ROAD: Tile = Tile::new(
+        vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
+        vec![
+            Segment {
+                stype: Field,
+                edges: vec![Edge(End, West), Edge(Beginning, North), Vert(0)]
+            },
+            Segment {
+                stype: Road,
+                edges: vec![Edge(Middle, West), Vert(0), Edge(Middle, North), Vert(1)]
             },
             Segment {
                 stype: Field,
-                poly: vec![5, 9, 7, 3, 2, 1],
-            },
-        ],
-        mounts: Mounts {
-            north: [0, 1, 2],
-            east: [2, 2, 2],
-            south: [2, 2, 2],
-            west: [2, 1, 0]
-        }
-    };
-    pub static ref CORNER_CITY: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-        ],
-        segments: vec![
+                edges: vec![
+                    Edge(Beginning, West),
+                    Vert(1),
+                    Edge(End, North),
+                    Edge(Full, East),
+                    Edge(Full, South)
+                ]
+            }
+        ]
+    );
+    pub static ref CORNER_CITY: Tile = Tile::new(
+        vec![],
+        vec![
             Segment {
                 stype: City,
-                poly: vec![0, 3, 1]
+                edges: vec![Edge(Full, West), Edge(Full, North)]
             },
             Segment {
                 stype: Field,
-                poly: vec![1, 3, 2]
-            },
-        ],
-        mounts: Mounts {
-            north: [0, 0, 0],
-            east: [1, 1, 1],
-            south: [1, 1, 1],
-            west: [0, 0, 0]
-        }
-    };
-    pub static ref CITY_ENTRANCE: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-            vec2(0.45, 0.3),
-            vec2(0.55, 0.3),
-            vec2(0.45, 1.0),
-            vec2(0.55, 1.0),
-        ],
-        segments: vec![
+                edges: vec![Edge(Full, East), Edge(Full, South)]
+            }
+        ]
+    );
+    pub static ref CITY_ENTRANCE: Tile = Tile::new(
+        vec![vec2(0.45, 0.3), vec2(0.55, 0.3)],
+        vec![
             Segment {
                 stype: City,
-                poly: vec![0, 3, 5, 4]
+                edges: vec![Edge(Full, North), Vert(1), Vert(0)]
             },
             Segment {
                 stype: Road,
-                poly: vec![4, 5, 7, 6]
+                edges: vec![Edge(Middle, South), Vert(0), Vert(1)]
             },
             Segment {
                 stype: Field,
-                poly: vec![0, 4, 6, 1]
+                edges: vec![Edge(End, South), Edge(Full, West), Vert(0)]
             },
             Segment {
                 stype: Field,
-                poly: vec![5, 3, 2, 7]
+                edges: vec![Edge(Full, East), Edge(Beginning, South), Vert(1)]
             }
+        ]
+    );
+    pub static ref CROSSROADS: Tile = Tile::new(
+        vec![
+            vec2(0.35, 0.45),
+            vec2(0.65, 0.45),
+            vec2(0.65, 0.55),
+            vec2(0.55, 0.65),
+            vec2(0.45, 0.65),
+            vec2(0.35, 0.55)
         ],
-        mounts: Mounts {
-            north: [0, 0, 0],
-            east: [3, 3, 3],
-            south: [3, 1, 2],
-            west: [2, 2, 2]
-        }
-    };
-    pub static ref DEAD_END_ROAD: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
-            vec2(0.45, 1.0),
-            vec2(0.55, 1.0),
-            vec2(0.45, 0.45),
-            vec2(0.55, 0.45),
-        ],
-        segments: vec![
+        vec![
+            Segment {
+                stype: Village,
+                edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4), Vert(5)]
+            },
             Segment {
                 stype: Field,
-                poly: vec![0, 3, 2, 5, 7, 6, 4, 1]
+                edges: vec![
+                    Edge(End, West),
+                    Edge(Full, North),
+                    Edge(Beginning, East),
+                    Vert(1),
+                    Vert(0)
+                ]
             },
             Segment {
                 stype: Road,
-                poly: vec![4, 6, 7, 5]
+                edges: vec![Edge(Middle, East), Vert(2), Vert(1)]
+            },
+            Segment {
+                stype: Field,
+                edges: vec![Edge(End, East), Edge(Beginning, South), Vert(3), Vert(2)]
+            },
+            Segment {
+                stype: Road,
+                edges: vec![Edge(Middle, South), Vert(4), Vert(3)]
+            },
+            Segment {
+                stype: Field,
+                edges: vec![Edge(End, South), Edge(Beginning, West), Vert(5), Vert(4)]
+            },
+            Segment {
+                stype: Road,
+                edges: vec![Edge(Middle, West), Vert(0), Vert(5)]
             }
+        ]
+    );
+    pub static ref MONASTARY: Tile = Tile::new(
+        vec![
+            vec2(0.3, 0.7),
+            vec2(0.3, 0.3),
+            vec2(0.5, 0.15),
+            vec2(0.7, 0.3),
+            vec2(0.7, 0.7)
         ],
-        mounts: Mounts {
-            north: [0, 0, 0],
-            east: [0, 0, 0],
-            south: [0, 1, 0],
-            west: [0, 0, 0]
-        }
-    };
-    pub static ref FIELD: Tile = Tile {
-        verts: vec![
-            vec2(0.0, 0.0),
-            vec2(0.0, 1.0),
-            vec2(1.0, 1.0),
-            vec2(1.0, 0.0),
+        vec![
+            Segment {
+                stype: Monastary,
+                edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4),]
+            },
+            SpecialSegment {
+                stype: Field,
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.8, 0.5))],
+                edges: vec![
+                    Edge(Full, West),
+                    Edge(Full, North),
+                    Edge(Full, East),
+                    Edge(Full, South),
+                    Vert(0),
+                    Vert(4),
+                    Vert(3),
+                    Vert(2),
+                    Vert(1),
+                    Vert(0),
+                ]
+            }
+        ]
+    );
+    pub static ref ROAD_MONASTARY: Tile = Tile::new(
+        vec![
+            vec2(0.3, 0.7),
+            vec2(0.3, 0.3),
+            vec2(0.5, 0.15),
+            vec2(0.7, 0.3),
+            vec2(0.7, 0.7),
+            vec2(0.55, 0.7),
+            vec2(0.45, 0.7)
         ],
-        segments: vec![Segment {
-            stype: Field,
-            poly: vec![0, 1, 2, 3]
-        }],
-        mounts: Mounts {
-            north: [0, 0, 0],
-            east: [0, 0, 0],
-            south: [0, 0, 0],
-            west: [0, 0, 0]
-        }
-    };
+        vec![
+            Segment {
+                stype: Monastary,
+                edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4),]
+            },
+            SpecialSegment {
+                stype: Field,
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.8, 0.5))],
+                edges: vec![
+                    Edge(End, South),
+                    Edge(Full, West),
+                    Edge(Full, North),
+                    Edge(Full, East),
+                    Edge(Beginning, South),
+                    Vert(5),
+                    Vert(4),
+                    Vert(3),
+                    Vert(2),
+                    Vert(1),
+                    Vert(0),
+                    Vert(6),
+                ]
+            },
+            Segment {
+                stype: Road,
+                edges: vec![Edge(Middle, South), Vert(6), Vert(5),]
+            }
+        ]
+    );
 }
