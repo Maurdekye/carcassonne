@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use ggez::GameError;
+use ggez::{glam::Vec2, GameError};
 use player::Player;
 use slotmap::{DefaultKey, SlotMap};
 
@@ -231,7 +231,7 @@ impl Game {
             .map(|(g, _)| g)
     }
 
-    fn group_and_key_by_seg_ident(
+    pub fn group_and_key_by_seg_ident(
         &self,
         seg_ident: SegmentIdentifier,
     ) -> Option<(&SegmentGroup, GroupIdentifier)> {
@@ -324,6 +324,15 @@ impl Game {
         group.meeples.push((seg_ident, player_ident));
 
         Ok(())
+    }
+
+    pub fn group_poly(&self, group_ident: GroupIdentifier) -> Option<Vec<Vec2>> {
+        // fn get_open_poly(game: &Game, startin)
+        self.groups.get(group_ident).map(|group| {
+            let vert_library: Vec<Vec<Vec2>> = Vec::new();
+            // let poly
+            todo!()
+        })
     }
 }
 

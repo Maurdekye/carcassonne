@@ -314,6 +314,8 @@ impl EventHandler<GameError> for Client {
                 self.selected_group = None;
                 self.selected_segment = None;
 
+                if let Some(tile) = self.game.placed_tiles.get(placed_position) {}
+
                 self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
                 let player_ident = *self.turn_order.front().unwrap();
@@ -332,21 +334,17 @@ impl EventHandler<GameError> for Client {
                     'segment_locate: {
                         if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
                             for (i, segment) in tile.segments.iter().enumerate() {
-                                if point_in_polygon(
-                                    subgrid_pos,
-                                    &segment
-                                        .poly
-                                        .iter()
-                                        .map(|i| tile.verts[*i])
-                                        .collect::<Vec<_>>(),
-                                ) {
-                                    self.selected_group = Some(
-                                        *self
-                                            .game
-                                            .group_associations
-                                            .get(&(focused_pos, i))
-                                            .unwrap(),
-                                    );
+                                let (group, group_ident) = self
+                                    .game
+                                    .group_and_key_by_seg_ident((*placed_position, i))
+                                    .unwrap();
+                                if group.meeples.is_empty()
+                                    && point_in_polygon(
+                                        subgrid_pos,
+                                        &tile.segment_polygon(i).collect::<Vec<_>>(),
+                                    )
+                                {
+                                    self.selected_group = Some(group_ident);
                                     self.selected_segment = Some((focused_pos, i));
                                     break 'segment_locate;
                                 }

@@ -37,6 +37,16 @@ impl Orientation {
         }
     }
 
+    pub fn rotate(self) -> Orientation {
+        use Orientation::*;
+        match self {
+            North => West,
+            East => North,
+            South => East,
+            West => South,
+        }
+    }
+
     pub fn iter_with_offsets() -> impl Iterator<Item = (Orientation, GridPos)> {
         use Orientation::*;
         [North, East, South, West].into_iter().zip([
@@ -73,6 +83,10 @@ impl SegmentType {
             Monastary => Color::from_rgb(183, 222, 235),
             Village => Color::from_rgb(227, 204, 166),
         }
+    }
+
+    fn placeable(&self) -> bool {
+        !matches!(self, SegmentType::Village)
     }
 }
 
@@ -133,22 +147,7 @@ pub struct Segment {
     pub poly: Vec<usize>,
     pub attributes: Vec<SegmentAttribute>,
     pub meeple_spot: Vec2,
-}
-
-impl Segment {
-    pub fn new(
-        stype: SegmentType,
-        poly: Vec<usize>,
-        attributes: Vec<SegmentAttribute>,
-        meeple_spot: Vec2,
-    ) -> Self {
-        Self {
-            stype,
-            poly,
-            attributes,
-            meeple_spot,
-        }
-    }
+    pub edge_definition: Vec<SegmentBorderPiece>,
 }
 
 #[derive(Clone, Debug)]
@@ -160,6 +159,29 @@ pub enum SegmentEdgePortion {
     Middle,
     End,
     Full,
+}
+
+impl SegmentEdgePortion {
+    pub fn opposite(self) -> Self {
+        use SegmentEdgePortion::*;
+        match self {
+            Beginning => End,
+            Middle => Middle,
+            End => Beginning,
+            Full => Full,
+        }
+    }
+}
+
+pub trait OppositePortionOrientation {
+    fn opposite(self) -> Self;
+}
+
+impl OppositePortionOrientation for (SegmentEdgePortion, Orientation) {
+    fn opposite(self) -> Self {
+        let (portion, orientation) = self;
+        (portion.opposite(), orientation.opposite())
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
@@ -188,6 +210,7 @@ pub struct Tile {
     pub mounts: Mounts,
     segment_adjacency: Vec<bool>,
     pub attributes: Vec<TileAttribute>,
+    pub edge_verts_map: HashMap<(SegmentEdgePortion, Orientation), [usize; 2]>,
 }
 
 impl Tile {
@@ -240,8 +263,7 @@ impl Tile {
                 } => (stype, edges, attributes),
             };
 
-            let num_edges = edges.len();
-            for (edge_index, edge) in edges.into_iter().enumerate() {
+            for (edge_index, edge) in edges.iter().cloned().enumerate() {
                 match edge {
                     SegmentBorderPiece::Vert(index) => {
                         poly.push(index);
@@ -315,7 +337,7 @@ impl Tile {
                             verts.push(end_vert);
                             verts.len() - 1
                         };
-                        if !(edge_index == num_edges - 1 && poly.first() == Some(&end_index)) {
+                        if !(edge_index == edges.len() - 1 && poly.first() == Some(&end_index)) {
                             poly.push(end_index);
                         }
                         poly_indicies[1] = end_index;
@@ -344,6 +366,7 @@ impl Tile {
                 poly,
                 attributes,
                 meeple_spot,
+                edge_definition: edges,
             });
         }
 
@@ -367,11 +390,28 @@ impl Tile {
             mounts,
             segment_adjacency,
             attributes,
+            edge_verts_map,
         }
     }
 
     pub fn new(verts: Vec<Vec2>, segment_definitions: Vec<SegmentDefinition>) -> Self {
         Tile::new_with_attributes(verts, segment_definitions, Vec::new())
+    }
+
+    pub fn segment_polygon(&self, seg_index: SegmentIndex) -> impl Iterator<Item = Vec2> + '_ {
+        self.segments[seg_index]
+            .poly
+            .iter()
+            .map(move |i| self.verts[*i])
+    }
+
+    pub fn refit_segment_polygon(
+        &self,
+        seg_index: SegmentIndex,
+        bounds: Rect,
+    ) -> impl Iterator<Item = Vec2> + '_ {
+        self.segment_polygon(seg_index)
+            .map(move |v| refit_to_rect(v, bounds))
     }
 
     pub fn render(
@@ -395,11 +435,7 @@ impl Tile {
         color: Option<Color>,
     ) -> Result<(), GameError> {
         let segment = &self.segments[seg_index];
-        let verts: Vec<Vec2> = segment
-            .poly
-            .iter()
-            .map(|i| refit_to_rect(self.verts[*i], bounds))
-            .collect();
+        let verts: Vec<Vec2> = self.refit_segment_polygon(seg_index, bounds).collect();
         canvas.draw(
             &Mesh::new_polygon(
                 ctx,
@@ -419,7 +455,17 @@ impl Tile {
         for segment in &mut self.segments {
             let mspot = &mut segment.meeple_spot;
             *mspot = vec2(1.0 - mspot.y, mspot.x);
+            for edge in segment.edge_definition.iter_mut() {
+                if let SegmentBorderPiece::Edge(_, orientation) = edge {
+                    *orientation = orientation.rotate();
+                }
+            }
         }
+        self.edge_verts_map = self
+            .edge_verts_map
+            .iter()
+            .map(|((p, orientation), v)| ((*p, orientation.rotate()), *v))
+            .collect();
 
         self.mounts = self.mounts.clone().rotate();
     }
@@ -469,14 +515,6 @@ impl Tile {
             .iter()
             .enumerate()
             .filter_map(|(i, a)| a.then_some((i, &self.segments[i])))
-        // let seg_poly = &self.segments[seg_index].poly;
-        // self.segments
-        //     .iter()
-        //     .enumerate()
-        //     .filter_map(move |(i, segment)| {
-        //         (i != seg_index && segment.poly.iter().any(|j| seg_poly.contains(j)))
-        //             .then_some((i, &self.segments[i]))
-        //     })
     }
 }
 
