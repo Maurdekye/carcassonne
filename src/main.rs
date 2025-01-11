@@ -49,7 +49,7 @@ struct Client {
 }
 
 impl Client {
-    fn new(players: usize) -> Self {
+    fn new(ctx: &Context, players: usize) -> Self {
         let mut game = Game::new();
         for color in [
             Color::RED,
@@ -71,7 +71,7 @@ impl Client {
             selected_segment: None,
             placement_is_valid: false,
             turn_phase: TurnPhase::TilePlacement(first_tile),
-            offset: Vec2::ZERO,
+            offset: Vec2::from(ctx.gfx.drawable_size()) / 2.0,
             turn_order: game.players.keys().collect(),
             skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             game,
@@ -495,54 +495,14 @@ impl EventHandler<GameError> for Client {
     }
 }
 
-fn main() {
-    use crate::tile::{
-        Orientation, SegmentBorderPiece, SegmentDefinition, SegmentEdgePortion, SegmentType, Tile,
-    };
-
-    use Orientation::*;
-    use SegmentBorderPiece::*;
-    use SegmentDefinition::*;
-    use SegmentEdgePortion::*;
-    use SegmentType::*;
-    
-    let tile = Tile::new(
-        vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
-        vec![
-            Segment {
-                stype: Field,
-                edges: vec![Edge(End, West), Edge(Beginning, North), Vert(0)],
-            },
-            Segment {
-                stype: Road,
-                edges: vec![Edge(Middle, West), Vert(0), Edge(Middle, North), Vert(1)],
-            },
-            Segment {
-                stype: Field,
-                edges: vec![
-                    Edge(Beginning, West),
-                    Vert(1),
-                    Edge(End, North),
-                    Edge(Full, East),
-                    Edge(Full, South),
-                ],
-            },
-        ],
-    );
-    dbg!(tile);
+fn main() -> GameResult {
+    let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
+        .window_mode(WindowMode::default().dimensions(800.0, 800.0))
+        .window_setup(WindowSetup::default().title("Carcassone"))
+        .build()?;
+    let mut client = Client::new(&ctx, 4);
+    client
+        .game
+        .place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
+    event::run(ctx, event_loop, client);
 }
-
-// fn main() -> GameResult {
-//     let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
-//         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
-//         .window_setup(WindowSetup::default().title("Carcassone"))
-//         .build()?;
-//     let mut client = Client::new(4);
-//     client
-//         .game
-//         .place_tile(STRAIGHT_ROAD.clone(), GridPos(5, 5))?;
-//     // client
-//     //     .game
-//     //     .place_tile(DEAD_END_ROAD.clone().rotated(), Pos(7, 5))?;
-//     event::run(ctx, event_loop, client);
-// }

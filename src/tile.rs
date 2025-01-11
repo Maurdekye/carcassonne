@@ -218,8 +218,6 @@ impl Tile {
                 _ => false,
             }
         }
-        dbg!(&verts);
-        dbg!(&segment_definitions);
 
         let mut edge_verts_map: HashMap<(SegmentEdgePortion, Orientation), [usize; 2]> =
             HashMap::new();
@@ -232,7 +230,6 @@ impl Tile {
         };
 
         for (i, segment_definition) in segment_definitions.into_iter().enumerate() {
-            dbg!((i, &segment_definition));
             let mut poly = Vec::new();
             let (stype, edges, attributes) = match segment_definition {
                 SegmentDefinition::Segment { stype, edges } => (stype, edges, Vec::new()),
@@ -292,7 +289,6 @@ impl Tile {
                             (End, West) => [XB + YLM, XB + YB],
                             (Full, West) => [XB + YE, XB + YB],
                         };
-                        dbg!((start_vert, end_vert));
 
                         let this_edge = (portion, orientation);
                         let mut poly_indicies = [0, 0];
@@ -305,14 +301,10 @@ impl Tile {
                             verts.push(start_vert);
                             verts.len() - 1
                         };
-                        dbg!(&verts);
-                        dbg!(start_index);
                         if poly.last() != Some(&start_index) {
                             poly.push(start_index);
                         }
                         poly_indicies[0] = start_index;
-                        dbg!(&poly);
-                        dbg!(&poly_indicies);
 
                         let end_index = if let Some((_, &[i, _])) = edge_verts_map
                             .iter()
@@ -323,17 +315,12 @@ impl Tile {
                             verts.push(end_vert);
                             verts.len() - 1
                         };
-                        dbg!(&verts);
-                        dbg!(end_index);
                         if !(edge_index == num_edges - 1 && poly.first() == Some(&end_index)) {
                             poly.push(end_index);
                         }
                         poly_indicies[1] = end_index;
-                        dbg!(&poly);
-                        dbg!(&poly_indicies);
 
                         edge_verts_map.insert(this_edge, poly_indicies);
-                        dbg!(&edge_verts_map);
                     }
                 }
             }
@@ -351,14 +338,13 @@ impl Tile {
                     poly.iter().map(|i| verts[*i]).reduce(|a, b| a + b).unwrap() / poly.len() as f32
                 }
             };
-            dbg!(&meeple_spot);
 
-            segments.push(dbg!(Segment {
+            segments.push(Segment {
                 stype,
                 poly,
                 attributes,
                 meeple_spot,
-            }));
+            });
         }
 
         let segment_adjacency = (0..segments.len())
@@ -374,7 +360,6 @@ impl Tile {
                     .collect::<Vec<_>>()
             })
             .collect();
-        dbg!(&segment_adjacency);
 
         Tile {
             verts,
