@@ -71,7 +71,7 @@ impl Client {
             selected_segment: None,
             placement_is_valid: false,
             turn_phase: TurnPhase::TilePlacement(first_tile),
-            offset: Vec2::from(ctx.gfx.drawable_size()) / 2.0,
+            offset: -Vec2::from(ctx.gfx.drawable_size()) / 2.0,
             turn_order: game.players.keys().collect(),
             skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             game,

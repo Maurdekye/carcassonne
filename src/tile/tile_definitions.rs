@@ -25,7 +25,7 @@ lazy_static! {
                 edges: vec![Edge(Middle, West), Edge(Middle, East)]
             },
             Segment {
-                stype: Road,
+                stype: Field,
                 edges: vec![Edge(Beginning, West), Edge(End, East), Edge(Full, South)]
             }
         ]

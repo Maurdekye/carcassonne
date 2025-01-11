@@ -21,6 +21,6 @@ impl From<GridPos> for Vec2 {
 
 impl From<Vec2> for GridPos {
     fn from(Vec2 { x, y }: Vec2) -> Self {
-        GridPos(x as i32, y as i32)
+        GridPos(x.floor() as i32, y.floor() as i32)
     }
 }

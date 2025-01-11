@@ -415,7 +415,10 @@ impl Tile {
     pub fn rotate(&mut self) {
         for vert in &mut self.verts {
             *vert = vec2(1.0 - vert.y, vert.x);
-            // *vert = vec2(vert.y, 1.0 - vert.x);
+        }
+        for segment in &mut self.segments {
+            let mspot = &mut segment.meeple_spot;
+            *mspot = vec2(1.0 - mspot.y, mspot.x);
         }
 
         self.mounts = self.mounts.clone().rotate();
