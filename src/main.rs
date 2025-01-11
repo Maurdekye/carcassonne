@@ -292,10 +292,23 @@ impl EventHandler<GameError> for Client {
                     let tile = self.get_held_tile_mut().unwrap().clone();
                     let closed_groups = self.game.place_tile(tile, focused_pos)?;
                     self.reevaluate_selected_square();
-                    self.turn_phase = TurnPhase::MeeplePlacement {
-                        placed_position: focused_pos,
-                        closed_groups,
-                    };
+                    let tile = self.game.placed_tiles.get(&focused_pos).unwrap();
+
+                    if (0..tile.segments.len())
+                        .filter_map(|i| {
+                            let (group, _) =
+                                self.game.group_and_key_by_seg_ident((focused_pos, i))?;
+                            Some(!group.meeples.is_empty())
+                        })
+                        .all(|x| x)
+                    {
+                        self.end_turn(closed_groups.clone());
+                    } else {
+                        self.turn_phase = TurnPhase::MeeplePlacement {
+                            placed_position: focused_pos,
+                            closed_groups,
+                        };
+                    }
                 }
 
                 if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
@@ -310,23 +323,8 @@ impl EventHandler<GameError> for Client {
                 'meeple_placement: {
                     self.selected_group = None;
                     self.selected_segment = None;
-                    
-                    self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
-                    if let Some(tile) = &self.game.placed_tiles.get(placed_position) {
-                        if (0..tile.segments.len())
-                            .filter_map(|i| {
-                                let (group, _) = self
-                                    .game
-                                    .group_and_key_by_seg_ident((*placed_position, i))?;
-                                Some(!group.meeples.is_empty())
-                            })
-                            .all(|x| x)
-                        {
-                            self.end_turn(closed_groups.clone());
-                            break 'meeple_placement;
-                        }
-                    }
+                    self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
                     let player_ident = *self.turn_order.front().unwrap();
                     let player = self.game.players.get(player_ident).unwrap();
