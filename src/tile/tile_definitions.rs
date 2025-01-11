@@ -51,7 +51,7 @@ lazy_static! {
                     Edge(Full, East),
                     Edge(Full, South)
                 ],
-                attributes: vec![SegmentAttribute:CustomMeepleSpot(vec2(0.75, 0.75))]
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.75, 0.75))]
             }
         ]
     );
