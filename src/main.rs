@@ -1,3 +1,4 @@
+#![feature(iter_map_windows)]
 use std::collections::VecDeque;
 
 use game::{player::Player, Game, GroupIdentifier, PlayerIdentifier, SegmentIdentifier};
@@ -6,16 +7,11 @@ use ggez::{
     event::{self, EventHandler},
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
-    input::{keyboard::KeyCode, mouse},
+    input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use tile::{
-    tile_definitions::STRAIGHT_ROAD,
-    Orientation,
-    SegmentType::{City, Road},
-    Tile,
-};
+use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -311,59 +307,74 @@ impl EventHandler<GameError> for Client {
                 placed_position,
                 closed_groups,
             } => {
-                self.selected_group = None;
-                self.selected_segment = None;
+                'meeple_placement: {
+                    self.selected_group = None;
+                    self.selected_segment = None;
+                    
+                    self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
-                if let Some(tile) = self.game.placed_tiles.get(placed_position) {}
-
-                self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
-
-                let player_ident = *self.turn_order.front().unwrap();
-                let player = self.game.players.get(player_ident).unwrap();
-                if player.meeples == 0
-                    || (self.skip_meeple_button.contains(mouse)
-                        && ctx.mouse.button_just_pressed(event::MouseButton::Left))
-                {
-                    self.end_turn(closed_groups.clone());
-                } else if *placed_position == focused_pos {
-                    let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
-                    let subgrid_pos = mouse - Vec2::from(corner);
-                    let subgrid_pos =
-                        subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
-
-                    'segment_locate: {
-                        if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
-                            for (i, segment) in tile.segments.iter().enumerate() {
-                                let (group, group_ident) = self
+                    if let Some(tile) = &self.game.placed_tiles.get(placed_position) {
+                        if (0..tile.segments.len())
+                            .filter_map(|i| {
+                                let (group, _) = self
                                     .game
-                                    .group_and_key_by_seg_ident((*placed_position, i))
-                                    .unwrap();
-                                if group.meeples.is_empty()
-                                    && point_in_polygon(
-                                        subgrid_pos,
-                                        &tile.segment_polygon(i).collect::<Vec<_>>(),
-                                    )
-                                {
-                                    self.selected_group = Some(group_ident);
-                                    self.selected_segment = Some((focused_pos, i));
-                                    break 'segment_locate;
-                                }
-                            }
+                                    .group_and_key_by_seg_ident((*placed_position, i))?;
+                                Some(!group.meeples.is_empty())
+                            })
+                            .all(|x| x)
+                        {
+                            self.end_turn(closed_groups.clone());
+                            break 'meeple_placement;
                         }
                     }
 
-                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                        if let (Some(seg_ident), Some(group)) = (
-                            self.selected_segment,
-                            self.selected_group
-                                .and_then(|group_ident| self.game.groups.get(group_ident)),
-                        ) {
-                            let player_ident = *self.turn_order.front().unwrap();
-                            let player = self.game.players.get(player_ident).unwrap();
-                            if group.meeples.is_empty() && player.meeples > 0 {
-                                // place meeple and advance turn
-                                self.game.place_meeple(seg_ident, player_ident)?;
-                                self.end_turn(closed_groups.clone());
+                    let player_ident = *self.turn_order.front().unwrap();
+                    let player = self.game.players.get(player_ident).unwrap();
+                    if player.meeples == 0
+                        || (self.skip_meeple_button.contains(mouse)
+                            && ctx.mouse.button_just_pressed(event::MouseButton::Left))
+                    {
+                        self.end_turn(closed_groups.clone());
+                    } else if *placed_position == focused_pos {
+                        let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
+                        let subgrid_pos = mouse - Vec2::from(corner);
+                        let subgrid_pos =
+                            subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
+
+                        'segment_locate: {
+                            if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
+                                for (i, _) in tile.segments.iter().enumerate() {
+                                    let (group, group_ident) = self
+                                        .game
+                                        .group_and_key_by_seg_ident((*placed_position, i))
+                                        .unwrap();
+                                    if group.meeples.is_empty()
+                                        && point_in_polygon(
+                                            subgrid_pos,
+                                            &tile.segment_polygon(i).collect::<Vec<_>>(),
+                                        )
+                                    {
+                                        self.selected_group = Some(group_ident);
+                                        self.selected_segment = Some((focused_pos, i));
+                                        break 'segment_locate;
+                                    }
+                                }
+                            }
+                        }
+
+                        if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                            if let (Some(seg_ident), Some(group)) = (
+                                self.selected_segment,
+                                self.selected_group
+                                    .and_then(|group_ident| self.game.groups.get(group_ident)),
+                            ) {
+                                let player_ident = *self.turn_order.front().unwrap();
+                                let player = self.game.players.get(player_ident).unwrap();
+                                if group.meeples.is_empty() && player.meeples > 0 {
+                                    // place meeple and advance turn
+                                    self.game.place_meeple(seg_ident, player_ident)?;
+                                    self.end_turn(closed_groups.clone());
+                                }
                             }
                         }
                     }
@@ -383,6 +394,7 @@ impl EventHandler<GameError> for Client {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         let time = ctx.time.time_since_start().as_secs_f32();
+        let sin_time = time.sin() * 0.1 + 1.0;
 
         // draw tiles
         for (pos, tile) in &self.game.placed_tiles {
@@ -429,21 +441,50 @@ impl EventHandler<GameError> for Client {
                 let on_ui = self.skip_meeple_button.contains(mouse);
 
                 if !on_ui {
-                    if let Some((tile_pos, seg_index)) = self.selected_segment {
-                        let tile = self.game.placed_tiles.get(&tile_pos).unwrap();
-                        let sin_time = time.sin() * 0.1 + 1.0;
-                        tile.render_segment(
-                            seg_index,
-                            ctx,
-                            &mut canvas,
-                            rect,
-                            Some(Color::from_rgb(
-                                (200.0 * sin_time) as u8,
-                                (20.0 * sin_time) as u8,
-                                (70.0 * sin_time) as u8,
-                            )),
-                        )?;
+                    if let Some(group_ident) = self.selected_group {
+                        let Vec2 { x, y } = self.to_screen_pos(GridPos(0, 0), ctx);
+                        let outline = self.game.get_group_outline(group_ident).unwrap();
+                        let origin_rect = Rect {
+                            x,
+                            y,
+                            w: GRID_SIZE,
+                            h: GRID_SIZE,
+                        };
+                        for polyline in outline.iter().map(|polyline| {
+                            polyline
+                                .iter()
+                                .map(|vert| refit_to_rect(*vert, origin_rect))
+                                .collect::<Vec<_>>()
+                        }) {
+                            canvas.draw(
+                                &Mesh::new_polyline(
+                                    ctx,
+                                    DrawMode::stroke(2.0),
+                                    &polyline,
+                                    Color::from_rgb(
+                                        (200.0 * sin_time) as u8,
+                                        (20.0 * sin_time) as u8,
+                                        (70.0 * sin_time) as u8,
+                                    ),
+                                )?,
+                                DrawParam::default(),
+                            );
+                        }
                     }
+                    // if let Some((tile_pos, seg_index)) = self.selected_segment {
+                    //     let tile = self.game.placed_tiles.get(&tile_pos).unwrap();
+                    //     tile.render_segment(
+                    //         seg_index,
+                    //         ctx,
+                    //         &mut canvas,
+                    //         rect,
+                    //         Some(Color::from_rgb(
+                    //             (200.0 * sin_time) as u8,
+                    //             (20.0 * sin_time) as u8,
+                    //             (70.0 * sin_time) as u8,
+                    //         )),
+                    //     )?;
+                    // }
                 }
 
                 // draw skip meeples button

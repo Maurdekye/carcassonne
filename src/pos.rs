@@ -5,6 +5,19 @@ use ggez::glam::{vec2, Vec2};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GridPos(pub i32, pub i32);
 
+impl GridPos {
+    pub fn adjacent(&self) -> impl Iterator<Item = Self> {
+        let GridPos(x, y) = *self;
+        vec![
+            GridPos(x - 1, y),
+            GridPos(x, y - 1),
+            GridPos(x + 1, y),
+            GridPos(x, y + 1),
+        ]
+        .into_iter()
+    }
+}
+
 impl Add<GridPos> for GridPos {
     type Output = GridPos;
 
