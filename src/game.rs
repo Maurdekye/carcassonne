@@ -340,7 +340,13 @@ impl Game {
     }
 
     fn compute_group_outline(&self, group_ident: GroupIdentifier) -> Option<Vec<Vec<Vec2>>> {
+        fn proximal(a: Vec2, b: Vec2) -> bool {
+            (a - b).length_squared() < 0.00001
+        }
         type Line = [Vec2; 2];
+        fn lines_proximal([a_start, a_end]: Line, [b_start, b_end]: Line) -> bool {
+            proximal(a_start, b_start) && proximal(a_end, b_end)
+        }
 
         // collect all edges by their grid position
         let CollectedBag(edges_by_gridpos) = self
@@ -367,6 +373,7 @@ impl Game {
                     .map_windows(move |&line: &Line| (tile_pos, line))
             })
             .collect();
+        dbg!(&edges_by_gridpos);
 
         // filter out all edges that overlap one another and cancel out
         let group_edges = edges_by_gridpos
@@ -377,15 +384,18 @@ impl Game {
                     .chain([*pos])
                     .filter_map(|pos| edges_by_gridpos.get(&pos))
                     .flatten()
-                    .all(|&[s, e]| [e, s] != line)
+                    .all(|&[s, e]| !lines_proximal([e, s], line))
                     .then_some(line)
             });
+        dbg!(&group_edges.clone().collect::<Vec<_>>());
 
         // connect all edges together
         let mut polylines: Vec<VecDeque<Line>> = Vec::new();
         for line in group_edges {
             let [start, end] = line;
+            dbg!(&line);
 
+            #[derive(Debug)]
             enum FrontBack {
                 Front,
                 Back,
@@ -393,17 +403,19 @@ impl Game {
             use FrontBack::*;
             let mut appended_to = None;
             for (i, polyline) in polylines.iter_mut().enumerate() {
-                if polyline.back().unwrap()[1] == start {
+                if proximal(polyline.back().unwrap()[1], start) {
                     polyline.push_back(line);
                     appended_to = Some((end, i, Back));
                     break;
                 }
-                if polyline.front().unwrap()[0] == end {
+                if proximal(polyline.front().unwrap()[0], end) {
                     polyline.push_front(line);
                     appended_to = Some((start, i, Front));
                     break;
                 }
             }
+            dbg!(&appended_to);
+            dbg!(&polylines);
             match appended_to {
                 None => polylines.push(VecDeque::from([line])),
                 Some((start, index, Front)) => {
@@ -411,9 +423,9 @@ impl Game {
                         .iter()
                         .enumerate()
                         .filter_map(|(i, lines)| {
-                            lines
-                                .back()
-                                .and_then(|[_, end]| (i != index && *end == start).then_some(i))
+                            lines.back().and_then(|[_, end]| {
+                                (i != index && proximal(*end, start)).then_some(i)
+                            })
                         })
                         .next()
                     {
@@ -422,6 +434,7 @@ impl Game {
                             join_index -= 1;
                         }
                         polylines[join_index].extend(polyline);
+                        dbg!(&polylines);
                     }
                 }
                 Some((end, mut index, Back)) => {
@@ -429,9 +442,9 @@ impl Game {
                         .iter()
                         .enumerate()
                         .filter_map(|(i, lines)| {
-                            lines
-                                .back()
-                                .and_then(|[start, _]| (i != index && *start == end).then_some(i))
+                            lines.back().and_then(|[start, _]| {
+                                (i != index && proximal(*start, end)).then_some(i)
+                            })
                         })
                         .next()
                     {
@@ -440,17 +453,24 @@ impl Game {
                             index -= 1;
                         }
                         polylines[index].extend(polyline);
+                        dbg!(&polylines);
                     }
                 }
             }
         }
 
-        Some(
-            polylines
-                .into_iter()
-                .map(|polyline| polyline.into_iter().map(|[start, _]| start).collect())
-                .collect(),
-        )
+        Some(dbg!(polylines
+            .into_iter()
+            .map(|polyline| {
+                let first_point = polyline.front().unwrap()[0];
+                let last_point = polyline.back().unwrap()[1];
+                let mut points: Vec<_> = polyline.into_iter().map(|[start, _]| start).collect();
+                if proximal(first_point, last_point) {
+                    points.push(first_point);
+                }
+                points
+            })
+            .collect()))
     }
 }
 

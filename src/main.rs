@@ -11,7 +11,10 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
+use tile::{
+    tile_definitions::{CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD},
+    Orientation, Tile,
+};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -442,11 +445,12 @@ impl EventHandler<GameError> for Client {
                     if let Some(group_ident) = self.selected_group {
                         let Vec2 { x, y } = self.to_screen_pos(GridPos(0, 0), ctx);
                         let outline = self.game.get_group_outline(group_ident).unwrap();
+                        let (w, h) = ctx.gfx.drawable_size();
                         let origin_rect = Rect {
                             x,
                             y,
-                            w: GRID_SIZE,
-                            h: GRID_SIZE,
+                            w: GRID_SIZE * w,
+                            h: GRID_SIZE * h,
                         };
                         for polyline in outline.iter().map(|polyline| {
                             polyline
@@ -455,10 +459,10 @@ impl EventHandler<GameError> for Client {
                                 .collect::<Vec<_>>()
                         }) {
                             canvas.draw(
-                                &Mesh::new_polyline(
+                                &Mesh::new_line(
                                     ctx,
-                                    DrawMode::stroke(2.0),
                                     &polyline,
+                                    2.0,
                                     Color::from_rgb(
                                         (200.0 * sin_time) as u8,
                                         (20.0 * sin_time) as u8,
@@ -469,20 +473,6 @@ impl EventHandler<GameError> for Client {
                             );
                         }
                     }
-                    // if let Some((tile_pos, seg_index)) = self.selected_segment {
-                    //     let tile = self.game.placed_tiles.get(&tile_pos).unwrap();
-                    //     tile.render_segment(
-                    //         seg_index,
-                    //         ctx,
-                    //         &mut canvas,
-                    //         rect,
-                    //         Some(Color::from_rgb(
-                    //             (200.0 * sin_time) as u8,
-                    //             (20.0 * sin_time) as u8,
-                    //             (70.0 * sin_time) as u8,
-                    //         )),
-                    //     )?;
-                    // }
                 }
 
                 // draw skip meeples button
@@ -533,13 +523,43 @@ impl EventHandler<GameError> for Client {
 }
 
 fn main() -> GameResult {
+    // test_group_outline_generation();
     let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassone"))
         .build()?;
     let mut client = Client::new(&ctx, 4);
+    let player_ident = client.game.players.keys().next().unwrap();
     client
         .game
         .place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
+    client
+        .game
+        .place_tile(L_CURVE_ROAD.clone(), GridPos(1, 0))?;
+    client.game.place_meeple((GridPos(1, 0), 0), player_ident)?;
     event::run(ctx, event_loop, client);
+}
+
+#[allow(unused)]
+fn test_group_outline_generation() -> GameResult {
+    use tile::SegmentType;
+    let mut game = Game::new();
+    game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
+    game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
+    game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
+    game.place_tile(
+        CORNER_CITY.clone().rotated().rotated().rotated(),
+        GridPos(1, 0),
+    )?;
+    let city_group_ident = game
+        .groups
+        .iter()
+        .filter_map(|(group_ident, group)| {
+            (group.gtype == SegmentType::City).then_some(group_ident)
+        })
+        .next()
+        .unwrap();
+    let outline = game.get_group_outline(city_group_ident);
+    dbg!(outline);
+    Ok(())
 }

@@ -521,9 +521,9 @@ impl Tile {
 pub fn get_tile_library() -> Vec<Tile> {
     vec![
         CITY_ENTRANCE.clone(),
-        STRAIGHT_ROAD.clone(),
         CORNER_CITY.clone(),
         L_CURVE_ROAD.clone(),
+        STRAIGHT_ROAD.clone().rotated(),
     ]
     .into_iter()
     .cycle()
