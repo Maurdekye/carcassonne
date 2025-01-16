@@ -10,8 +10,8 @@ use slotmap::{DefaultKey, SlotMap};
 use crate::{
     pos::GridPos,
     tile::{
-        get_tile_library, GridBorderCoordinate, Opposite, Orientation, Segment, SegmentBorderPiece,
-        SegmentType, Tile,
+        get_tile_library, GridBorderCoordinate, GridBorderCoordinateOffset, Opposite, Orientation,
+        Segment, SegmentBorderPiece, SegmentType, Tile,
     },
     util::{refit_to_rect, Bag, HashMapBag, MapFindExt},
 };
@@ -407,7 +407,9 @@ impl Game {
                     use SegmentBorderPiece::*;
                     match edge {
                         Vert(index) => {
-                            lines.push(Some(LinePiece::Vert(tile.verts[index])));
+                            lines.push(Some(LinePiece::Vert(
+                                tile.verts[index] + Vec2::from(tile_pos),
+                            )));
                         }
                         Edge(edge) => {
                             let (span, orientation) = edge;
@@ -446,13 +448,7 @@ impl Game {
 
                 let mut lines: Vec<_> = lines
                     .split(Option::is_none)
-                    .map(|lines| {
-                        lines
-                            .iter()
-                            .copied()
-                            .filter_map(identity)
-                            .collect::<Vec<_>>()
-                    })
+                    .map(|lines| lines.iter().copied().flatten().collect::<Vec<_>>())
                     .collect();
 
                 // dbg!(&lines);
@@ -466,12 +462,15 @@ impl Game {
                     } else {
                         last_line.extend(first_line);
                     }
-                };
+                } else {
+                    let first_piece = lines[0][0];
+                    lines[0].push(first_piece);
+                }
 
                 // dbg!(&lines);
 
                 lines.into_iter().filter_map(move |line| {
-                    (!line.is_empty()).then_some((tile_pos, (line, closed_loop)))
+                    (line.len() > 1).then_some((tile_pos, (line, closed_loop)))
                 })
             })
             .collect();
@@ -549,6 +548,8 @@ impl Game {
                 }
             }
         }
+
+        // dbg!(&polylines);
 
         let final_lines_set = polylines
             .into_iter()
@@ -671,18 +672,20 @@ impl Game {
             }
         }
 
-        Some(polylines
-            .into_iter()
-            .map(|polyline| {
-                let first_point = polyline.front().unwrap()[0];
-                let last_point = polyline.back().unwrap()[1];
-                let mut points: Vec<_> = polyline.into_iter().map(|[start, _]| start).collect();
-                if proximal(first_point, last_point) {
-                    points.push(first_point);
-                }
-                points
-            })
-            .collect())
+        Some(
+            polylines
+                .into_iter()
+                .map(|polyline| {
+                    let first_point = polyline.front().unwrap()[0];
+                    let last_point = polyline.back().unwrap()[1];
+                    let mut points: Vec<_> = polyline.into_iter().map(|[start, _]| start).collect();
+                    if proximal(first_point, last_point) {
+                        points.push(first_point);
+                    }
+                    points
+                })
+                .collect(),
+        )
     }
 }
 

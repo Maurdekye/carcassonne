@@ -31,10 +31,10 @@ impl Orientation {
     pub fn rotate(self) -> Orientation {
         use Orientation::*;
         match self {
-            North => West,
-            East => North,
-            South => East,
-            West => South,
+            North => East,
+            East => South,
+            South => West,
+            West => North,
         }
     }
 
