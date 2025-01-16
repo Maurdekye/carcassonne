@@ -401,13 +401,13 @@ impl Game {
                 let (tile_pos, seg_index) = seg_ident;
                 let tile = self.placed_tiles.get(&tile_pos).unwrap();
 
-                let mut lines: Vec<Option<LinePiece>> = vec![];
+                let mut pieces: Vec<Option<LinePiece>> = vec![];
                 for &edge in &tile.segments[seg_index].edge_definition {
                     // dbg!(edge);
                     use SegmentBorderPiece::*;
                     match edge {
                         Vert(index) => {
-                            lines.push(Some(LinePiece::Vert(
+                            pieces.push(Some(LinePiece::Vert(
                                 tile.verts[index] + Vec2::from(tile_pos),
                             )));
                         }
@@ -421,8 +421,8 @@ impl Game {
                                 ),
                             );
                             // dbg!(&start);
-                            if lines.last() != Some(&Some(start)) {
-                                lines.push(Some(start));
+                            if pieces.last() != Some(&Some(start)) {
+                                pieces.push(Some(start));
                             }
 
                             // this breaks rustfmt if its a matches! macro
@@ -430,7 +430,7 @@ impl Game {
                                 Some(adj_edges) if (adj_edges.contains(&edge.opposite())) => true,
                                 _ => false,
                             } {
-                                lines.push(None);
+                                pieces.push(None);
                             }
 
                             let end = LinePiece::BorderCoordinate(
@@ -440,13 +440,13 @@ impl Game {
                                 ),
                             );
                             // dbg!(&end);
-                            lines.push(Some(end));
+                            pieces.push(Some(end));
                         }
                     }
                     // dbg!(&lines);
                 }
 
-                let mut lines: Vec<_> = lines
+                let mut lines: Vec<_> = pieces
                     .split(Option::is_none)
                     .map(|lines| lines.iter().copied().flatten().collect::<Vec<_>>())
                     .collect();
