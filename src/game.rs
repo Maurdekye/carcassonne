@@ -365,7 +365,7 @@ impl Game {
                     })
             })
             .collect();
-        dbg!(&edges_by_gridpos);
+        // dbg!(&edges_by_gridpos);
 
         #[derive(Debug, Clone, Copy)]
         enum LinePiece {
@@ -397,13 +397,13 @@ impl Game {
             .iter()
             .copied()
             .flat_map(|seg_ident| {
-                dbg!(&seg_ident);
+                // dbg!(&seg_ident);
                 let (tile_pos, seg_index) = seg_ident;
                 let tile = self.placed_tiles.get(&tile_pos).unwrap();
 
                 let mut lines: Vec<Option<LinePiece>> = vec![];
-                for &edge in dbg!(&tile.segments[seg_index].edge_definition) {
-                    dbg!(edge);
+                for &edge in &tile.segments[seg_index].edge_definition {
+                    // dbg!(edge);
                     use SegmentBorderPiece::*;
                     match edge {
                         Vert(index) => {
@@ -411,14 +411,14 @@ impl Game {
                         }
                         Edge(edge) => {
                             let (span, orientation) = edge;
-                            dbg!((tile_pos, span.start(), orientation));
+                            // dbg!((tile_pos, span.start(), orientation));
                             let start = LinePiece::BorderCoordinate(
                                 GridBorderCoordinate::from_tile_edge_vertex(
                                     tile_pos,
                                     (span.start(), orientation),
                                 ),
                             );
-                            dbg!(&start);
+                            // dbg!(&start);
                             if lines.last() != Some(&Some(start)) {
                                 lines.push(Some(start));
                             }
@@ -437,11 +437,11 @@ impl Game {
                                     (span.end(), orientation),
                                 ),
                             );
-                            dbg!(&end);
+                            // dbg!(&end);
                             lines.push(Some(end));
                         }
                     }
-                    dbg!(&lines);
+                    // dbg!(&lines);
                 }
 
                 let mut lines: Vec<_> = lines
@@ -455,7 +455,7 @@ impl Game {
                     })
                     .collect();
 
-                dbg!(&lines);
+                // dbg!(&lines);
 
                 let closed_loop = lines.len() == 1;
                 if !closed_loop {
@@ -468,14 +468,14 @@ impl Game {
                     }
                 };
 
-                dbg!(&lines);
+                // dbg!(&lines);
 
-                dbg!(lines.into_iter().filter_map(move |line| {
+                lines.into_iter().filter_map(move |line| {
                     (!line.is_empty()).then_some((tile_pos, (line, closed_loop)))
-                }))
+                })
             })
             .collect();
-        dbg!(&lines_by_gridpos);
+        // dbg!(&lines_by_gridpos);
 
         // connect all lines together
         let mut polylines: Vec<VecDeque<LinePiece>> = Vec::new();
@@ -483,7 +483,7 @@ impl Game {
             .iter()
             .flat_map(|(pos, lines)| lines.iter().map(move |line| (*pos, line)))
         {
-            dbg!((&line, closed_loop));
+            // dbg!((&line, closed_loop));
 
             if *closed_loop {
                 polylines.push(line.clone().into_iter().map(LinePiece::from).collect());
@@ -513,8 +513,8 @@ impl Game {
                     break;
                 }
             }
-            dbg!(&appended_to);
-            dbg!(&polylines);
+            // dbg!(&appended_to);
+            // dbg!(&polylines);
             match appended_to {
                 None => polylines.push(VecDeque::from(line.clone())),
                 Some((start, index, Front)) => {
@@ -530,7 +530,7 @@ impl Game {
                             join_index -= 1;
                         }
                         polylines[join_index].extend(polyline.into_iter().skip(1));
-                        dbg!(&polylines);
+                        // dbg!(&polylines);
                     }
                 }
                 Some((end, mut index, Back)) => {
@@ -544,7 +544,7 @@ impl Game {
                             index -= 1;
                         }
                         polylines[index].extend(polyline.into_iter().skip(1));
-                        dbg!(&polylines);
+                        // dbg!(&polylines);
                     }
                 }
             }
@@ -593,7 +593,7 @@ impl Game {
                     .map_windows(move |&line: &Line| (tile_pos, line))
             })
             .collect();
-        dbg!(&edges_by_gridpos);
+        // dbg!(&edges_by_gridpos);
 
         // filter out all edges that overlap one another and cancel out
         let group_edges = edges_by_gridpos
@@ -607,13 +607,13 @@ impl Game {
                     .all(|&[s, e]| !lines_proximal([e, s], line))
                     .then_some(line)
             });
-        dbg!(&group_edges.clone().collect::<Vec<_>>());
+        // dbg!(&group_edges.clone().collect::<Vec<_>>());
 
         // connect all edges together
         let mut polylines: Vec<VecDeque<Line>> = Vec::new();
         for line in group_edges {
             let [start, end] = line;
-            dbg!(&line);
+            // dbg!(&line);
 
             #[derive(Debug)]
             enum FrontBack {
@@ -634,8 +634,8 @@ impl Game {
                     break;
                 }
             }
-            dbg!(&appended_to);
-            dbg!(&polylines);
+            // dbg!(&appended_to);
+            // dbg!(&polylines);
             match appended_to {
                 None => polylines.push(VecDeque::from([line])),
                 Some((start, index, Front)) => {
@@ -651,7 +651,7 @@ impl Game {
                             join_index -= 1;
                         }
                         polylines[join_index].extend(polyline);
-                        dbg!(&polylines);
+                        // dbg!(&polylines);
                     }
                 }
                 Some((end, mut index, Back)) => {
@@ -665,13 +665,13 @@ impl Game {
                             index -= 1;
                         }
                         polylines[index].extend(polyline);
-                        dbg!(&polylines);
+                        // dbg!(&polylines);
                     }
                 }
             }
         }
 
-        Some(dbg!(polylines
+        Some(polylines
             .into_iter()
             .map(|polyline| {
                 let first_point = polyline.front().unwrap()[0];
@@ -682,7 +682,7 @@ impl Game {
                 }
                 points
             })
-            .collect()))
+            .collect())
     }
 }
 
