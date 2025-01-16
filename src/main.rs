@@ -11,10 +11,7 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use tile::{
-    tile_definitions::{CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD},
-    Orientation, Tile,
-};
+use tile::{tile_definitions::STRAIGHT_ROAD, Orientation, Tile};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -70,7 +67,7 @@ impl Client {
             selected_segment: None,
             placement_is_valid: false,
             turn_phase: TurnPhase::TilePlacement(first_tile),
-            offset: -Vec2::from(ctx.gfx.drawable_size()) / 2.0,
+            offset: -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - GRID_SIZE / 2.0),
             turn_order: game.players.keys().collect(),
             skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             game,
@@ -323,59 +320,57 @@ impl EventHandler<GameError> for Client {
                 placed_position,
                 closed_groups,
             } => {
-                'meeple_placement: {
-                    self.selected_group = None;
-                    self.selected_segment = None;
+                self.selected_group = None;
+                self.selected_segment = None;
 
-                    self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
+                self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
-                    let player_ident = *self.turn_order.front().unwrap();
-                    let player = self.game.players.get(player_ident).unwrap();
-                    if player.meeples == 0
-                        || (self.skip_meeple_button.contains(mouse)
-                            && ctx.mouse.button_just_pressed(event::MouseButton::Left))
-                    {
-                        self.end_turn(closed_groups.clone());
-                    } else if *placed_position == focused_pos {
-                        let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
-                        let subgrid_pos = mouse - Vec2::from(corner);
-                        let subgrid_pos =
-                            subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
+                let player_ident = *self.turn_order.front().unwrap();
+                let player = self.game.players.get(player_ident).unwrap();
+                if player.meeples == 0
+                    || (self.skip_meeple_button.contains(mouse)
+                        && ctx.mouse.button_just_pressed(event::MouseButton::Left))
+                {
+                    self.end_turn(closed_groups.clone());
+                } else if *placed_position == focused_pos {
+                    let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
+                    let subgrid_pos = mouse - Vec2::from(corner);
+                    let subgrid_pos =
+                        subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
 
-                        'segment_locate: {
-                            if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
-                                for (i, _) in tile.segments.iter().enumerate() {
-                                    let (group, group_ident) = self
-                                        .game
-                                        .group_and_key_by_seg_ident((*placed_position, i))
-                                        .unwrap();
-                                    if group.meeples.is_empty()
-                                        && point_in_polygon(
-                                            subgrid_pos,
-                                            &tile.segment_polygon(i).collect::<Vec<_>>(),
-                                        )
-                                    {
-                                        self.selected_group = Some(group_ident);
-                                        self.selected_segment = Some((focused_pos, i));
-                                        break 'segment_locate;
-                                    }
+                    'segment_locate: {
+                        if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
+                            for (i, _) in tile.segments.iter().enumerate() {
+                                let (group, group_ident) = self
+                                    .game
+                                    .group_and_key_by_seg_ident((*placed_position, i))
+                                    .unwrap();
+                                if group.meeples.is_empty()
+                                    && point_in_polygon(
+                                        subgrid_pos,
+                                        &tile.segment_polygon(i).collect::<Vec<_>>(),
+                                    )
+                                {
+                                    self.selected_group = Some(group_ident);
+                                    self.selected_segment = Some((focused_pos, i));
+                                    break 'segment_locate;
                                 }
                             }
                         }
+                    }
 
-                        if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                            if let (Some(seg_ident), Some(group)) = (
-                                self.selected_segment,
-                                self.selected_group
-                                    .and_then(|group_ident| self.game.groups.get(group_ident)),
-                            ) {
-                                let player_ident = *self.turn_order.front().unwrap();
-                                let player = self.game.players.get(player_ident).unwrap();
-                                if group.meeples.is_empty() && player.meeples > 0 {
-                                    // place meeple and advance turn
-                                    self.game.place_meeple(seg_ident, player_ident)?;
-                                    self.end_turn(closed_groups.clone());
-                                }
+                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                        if let (Some(seg_ident), Some(group)) = (
+                            self.selected_segment,
+                            self.selected_group
+                                .and_then(|group_ident| self.game.groups.get(group_ident)),
+                        ) {
+                            let player_ident = *self.turn_order.front().unwrap();
+                            let player = self.game.players.get(player_ident).unwrap();
+                            if group.meeples.is_empty() && player.meeples > 0 {
+                                // place meeple and advance turn
+                                self.game.place_meeple(seg_ident, player_ident)?;
+                                self.end_turn(closed_groups.clone());
                             }
                         }
                     }
@@ -523,43 +518,13 @@ impl EventHandler<GameError> for Client {
 }
 
 fn main() -> GameResult {
-    // test_group_outline_generation();
     let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassone"))
         .build()?;
     let mut client = Client::new(&ctx, 4);
-    let player_ident = client.game.players.keys().next().unwrap();
     client
         .game
         .place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
-    client
-        .game
-        .place_tile(L_CURVE_ROAD.clone(), GridPos(1, 0))?;
-    client.game.place_meeple((GridPos(1, 0), 0), player_ident)?;
     event::run(ctx, event_loop, client);
-}
-
-#[allow(unused)]
-fn test_group_outline_generation() -> GameResult {
-    use tile::SegmentType;
-    let mut game = Game::new();
-    game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
-    game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
-    game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
-    game.place_tile(
-        CORNER_CITY.clone().rotated().rotated().rotated(),
-        GridPos(1, 0),
-    )?;
-    let city_group_ident = game
-        .groups
-        .iter()
-        .filter_map(|(group_ident, group)| {
-            (group.gtype == SegmentType::City).then_some(group_ident)
-        })
-        .next()
-        .unwrap();
-    let outline = game.get_group_outline(city_group_ident);
-    dbg!(outline);
-    Ok(())
 }

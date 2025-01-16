@@ -71,9 +71,9 @@ where
     }
 }
 
-pub struct CollectedBag<K, V>(pub HashMap<K, Vec<V>>);
+pub struct Bag<K, V>(pub HashMap<K, Vec<V>>);
 
-impl<K, V> FromIterator<(K, V)> for CollectedBag<K, V>
+impl<K, V> FromIterator<(K, V)> for Bag<K, V>
 where
     K: std::hash::Hash + Eq,
 {
@@ -82,6 +82,29 @@ where
         for (k, v) in iter {
             bag.place(k, v);
         }
-        CollectedBag(bag)
+        Bag(bag)
+    }
+}
+
+pub trait MapFindExt
+where
+    Self: Iterator,
+{
+    fn map_find<F, O>(self, f: F) -> Option<O>
+    where
+        Self: Sized,
+        F: FnMut(Self::Item) -> Option<O>;
+}
+
+impl<I> MapFindExt for I
+where
+    I: Iterator,
+{
+    fn map_find<F, O>(self, f: F) -> Option<O>
+    where
+        Self: Sized,
+        F: FnMut(Self::Item) -> Option<O>,
+    {
+        self.filter_map(f).next()
     }
 }

@@ -2,7 +2,7 @@ use ggez::glam::vec2;
 
 use crate::tile::{
     tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD},
-    MountingPair, Orientation, Tile,
+    MountingPair, Orientation,
 };
 
 #[test]
@@ -72,34 +72,39 @@ fn straight_road_curve_road_rotate_mount_west() {
 #[test]
 fn test_tile_definition() {
     use crate::tile::{
-        Orientation, SegmentBorderPiece, SegmentDefinition, SegmentEdgePortion, SegmentType, Tile,
+        Orientation, SegmentBorderPiece, SegmentDefinition, SegmentType, Tile, TileEdgeSpan,
     };
 
     use Orientation::*;
     use SegmentBorderPiece::*;
     use SegmentDefinition::*;
-    use SegmentEdgePortion::*;
     use SegmentType::*;
-    
+    use TileEdgeSpan::*;
+
     let tile = Tile::new(
         vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
         vec![
             Segment {
                 stype: Field,
-                edges: vec![Edge(End, West), Edge(Beginning, North), Vert(0)],
+                edges: vec![Edge((End, West)), Edge((Beginning, North)), Vert(0)],
             },
             Segment {
                 stype: Road,
-                edges: vec![Edge(Middle, West), Vert(0), Edge(Middle, North), Vert(1)],
+                edges: vec![
+                    Edge((Middle, West)),
+                    Vert(0),
+                    Edge((Middle, North)),
+                    Vert(1),
+                ],
             },
             Segment {
                 stype: Field,
                 edges: vec![
-                    Edge(Beginning, West),
+                    Edge((Beginning, West)),
                     Vert(1),
-                    Edge(End, North),
-                    Edge(Full, East),
-                    Edge(Full, South),
+                    Edge((End, North)),
+                    Edge((Full, East)),
+                    Edge((Full, South)),
                 ],
             },
         ],
