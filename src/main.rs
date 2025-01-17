@@ -242,7 +242,7 @@ impl Client {
             use tile::SegmentType::*;
             let group = self.game.groups.get(group_ident).unwrap();
             match group.gtype {
-                City | Road => self.game.score_group(group_ident),
+                City | Road | Monastary => self.game.score_group(group_ident),
                 _ => {}
             }
         }
