@@ -90,6 +90,7 @@ pub trait MapFindExt
 where
     Self: Iterator,
 {
+    #[allow(unused)]
     fn map_find<F, O>(self, f: F) -> Option<O>
     where
         Self: Sized,
@@ -106,5 +107,20 @@ where
         F: FnMut(Self::Item) -> Option<O>,
     {
         self.filter_map(f).next()
+    }
+}
+
+pub trait RotateExt: Sized {
+    fn rotate_(&mut self);
+    #[allow(unused)]
+    fn rotated(mut self) -> Self {
+        self.rotate_();
+        self
+    }
+}
+
+impl RotateExt for Vec2 {
+    fn rotate_(&mut self) {
+        *self = vec2(1.0 - self.y, -self.x);
     }
 }

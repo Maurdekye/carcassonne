@@ -1,7 +1,7 @@
 use ggez::glam::vec2;
 
 use crate::tile::{
-    tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD},
+    tile_definitions::{CURVE_ROAD, STRAIGHT_ROAD},
     MountingPair, Orientation,
 };
 
@@ -41,13 +41,13 @@ fn straight_road_mount_east_west() {
 
 #[test]
 fn straight_road_curve_road_mount_west() {
-    let result = STRAIGHT_ROAD.validate_mounting(&L_CURVE_ROAD, Orientation::West);
+    let result = STRAIGHT_ROAD.validate_mounting(&CURVE_ROAD, Orientation::West);
     assert_eq!(result, None);
 }
 
 #[test]
 fn straight_road_curve_road_rotate_mount_west() {
-    let mut curve_road = L_CURVE_ROAD.clone();
+    let mut curve_road = CURVE_ROAD.clone();
     curve_road.rotate();
     let result = STRAIGHT_ROAD.validate_mounting(&curve_road, Orientation::West);
     assert_eq!(

@@ -1,19 +1,16 @@
-use std::{
-    collections::{HashMap, HashSet, VecDeque},
-    convert::identity,
-};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use ggez::{glam::Vec2, graphics::Rect, GameError, GameResult};
+use ggez::{glam::Vec2, graphics::Color, GameError};
 use player::Player;
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
     pos::GridPos,
     tile::{
-        get_tile_library, GridBorderCoordinate, GridBorderCoordinateOffset, Opposite, Orientation,
-        Segment, SegmentBorderPiece, SegmentType, Tile,
+        get_tile_library, GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute,
+        SegmentBorderPiece, SegmentType, Tile,
     },
-    util::{refit_to_rect, Bag, HashMapBag, MapFindExt},
+    util::{Bag, HashMapBag},
 };
 
 pub mod player {
@@ -52,22 +49,10 @@ pub struct SegmentGroup {
     pub outline: Option<Vec<Vec<Vec2>>>,
 }
 
-impl SegmentGroup {
-    fn score(&self) -> usize {
-        let tile_span = self
-            .segments
-            .iter()
-            .map(|(pos, _)| *pos)
-            .collect::<HashSet<_>>()
-            .len();
-        let base_score = match self.gtype {
-            SegmentType::City if !self.free_edges.is_empty() => 1,
-            SegmentType::City => 2,
-            SegmentType::Road => 1,
-            _ => 0,
-        };
-        base_score * tile_span
-    }
+pub struct ScoringResult {
+    pub meeple_location: Vec2,
+    pub meeple_color: Color,
+    pub score: usize,
 }
 
 pub struct Game {
@@ -289,14 +274,15 @@ impl Game {
             .and_then(|tile| tile.segments.get(seg_index))
     }
 
-    pub fn score_group(&mut self, group_ident: GroupIdentifier) {
+    pub fn score_group(&mut self, group_ident: GroupIdentifier) -> Vec<ScoringResult> {
+        let mut scoring_result = Vec::new();
         let group = self.groups.get(group_ident).unwrap();
 
         // determine which players are earning score for the group
         let Bag(meeples_by_player) = group.meeples.iter().map(|&(k, v)| (v, k)).collect();
         let Some(highest_count) = meeples_by_player.values().map(Vec::len).max() else {
             // nobody placed any meeples on the group
-            return;
+            return Vec::new();
         };
         let scoring_players: Vec<_> = meeples_by_player
             .iter()
@@ -306,7 +292,32 @@ impl Game {
             .collect();
 
         let group_score = match group.gtype {
-            SegmentType::City | SegmentType::Road => group.score(),
+            SegmentType::City | SegmentType::Road => {
+                let tile_span: usize = group
+                    .segments
+                    .iter()
+                    .map(|seg_ident| {
+                        if self
+                            .segment_by_ident(*seg_ident)
+                            .unwrap()
+                            .attributes
+                            .iter()
+                            .any(|a| matches!(a, SegmentAttribute::Fortified { .. }))
+                        {
+                            2
+                        } else {
+                            1
+                        }
+                    })
+                    .sum();
+                let base_score = match group.gtype {
+                    SegmentType::City if !group.free_edges.is_empty() => 1,
+                    SegmentType::City => 2,
+                    SegmentType::Road => 1,
+                    _ => unimplemented!("unimplemented segment type"),
+                };
+                base_score * tile_span
+            }
             SegmentType::Field => {
                 let mut cities = HashSet::new();
                 for (pos, seg_index) in group.segments.clone() {
@@ -340,18 +351,32 @@ impl Game {
             SegmentType::Village => 0,
         };
 
-        for player_ident in scoring_players {
-            let player = self.players.get_mut(player_ident).unwrap();
+        for player_ident in &scoring_players {
+            let player = self.players.get_mut(*player_ident).unwrap();
             player.score += group_score;
         }
 
         // return and remove meeples
         for (player_ident, meeples) in meeples_by_player {
+            let first_meeple = meeples.first().unwrap();
             let player = self.players.get_mut(player_ident).unwrap();
             player.meeples += meeples.len();
+            let color = player.color;
+            scoring_result.push(ScoringResult {
+                meeple_location: self.segment_by_ident(*first_meeple).unwrap().meeple_spot
+                    + Vec2::from(first_meeple.0),
+                meeple_color: color,
+                score: if scoring_players.contains(&player_ident) {
+                    group_score
+                } else {
+                    0
+                },
+            });
         }
 
         self.groups.get_mut(group_ident).unwrap().meeples.clear();
+
+        scoring_result
     }
 
     pub fn place_meeple(
@@ -633,83 +658,96 @@ fn test_group_coallating() {
     let mut game = Game::new();
     game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))
         .unwrap();
-    game.place_tile(L_CURVE_ROAD.clone().rotated(), GridPos(-1, 0))
+    game.place_tile(CURVE_ROAD.clone().rotated(), GridPos(-1, 0))
         .unwrap();
     game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
         .unwrap();
-    game.place_tile(CITY_ENTRANCE.clone(), GridPos(-1, -1))
+    game.place_tile(EDGE_CITY_ENTRANCE.clone(), GridPos(-1, -1))
         .unwrap();
 }
 
-#[test]
-pub fn test_group_outline_generation() -> GameResult {
-    use crate::tile::tile_definitions::CORNER_CITY;
-    use crate::tile::SegmentType;
-    let mut game = Game::new();
-    game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
-    game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
-    game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
-    game.place_tile(
-        CORNER_CITY.clone().rotated().rotated().rotated(),
-        GridPos(1, 0),
-    )?;
-    let city_group_ident = game
-        .groups
-        .iter()
-        .find_map(|(group_ident, group)| (group.gtype == SegmentType::City).then_some(group_ident))
-        .unwrap();
-    let outline = game.compute_group_outline(city_group_ident);
-    // dbg!(outline);
-    Ok(())
-}
+#[cfg(test)]
+mod test {
+    use ggez::GameResult;
 
-#[test]
-pub fn test_group_outline_generation_2() -> GameResult {
-    use crate::tile::tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD};
-    use crate::tile::SegmentType;
-    let mut game = Game::new();
-    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
-    game.place_tile(L_CURVE_ROAD.clone(), GridPos(1, 0))?;
-    game.place_tile(STRAIGHT_ROAD.clone().rotated(), GridPos(1, -1))?;
-    let group_ident = game
-        .groups
-        .iter()
-        .map_find(|(group_ident, group)| (group.gtype == SegmentType::Road).then_some(group_ident))
-        .unwrap();
-    let outline = game.compute_group_outline(group_ident);
-    // dbg!(outline);
-    Ok(())
-}
+    use crate::{game::Game, pos::GridPos, util::MapFindExt};
 
-#[test]
-pub fn test_group_outline_generation_3() -> GameResult {
-    use crate::tile::tile_definitions::MONASTARY;
-    use crate::tile::SegmentType;
-    let mut game = Game::new();
-    game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
-    let group_ident = game
-        .groups
-        .iter()
-        .map_find(|(group_ident, group)| (group.gtype == SegmentType::Field).then_some(group_ident))
-        .unwrap();
-    let outline = game.compute_group_outline(group_ident);
-    // dbg!(outline);
-    Ok(())
-}
+    #[test]
+    pub fn test_group_outline_generation() -> GameResult {
+        use crate::tile::tile_definitions::CORNER_CITY;
+        use crate::tile::SegmentType;
+        let mut game = Game::new();
+        game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
+        game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
+        game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
+        game.place_tile(
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            GridPos(1, 0),
+        )?;
+        let city_group_ident = game
+            .groups
+            .iter()
+            .find_map(|(group_ident, group)| {
+                (group.gtype == SegmentType::City).then_some(group_ident)
+            })
+            .unwrap();
+        let outline = game.compute_group_outline(city_group_ident);
+        dbg!(outline);
+        Ok(())
+    }
 
-#[test]
-pub fn test_monastary_scoring() -> GameResult {
-    use crate::tile::tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD};
-    let mut game = Game::new();
-    game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, 1))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 0))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 1))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, -1))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, -1))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, -1))?;
-    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
-    let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
-    assert!(!closing_tiles.is_empty());
-    Ok(())
+    #[test]
+    pub fn test_group_outline_generation_2() -> GameResult {
+        use crate::tile::tile_definitions::{CURVE_ROAD, STRAIGHT_ROAD};
+        use crate::tile::SegmentType;
+        let mut game = Game::new();
+        game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
+        game.place_tile(CURVE_ROAD.clone(), GridPos(1, 0))?;
+        game.place_tile(STRAIGHT_ROAD.clone().rotated(), GridPos(1, -1))?;
+        let group_ident = game
+            .groups
+            .iter()
+            .map_find(|(group_ident, group)| {
+                (group.gtype == SegmentType::Road).then_some(group_ident)
+            })
+            .unwrap();
+        let outline = game.compute_group_outline(group_ident);
+        dbg!(outline);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_group_outline_generation_3() -> GameResult {
+        use crate::tile::tile_definitions::MONASTARY;
+        use crate::tile::SegmentType;
+        let mut game = Game::new();
+        game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+        let group_ident = game
+            .groups
+            .iter()
+            .map_find(|(group_ident, group)| {
+                (group.gtype == SegmentType::Field).then_some(group_ident)
+            })
+            .unwrap();
+        let outline = game.compute_group_outline(group_ident);
+        dbg!(outline);
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_monastary_scoring() -> GameResult {
+        use crate::tile::tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD};
+        let mut game = Game::new();
+        game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, 1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 0))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
+        let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
+        assert!(!closing_tiles.is_empty());
+        Ok(())
+    }
 }

@@ -8,10 +8,19 @@ use ggez::{
     Context, GameError,
 };
 use tile_definitions::{
-    CITY_ENTRANCE, CORNER_CITY, CROSSROADS, L_CURVE_ROAD, MONASTARY, ROAD_MONASTARY, STRAIGHT_ROAD,
+    ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CORNER_CITY_CURVE_ROAD, CROSSROADS, CURVE_ROAD,
+    EDGE_CITY, EDGE_CITY_CROSSROADS, EDGE_CITY_LEFT_CURVE_ROAD, EDGE_CITY_RIGHT_CURVE_ROAD,
+    FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_BRIDGE_CITY, FORTIFIED_CORNER_CITY,
+    FORTIFIED_CORNER_CITY_CURVE_ROAD, FORTIFIED_THREE_QUARTER_CITY, FOUR_WAY_CROSSROADS,
+    FULL_FORTIFIED_CITY, MONASTARY, OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE,
+    STRAIGHT_ROAD, THREE_QUARTER_CITY, THREE_QUARTER_CITY_ENTRANCE,
 };
 
-use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
+use crate::{
+    game::SegmentIndex,
+    pos::GridPos,
+    util::{refit_to_rect, RotateExt},
+};
 
 #[cfg(test)]
 mod test;
@@ -149,7 +158,7 @@ impl Mounts {
 
 #[derive(Clone, Debug)]
 pub enum SegmentAttribute {
-    Fortified,
+    Fortified { shield_location: Vec2 },
     CustomMeepleSpot(Vec2),
 }
 
@@ -623,19 +632,40 @@ impl Tile {
             )?,
             DrawParam::default(),
         );
+        for attribute in &segment.attributes {
+            if let SegmentAttribute::Fortified { shield_location } = attribute {
+                let shield_location = refit_to_rect(*shield_location, bounds);
+                canvas.draw(
+                    &Mesh::new_polygon(
+                        ctx,
+                        DrawMode::fill(),
+                        &[
+                            shield_location + vec2(0.0, 0.075),
+                            shield_location + vec2(0.075, 0.0),
+                            shield_location + vec2(0.0, -0.075),
+                            shield_location + vec2(-0.075, 0.0),
+                        ],
+                        Color::from_rgb(134, 146, 228),
+                    )?,
+                    DrawParam::default(),
+                );
+            }
+        }
         Ok(())
     }
 
     pub fn rotate(&mut self) {
-        for vert in &mut self.verts {
-            *vert = vec2(1.0 - vert.y, vert.x);
-        }
+        self.verts.iter_mut().for_each(RotateExt::rotate_);
         for segment in &mut self.segments {
-            let mspot = &mut segment.meeple_spot;
-            *mspot = vec2(1.0 - mspot.y, mspot.x);
+            segment.meeple_spot.rotate_();
             for edge in segment.edge_definition.iter_mut() {
                 if let SegmentBorderPiece::Edge((_, orientation)) = edge {
                     *orientation = orientation.rotate();
+                }
+            }
+            for attribute in &mut segment.attributes {
+                if let SegmentAttribute::Fortified { shield_location } = attribute {
+                    shield_location.rotate_();
                 }
             }
         }
@@ -648,6 +678,7 @@ impl Tile {
         self.mounts = self.mounts.clone().rotate();
     }
 
+    #[allow(unused)]
     pub fn rotated(mut self) -> Self {
         self.rotate();
         self
@@ -696,18 +727,43 @@ impl Tile {
     }
 }
 
+#[rustfmt::skip]
 pub fn get_tile_library() -> Vec<Tile> {
-    vec![
-        ROAD_MONASTARY.clone(),
-        CROSSROADS.clone(),
-        MONASTARY.clone(),
-        CITY_ENTRANCE.clone(),
-        CORNER_CITY.clone(),
-        L_CURVE_ROAD.clone(),
-        STRAIGHT_ROAD.clone(),
+    [
+        (&*STARTING_TILE, 3),
+
+        (&*STRAIGHT_ROAD, 8),
+        (&*CURVE_ROAD, 9),
+        (&*CROSSROADS, 4),
+        (&*FOUR_WAY_CROSSROADS, 1),
+
+        (&*EDGE_CITY, 5),
+        (&*EDGE_CITY_LEFT_CURVE_ROAD, 3),
+        (&*EDGE_CITY_RIGHT_CURVE_ROAD, 3),
+        (&*EDGE_CITY_CROSSROADS, 3),
+
+        (&*ADJACENT_EDGE_CITIES, 2),
+        (&*OPPOSING_EDGE_CITIES, 3),
+
+        (&*CORNER_CITY, 3),
+        (&*FORTIFIED_CORNER_CITY, 2),
+        (&*CORNER_CITY_CURVE_ROAD, 3),
+        (&*FORTIFIED_CORNER_CITY_CURVE_ROAD, 2),
+
+        (&*BRIDGE_CITY, 1),
+        (&*FORTIFIED_BRIDGE_CITY, 2),
+
+        (&*THREE_QUARTER_CITY, 3),
+        (&*FORTIFIED_THREE_QUARTER_CITY, 1),
+        (&*THREE_QUARTER_CITY_ENTRANCE, 1),
+        (&*FORITIFED_THREE_QUARTER_CITY_ENTRANCE, 2),
+
+        (&*FULL_FORTIFIED_CITY, 1),
+
+        (&*MONASTARY, 4),
+        (&*ROAD_MONASTARY, 2),
     ]
     .into_iter()
-    .cycle()
-    .take(20)
+    .flat_map(|(tile, count)| vec![tile.clone(); count])
     .collect()
 }
