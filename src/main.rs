@@ -518,6 +518,7 @@ impl EventHandler<GameError> for Client {
 }
 
 fn main() -> GameResult {
+    // game::test_group_outline_generation_2()?;
     let (ctx, event_loop) = ContextBuilder::new("carcassone", "maurdekye")
         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassone"))

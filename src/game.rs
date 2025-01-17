@@ -392,169 +392,186 @@ impl Game {
         }
 
         // collect all lines together by their grid position
-        let Bag(lines_by_gridpos) = group
-            .segments
-            .iter()
-            .copied()
-            .flat_map(|seg_ident| {
-                // dbg!(&seg_ident);
-                let (tile_pos, seg_index) = seg_ident;
-                let tile = self.placed_tiles.get(&tile_pos).unwrap();
+        let line_segments_iter = group.segments.iter().copied().flat_map(|seg_ident| {
+            // dbg!(&seg_ident);
+            let (tile_pos, seg_index) = seg_ident;
+            let tile = self.placed_tiles.get(&tile_pos).unwrap();
 
-                let mut pieces: Vec<Option<LinePiece>> = vec![];
-                for &edge in &tile.segments[seg_index].edge_definition {
-                    // dbg!(edge);
-                    use SegmentBorderPiece::*;
-                    match edge {
-                        Vert(index) => {
-                            pieces.push(Some(LinePiece::Vert(
-                                tile.verts[index] + Vec2::from(tile_pos),
-                            )));
-                        }
-                        Edge(edge) => {
-                            let (span, orientation) = edge;
-                            // dbg!((tile_pos, span.start(), orientation));
-                            let start = LinePiece::BorderCoordinate(
-                                GridBorderCoordinate::from_tile_edge_vertex(
-                                    tile_pos,
-                                    (span.start(), orientation),
-                                ),
-                            );
-                            // dbg!(&start);
-                            if pieces.last() != Some(&Some(start)) {
-                                pieces.push(Some(start));
-                            }
-
-                            // this breaks rustfmt if its a matches! macro
-                            if match edges_by_gridpos.get(&(tile_pos + orientation.offset())) {
-                                Some(adj_edges) if (adj_edges.contains(&edge.opposite())) => true,
-                                _ => false,
-                            } {
-                                pieces.push(None);
-                            }
-
-                            let end = LinePiece::BorderCoordinate(
-                                GridBorderCoordinate::from_tile_edge_vertex(
-                                    tile_pos,
-                                    (span.end(), orientation),
-                                ),
-                            );
-                            // dbg!(&end);
-                            pieces.push(Some(end));
-                        }
+            let mut pieces: Vec<Option<LinePiece>> = vec![];
+            for &edge in &tile.segments[seg_index].edge_definition {
+                // dbg!(edge);
+                use SegmentBorderPiece::*;
+                match edge {
+                    Vert(index) => {
+                        pieces.push(Some(LinePiece::Vert(
+                            tile.verts[index] + Vec2::from(tile_pos),
+                        )));
                     }
-                    // dbg!(&lines);
+                    Edge(edge) => {
+                        let (span, orientation) = edge;
+                        // dbg!((tile_pos, span.start(), orientation));
+                        let start = LinePiece::BorderCoordinate(
+                            GridBorderCoordinate::from_tile_edge_vertex(
+                                tile_pos,
+                                (span.start(), orientation),
+                            ),
+                        );
+                        // dbg!(&start);
+                        if pieces.last() != Some(&Some(start)) {
+                            pieces.push(Some(start));
+                        }
+
+                        // this breaks rustfmt if its a matches! macro
+                        if match edges_by_gridpos.get(&(tile_pos + orientation.offset())) {
+                            Some(adj_edges) if (adj_edges.contains(&edge.opposite())) => true,
+                            _ => false,
+                        } {
+                            pieces.push(None);
+                        }
+
+                        let end = LinePiece::BorderCoordinate(
+                            GridBorderCoordinate::from_tile_edge_vertex(
+                                tile_pos,
+                                (span.end(), orientation),
+                            ),
+                        );
+                        // dbg!(&end);
+                        pieces.push(Some(end));
+                    }
                 }
+                // dbg!(&pieces);
+            }
 
-                let mut lines: Vec<_> = pieces
-                    .split(Option::is_none)
-                    .map(|lines| lines.iter().copied().flatten().collect::<Vec<_>>())
-                    .collect();
+            let mut lines: Vec<_> = pieces
+                .split(Option::is_none)
+                .map(|lines| lines.iter().copied().flatten().collect::<Vec<_>>())
+                .collect();
 
-                // dbg!(&lines);
+            // dbg!(&lines);
 
-                let closed_loop = lines.len() == 1;
-                if !closed_loop {
-                    let first_line = lines.remove(0);
-                    let last_line = lines.last_mut().unwrap();
-                    if first_line.first() == last_line.last() {
-                        last_line.extend(first_line.into_iter().skip(1));
-                    } else {
-                        last_line.extend(first_line);
-                    }
+            let closed_loop = lines.len() == 1;
+            if !closed_loop {
+                let first_line = lines.remove(0);
+                let last_line = lines.last_mut().unwrap();
+                if first_line.first() == last_line.last() {
+                    last_line.extend(first_line.into_iter().skip(1));
                 } else {
-                    let first_piece = lines[0][0];
-                    lines[0].push(first_piece);
+                    last_line.extend(first_line);
                 }
+            } else {
+                let first_piece = lines[0][0];
+                lines[0].push(first_piece);
+            }
 
-                // dbg!(&lines);
+            // dbg!(&lines);
 
-                lines.into_iter().filter_map(move |line| {
-                    (line.len() > 1).then_some((tile_pos, (line, closed_loop)))
-                })
-            })
-            .collect();
+            lines
+                .into_iter()
+                .filter_map(move |line| (line.len() > 1).then_some((tile_pos, (line, closed_loop))))
+        });
+        let mut closed_loops = Vec::new();
+        let mut lines_by_gridpos = HashMap::new();
+        for (gridpos, (line, closed_loop)) in line_segments_iter {
+            if closed_loop {
+                closed_loops.push(line.into());
+            } else {
+                lines_by_gridpos.place(gridpos, line);
+            }
+        }
+        // dbg!(&closed_loops);
         // dbg!(&lines_by_gridpos);
 
         // connect all lines together
-        let mut polylines: Vec<VecDeque<LinePiece>> = Vec::new();
-        for (_pos, (line, closed_loop)) in lines_by_gridpos
-            .iter()
-            .flat_map(|(pos, lines)| lines.iter().map(move |line| (*pos, line)))
-        {
-            // dbg!((&line, closed_loop));
-
-            if *closed_loop {
-                polylines.push(line.clone().into_iter().map(LinePiece::from).collect());
-                continue;
-            }
-
-            #[derive(Debug)]
-            enum FrontBack {
-                Front,
-                Back,
-            }
-            use FrontBack::*;
-            let mut appended_to = None;
-            for (i, polyline) in polylines.iter_mut().enumerate() {
-                if polyline.back() == line.first() {
-                    polyline.extend(line.iter().skip(1));
-                    appended_to = Some((line.last().unwrap().clone(), i, Back));
-                    break;
-                }
-                if polyline.front() == line.last() {
-                    *polyline = line
-                        .iter()
-                        .cloned()
-                        .chain(polyline.iter().cloned().skip(1))
-                        .collect();
-                    appended_to = Some((line.first().unwrap().clone(), i, Front));
-                    break;
-                }
-            }
-            // dbg!(&appended_to);
-            // dbg!(&polylines);
-            match appended_to {
-                None => polylines.push(VecDeque::from(line.clone())),
-                Some((start, index, Front)) => {
-                    if let Some(mut join_index) =
-                        polylines.iter().enumerate().map_find(|(i, lines)| {
-                            lines
-                                .back()
-                                .and_then(|end| (i != index && end == &start).then_some(i))
-                        })
+        let mut polylines: Vec<VecDeque<LinePiece>> = closed_loops;
+        let mut current_line: VecDeque<LinePiece> = VecDeque::new();
+        loop {
+            // dbg!(&current_line);
+            match (current_line.front(), current_line.back()) {
+                (None, None) => {
+                    if let Some(next_line) = lines_by_gridpos
+                        .values_mut()
+                        .find(|lines| !lines.is_empty())
+                        .and_then(|lines| lines.pop())
                     {
-                        let polyline = polylines.remove(index);
-                        if join_index > index {
-                            join_index -= 1;
-                        }
-                        polylines[join_index].extend(polyline.into_iter().skip(1));
-                        // dbg!(&polylines);
+                        current_line = next_line.into();
+                    } else {
+                        break;
                     }
                 }
-                Some((end, mut index, Back)) => {
-                    if let Some(join_index) = polylines.iter().enumerate().find_map(|(i, lines)| {
-                        lines
-                            .front()
-                            .and_then(|start| (i != index && start == &end).then_some(i))
-                    }) {
-                        let polyline = polylines.remove(join_index);
-                        if index > join_index {
-                            index -= 1;
-                        }
-                        polylines[index].extend(polyline.into_iter().skip(1));
+                (
+                    Some(LinePiece::BorderCoordinate(start)),
+                    Some(LinePiece::BorderCoordinate(end)),
+                ) => {
+                    // dbg!((&start, &end));
+                    if start == end {
+                        // segment is completed, add to polylines
+                        polylines.push(current_line);
+                        current_line = VecDeque::new();
                         // dbg!(&polylines);
+                    } else {
+                        // locate a segment to attach to the end
+                        let search_result = 'line_search: {
+                            for adjacent in end.get_adjacent_gridposes() {
+                                let Some(lines) = lines_by_gridpos.get_mut(&adjacent) else {
+                                    continue;
+                                };
+                                let Some((i, _)) = lines.iter().enumerate().find(|(_, line)| {
+                                    line.first() == Some(&LinePiece::BorderCoordinate(*end))
+                                }) else {
+                                    continue;
+                                };
+                                break 'line_search Some(lines.remove(i));
+                            }
+                            None
+                        };
+                        // dbg!(&search_result);
+                        if let Some(new_line) = search_result {
+                            current_line.extend(new_line.into_iter().skip(1));
+                            continue;
+                        }
+
+                        // locate a segment to attach to the beginning
+                        let search_result = 'line_search: {
+                            for adjacent in start.get_adjacent_gridposes() {
+                                let Some(lines) = lines_by_gridpos.get_mut(&adjacent) else {
+                                    continue;
+                                };
+                                let Some((i, _)) = lines.iter().enumerate().find(|(_, line)| {
+                                    line.last() == Some(&LinePiece::BorderCoordinate(*start))
+                                }) else {
+                                    continue;
+                                };
+                                break 'line_search Some(lines.remove(i));
+                            }
+                            None
+                        };
+                        // dbg!(&search_result);
+                        if let Some(new_line) = search_result {
+                            current_line = new_line
+                                .into_iter()
+                                .chain(current_line.into_iter().skip(1))
+                                .collect();
+                            continue;
+                        }
+
+                        // no line segments remaining, just place the incomplete line into polylines (and print a warning)
+                        polylines.push(current_line);
+                        current_line = VecDeque::new();
+                        // dbg!(&polylines);
+                        eprintln!("Incomplete line segment created!");
                     }
                 }
+                _ => unimplemented!("non-border coordinate capped lines"),
             }
         }
-
         // dbg!(&polylines);
 
         let final_lines_set = polylines
             .into_iter()
             .map(|polyline| polyline.into_iter().map(Vec2::from).collect())
             .collect();
+
+        // dbg!(&final_lines_set);
 
         Some(final_lines_set)
     }
@@ -721,7 +738,7 @@ pub fn test_group_outline_generation() -> GameResult {
         .find_map(|(group_ident, group)| (group.gtype == SegmentType::City).then_some(group_ident))
         .unwrap();
     let outline = game.compute_group_outline_old(city_group_ident);
-    dbg!(outline);
+    // dbg!(outline);
     Ok(())
 }
 
@@ -739,6 +756,6 @@ pub fn test_group_outline_generation_2() -> GameResult {
         .map_find(|(group_ident, group)| (group.gtype == SegmentType::Road).then_some(group_ident))
         .unwrap();
     let outline = game.compute_group_outline(city_group_ident);
-    dbg!(outline);
+    // dbg!(outline);
     Ok(())
 }
