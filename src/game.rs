@@ -507,9 +507,17 @@ impl Game {
 
             // dbg!(&lines);
 
-            lines
-                .into_iter()
-                .filter_map(move |line| (line.len() > 1).then_some((tile_pos, (line, closed_loop))))
+            lines.into_iter().filter_map(move |line| {
+                let closed_loop = closed_loop
+                    || !matches!(
+                        (line.first(), line.last()),
+                        (
+                            Some(LinePiece::BorderCoordinate(_)),
+                            Some(LinePiece::BorderCoordinate(_))
+                        )
+                    );
+                (line.len() > 1).then_some((tile_pos, (line, closed_loop)))
+            })
         });
         let mut closed_loops = Vec::new();
         let mut lines_by_gridpos = HashMap::new();
@@ -663,12 +671,27 @@ pub fn test_group_outline_generation_2() -> GameResult {
     game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
     game.place_tile(L_CURVE_ROAD.clone(), GridPos(1, 0))?;
     game.place_tile(STRAIGHT_ROAD.clone().rotated(), GridPos(1, -1))?;
-    let city_group_ident = game
+    let group_ident = game
         .groups
         .iter()
         .map_find(|(group_ident, group)| (group.gtype == SegmentType::Road).then_some(group_ident))
         .unwrap();
-    let outline = game.compute_group_outline(city_group_ident);
+    let outline = game.compute_group_outline(group_ident);
+    // dbg!(outline);
+    Ok(())
+}
+
+pub fn test_group_outline_generation_3() -> GameResult {
+    use crate::tile::tile_definitions::MONASTARY;
+    use crate::tile::SegmentType;
+    let mut game = Game::new();
+    game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+    let group_ident = game
+        .groups
+        .iter()
+        .map_find(|(group_ident, group)| (group.gtype == SegmentType::Field).then_some(group_ident))
+        .unwrap();
+    let outline = game.compute_group_outline(group_ident);
     // dbg!(outline);
     Ok(())
 }
