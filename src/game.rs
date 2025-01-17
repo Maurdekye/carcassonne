@@ -268,7 +268,10 @@ impl Game {
 
         // determine which players are earning score for the group
         let Bag(meeples_by_player) = group.meeples.iter().map(|&(k, v)| (v, k)).collect();
-        let highest_count = meeples_by_player.values().map(Vec::len).max().unwrap();
+        let Some(highest_count) = meeples_by_player.values().map(Vec::len).max() else {
+            // nobody placed any meeples on the group
+            return;
+        };
         let scoring_players: Vec<_> = meeples_by_player
             .iter()
             .filter_map(|(player_ident, meeples)| {
