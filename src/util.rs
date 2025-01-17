@@ -121,6 +121,6 @@ pub trait RotateExt: Sized {
 
 impl RotateExt for Vec2 {
     fn rotate_(&mut self) {
-        *self = vec2(1.0 - self.y, -self.x);
+        *self = vec2(1.0 - self.y, self.x);
     }
 }

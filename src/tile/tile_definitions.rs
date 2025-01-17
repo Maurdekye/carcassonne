@@ -292,16 +292,17 @@ lazy_static! {
                 stype: City,
                 edges: vec![Edge((Full, North)), Vert(1), Vert(0)]
             },
-            Segment {
+            SpecialSegment {
                 stype: Road,
                 edges: vec![
                     Edge((Middle, West)),
                     Vert(3),
                     Edge((Middle, South)),
                     Vert(2)
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
-            Segment {
+            SpecialSegment {
                 stype: Field,
                 edges: vec![
                     Edge((End, West)),
@@ -310,7 +311,8 @@ lazy_static! {
                     Edge((Full, East)),
                     Edge((Beginning, South)),
                     Vert(3)
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.75, 0.5))]
             },
             Segment {
                 stype: Field,
@@ -330,16 +332,17 @@ lazy_static! {
                 stype: City,
                 edges: vec![Edge((Full, North)), Vert(1), Vert(0)]
             },
-            Segment {
+            SpecialSegment {
                 stype: Road,
                 edges: vec![
                     Edge((Middle, East)),
                     Vert(3),
                     Edge((Middle, South)),
                     Vert(2)
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
-            Segment {
+            SpecialSegment {
                 stype: Field,
                 edges: vec![
                     Edge((Full, West)),
@@ -348,7 +351,8 @@ lazy_static! {
                     Edge((Beginning, East)),
                     Vert(2),
                     Edge((End, South)),
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.25, 0.5))]
             },
             Segment {
                 stype: Field,
