@@ -2,15 +2,15 @@ use ggez::glam::vec2;
 use lazy_static::lazy_static;
 
 use crate::tile::{
-    Orientation, SegmentAttribute, SegmentBorderPiece, SegmentDefinition, TileEdgeSpan,
-    SegmentType, Tile,
+    Orientation, SegmentAttribute, SegmentBorderPiece, SegmentDefinition, SegmentType, Tile,
+    TileEdgeSpan,
 };
 
 use Orientation::*;
 use SegmentBorderPiece::*;
 use SegmentDefinition::*;
-use TileEdgeSpan::*;
 use SegmentType::*;
+use TileEdgeSpan::*;
 
 lazy_static! {
     pub static ref STRAIGHT_ROAD: Tile = Tile::new(
@@ -18,7 +18,11 @@ lazy_static! {
         vec![
             Segment {
                 stype: Field,
-                edges: vec![Edge((End, West)), Edge((Full, North)), Edge((Beginning, East))]
+                edges: vec![
+                    Edge((End, West)),
+                    Edge((Full, North)),
+                    Edge((Beginning, East))
+                ]
             },
             Segment {
                 stype: Road,
@@ -26,7 +30,11 @@ lazy_static! {
             },
             Segment {
                 stype: Field,
-                edges: vec![Edge((Beginning, West)), Edge((End, East)), Edge((Full, South))]
+                edges: vec![
+                    Edge((Beginning, West)),
+                    Edge((End, East)),
+                    Edge((Full, South))
+                ]
             }
         ]
     );
@@ -39,7 +47,12 @@ lazy_static! {
             },
             SpecialSegment {
                 stype: Road,
-                edges: vec![Edge((Middle, West)), Vert(0), Edge((Middle, North)), Vert(1)],
+                edges: vec![
+                    Edge((Middle, West)),
+                    Vert(0),
+                    Edge((Middle, North)),
+                    Vert(1)
+                ],
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
             SpecialSegment {
@@ -119,7 +132,12 @@ lazy_static! {
             },
             Segment {
                 stype: Field,
-                edges: vec![Edge((End, East)), Edge((Beginning, South)), Vert(3), Vert(2)]
+                edges: vec![
+                    Edge((End, East)),
+                    Edge((Beginning, South)),
+                    Vert(3),
+                    Vert(2)
+                ]
             },
             Segment {
                 stype: Road,
@@ -127,7 +145,12 @@ lazy_static! {
             },
             Segment {
                 stype: Field,
-                edges: vec![Edge((End, South)), Edge((Beginning, West)), Vert(5), Vert(4)]
+                edges: vec![
+                    Edge((End, South)),
+                    Edge((Beginning, West)),
+                    Vert(5),
+                    Vert(4)
+                ]
             },
             Segment {
                 stype: Road,
@@ -206,5 +229,17 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(6), Vert(5),]
             }
         ]
+    );
+    pub static ref _DEBUG_EMPTY_FIELD: Tile = Tile::new(
+        vec![],
+        vec![Segment {
+            stype: Field,
+            edges: vec![
+                Edge((Full, West)),
+                Edge((Full, North)),
+                Edge((Full, East)),
+                Edge((Full, South))
+            ]
+        }]
     );
 }

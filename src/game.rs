@@ -681,6 +681,7 @@ pub fn test_group_outline_generation_2() -> GameResult {
     Ok(())
 }
 
+#[test]
 pub fn test_group_outline_generation_3() -> GameResult {
     use crate::tile::tile_definitions::MONASTARY;
     use crate::tile::SegmentType;
@@ -693,5 +694,22 @@ pub fn test_group_outline_generation_3() -> GameResult {
         .unwrap();
     let outline = game.compute_group_outline(group_ident);
     // dbg!(outline);
+    Ok(())
+}
+
+#[test]
+pub fn test_monastary_scoring() -> GameResult {
+    use crate::tile::tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD};
+    let mut game = Game::new();
+    game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, 1))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 0))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 1))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, -1))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, -1))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, -1))?;
+    game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
+    let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
+    assert!(!closing_tiles.is_empty());
     Ok(())
 }
