@@ -441,6 +441,9 @@ impl Game {
                 // dbg!(edge);
                 use SegmentBorderPiece::*;
                 match edge {
+                    Break => {
+                        pieces.push(None);
+                    }
                     Vert(index) => {
                         pieces.push(Some(LinePiece::Vert(
                             tile.verts[index] + Vec2::from(tile_pos),

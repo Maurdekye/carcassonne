@@ -7,7 +7,9 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     Context, GameError,
 };
-use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, CROSSROADS, L_CURVE_ROAD, MONASTARY, ROAD_MONASTARY, STRAIGHT_ROAD};
+use tile_definitions::{
+    CITY_ENTRANCE, CORNER_CITY, CROSSROADS, L_CURVE_ROAD, MONASTARY, ROAD_MONASTARY, STRAIGHT_ROAD,
+};
 
 use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
 
@@ -15,7 +17,6 @@ use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
 mod test;
 
 const MOUNTS_PER_SIDE: usize = 3;
-
 
 pub type Mount = [usize; MOUNTS_PER_SIDE];
 pub type TileEdge = (TileEdgeSpan, Orientation);
@@ -390,6 +391,7 @@ pub fn edges_contiguous(before: TileEdge, after: TileEdge) -> bool {
 pub enum SegmentBorderPiece {
     Edge(TileEdge),
     Vert(usize),
+    Break,
 }
 
 #[derive(Debug)]
@@ -444,6 +446,7 @@ impl Tile {
 
             for (edge_index, edge) in edges.iter().cloned().enumerate() {
                 match edge {
+                    SegmentBorderPiece::Break => {}
                     SegmentBorderPiece::Vert(index) => {
                         poly.push(index);
                     }

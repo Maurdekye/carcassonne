@@ -156,12 +156,14 @@ lazy_static! {
                     Edge((Full, North)),
                     Edge((Full, East)),
                     Edge((Full, South)),
+                    Break,
                     Vert(0),
                     Vert(4),
                     Vert(3),
                     Vert(2),
                     Vert(1),
                     Vert(0),
+                    Break,
                 ]
             }
         ]
