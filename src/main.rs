@@ -11,7 +11,10 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use tile::{tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD}, Orientation, Tile};
+use tile::{
+    tile_definitions::{L_CURVE_ROAD, STRAIGHT_ROAD},
+    Orientation, Tile,
+};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -345,7 +348,8 @@ impl EventHandler<GameError> for Client {
                                     .game
                                     .group_and_key_by_seg_ident((*placed_position, i))
                                     .unwrap();
-                                if group.meeples.is_empty()
+                                if group.gtype.placeable()
+                                    && group.meeples.is_empty()
                                     && point_in_polygon(
                                         subgrid_pos,
                                         &tile.segment_polygon(i).collect::<Vec<_>>(),
@@ -527,8 +531,5 @@ fn main() -> GameResult {
     client
         .game
         .place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
-    client
-        .game
-        .place_tile(L_CURVE_ROAD.clone(), GridPos(1, 0))?;
     event::run(ctx, event_loop, client);
 }

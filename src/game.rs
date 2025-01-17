@@ -227,6 +227,32 @@ impl Game {
         // put tile on board
         self.placed_tiles.insert(pos, tile);
 
+        // check for completed monastaries
+        for adjacent_pos in pos.surrounding() {
+            let Some(tile) = self.placed_tiles.get(&adjacent_pos) else {
+                continue;
+            };
+            let Some((seg_index, _)) = tile
+                .segments
+                .iter()
+                .enumerate()
+                .find(|(_, seg)| seg.stype == SegmentType::Monastary)
+            else {
+                continue;
+            };
+            if adjacent_pos
+                .surrounding()
+                .all(|monastary_adjacent| self.placed_tiles.contains_key(&monastary_adjacent))
+            {
+                closing_groups.push(
+                    *self
+                        .group_associations
+                        .get(&(adjacent_pos, seg_index))
+                        .unwrap(),
+                );
+            }
+        }
+
         Ok(closing_groups)
     }
 
@@ -300,7 +326,17 @@ impl Game {
                 }
                 cities.len() * 3
             }
-            SegmentType::Monastary => todo!(),
+            SegmentType::Monastary => {
+                group
+                    .segments
+                    .first()
+                    .unwrap()
+                    .0
+                    .surrounding()
+                    .filter(|pos| self.placed_tiles.contains_key(&pos))
+                    .count()
+                    + 1
+            }
             SegmentType::Village => 0,
         };
 
@@ -611,7 +647,7 @@ pub fn test_group_outline_generation() -> GameResult {
         .iter()
         .find_map(|(group_ident, group)| (group.gtype == SegmentType::City).then_some(group_ident))
         .unwrap();
-    let outline = game.compute_group_outline_old(city_group_ident);
+    let outline = game.compute_group_outline(city_group_ident);
     // dbg!(outline);
     Ok(())
 }

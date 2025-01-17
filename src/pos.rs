@@ -2,19 +2,30 @@ use std::ops::Add;
 
 use ggez::glam::{vec2, Vec2};
 
+const ADJACENT_OFFSETS: [GridPos; 4] =
+    [GridPos(-1, 0), GridPos(0, -1), GridPos(1, 0), GridPos(0, 1)];
+
+const SURROUNDING_OFFSETS: [GridPos; 8] = [
+    GridPos(-1, -1),
+    GridPos(-1, 0),
+    GridPos(-1, 1),
+    GridPos(0, 1),
+    GridPos(1, 1),
+    GridPos(1, 0),
+    GridPos(1, -1),
+    GridPos(0, -1),
+];
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct GridPos(pub i32, pub i32);
 
 impl GridPos {
-    pub fn adjacent(&self) -> impl Iterator<Item = Self> {
-        let GridPos(x, y) = *self;
-        vec![
-            GridPos(x - 1, y),
-            GridPos(x, y - 1),
-            GridPos(x + 1, y),
-            GridPos(x, y + 1),
-        ]
-        .into_iter()
+    pub fn adjacent(self) -> impl Iterator<Item = Self> {
+        ADJACENT_OFFSETS.iter().map(move |&offset| self + offset)
+    }
+
+    pub fn surrounding(self) -> impl Iterator<Item = Self> {
+        SURROUNDING_OFFSETS.iter().map(move |&offset| self + offset)
     }
 }
 

@@ -7,7 +7,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     Context, GameError,
 };
-use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, L_CURVE_ROAD, STRAIGHT_ROAD};
+use tile_definitions::{CITY_ENTRANCE, CORNER_CITY, CROSSROADS, L_CURVE_ROAD, MONASTARY, ROAD_MONASTARY, STRAIGHT_ROAD};
 
 use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
 
@@ -15,6 +15,7 @@ use crate::{game::SegmentIndex, pos::GridPos, util::refit_to_rect};
 mod test;
 
 const MOUNTS_PER_SIDE: usize = 3;
+
 
 pub type Mount = [usize; MOUNTS_PER_SIDE];
 pub type TileEdge = (TileEdgeSpan, Orientation);
@@ -95,7 +96,7 @@ impl SegmentType {
         }
     }
 
-    fn placeable(&self) -> bool {
+    pub fn placeable(&self) -> bool {
         !matches!(self, SegmentType::Village)
     }
 }
@@ -525,13 +526,10 @@ impl Tile {
                 }
             }
 
-            let meeple_spot = match attributes
-                .iter()
-                .find_map(|attr| match attr {
-                    SegmentAttribute::CustomMeepleSpot(pos) => Some(pos),
-                    _ => None,
-                })
-            {
+            let meeple_spot = match attributes.iter().find_map(|attr| match attr {
+                SegmentAttribute::CustomMeepleSpot(pos) => Some(pos),
+                _ => None,
+            }) {
                 Some(pos) => *pos,
                 None => {
                     poly.iter().map(|i| verts[*i]).reduce(|a, b| a + b).unwrap() / poly.len() as f32
@@ -697,10 +695,13 @@ impl Tile {
 
 pub fn get_tile_library() -> Vec<Tile> {
     vec![
+        ROAD_MONASTARY.clone(),
+        CROSSROADS.clone(),
+        MONASTARY.clone(),
         CITY_ENTRANCE.clone(),
         CORNER_CITY.clone(),
         L_CURVE_ROAD.clone(),
-        STRAIGHT_ROAD.clone().rotated(),
+        STRAIGHT_ROAD.clone(),
     ]
     .into_iter()
     .cycle()
