@@ -65,8 +65,12 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Game {
+        Game::new_with_library(get_tile_library())
+    }
+
+    pub fn new_with_library(library: Vec<Tile>) -> Game {
         Game {
-            library: get_tile_library(),
+            library,
             placed_tiles: HashMap::new(),
             groups: SlotMap::new(),
             group_associations: HashMap::new(),
