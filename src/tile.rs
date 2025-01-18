@@ -634,17 +634,20 @@ impl Tile {
         );
         for attribute in &segment.attributes {
             if let SegmentAttribute::Fortified { shield_location } = attribute {
-                let shield_location = refit_to_rect(*shield_location, bounds);
                 canvas.draw(
                     &Mesh::new_polygon(
                         ctx,
                         DrawMode::fill(),
                         &[
-                            shield_location + vec2(0.0, 0.075),
-                            shield_location + vec2(0.075, 0.0),
-                            shield_location + vec2(0.0, -0.075),
-                            shield_location + vec2(-0.075, 0.0),
-                        ],
+                            vec2(-0.075, -0.075),
+                            vec2(0.075, -0.075),
+                            vec2(0.075, 0.075),
+                            vec2(0.0, 0.15),
+                            vec2(-0.075, 0.075),
+                        ]
+                        .into_iter()
+                        .map(|offset| refit_to_rect(*shield_location + offset, bounds))
+                        .collect::<Vec<_>>(),
                         Color::from_rgb(134, 146, 228),
                     )?,
                     DrawParam::default(),

@@ -13,7 +13,7 @@ use ggez::{
 };
 use pos::GridPos;
 use rand::{seq::SliceRandom, thread_rng};
-use tile::{tile_definitions::STARTING_TILE, Orientation, Tile};
+use tile::{tile_definitions::{CORNER_CITY_CURVE_ROAD, FOUR_WAY_CROSSROADS, FULL_FORTIFIED_CITY, STARTING_TILE}, Orientation, Tile};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -606,6 +606,7 @@ fn main() -> GameResult {
     client
         .game
         .place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    *client.get_held_tile_mut().unwrap() = FULL_FORTIFIED_CITY.clone();
 
     // use tile::tile_definitions::CROSSROADS;
     // let mut game = Game::new_with_library(vec![

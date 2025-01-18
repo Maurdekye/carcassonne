@@ -194,8 +194,8 @@ lazy_static! {
                 edges: vec![
                     Edge((End, North)),
                     Edge((Beginning, East)),
-                    Vert(2),
-                    Vert(3)
+                    Vert(3),
+                    Vert(2)
                 ]
             },
             Segment {
@@ -207,8 +207,8 @@ lazy_static! {
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
-                    Vert(3),
-                    Vert(2)
+                    Vert(5),
+                    Vert(4)
                 ]
             },
             Segment {
@@ -221,7 +221,7 @@ lazy_static! {
                     Edge((End, South)),
                     Edge((Beginning, West)),
                     Vert(7),
-                    Vert(5)
+                    Vert(6)
                 ]
             },
             Segment {
@@ -685,10 +685,10 @@ lazy_static! {
             Segment {
                 stype: Field,
                 edges: vec![
-                    Edge((Beginning, South)),
-                    Vert(4),
-                    Vert(3),
                     Edge((End, East)),
+                    Edge((Beginning, South)),
+                    Vert(3),
+                    Vert(2),
                 ]
             }
         ]
@@ -731,10 +731,10 @@ lazy_static! {
             Segment {
                 stype: Field,
                 edges: vec![
-                    Edge((Beginning, South)),
-                    Vert(4),
-                    Vert(3),
                     Edge((End, East)),
+                    Edge((Beginning, South)),
+                    Vert(3),
+                    Vert(2),
                 ]
             }
         ]
