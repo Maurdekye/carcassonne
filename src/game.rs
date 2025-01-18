@@ -348,7 +348,7 @@ impl Game {
                     .unwrap()
                     .0
                     .surrounding()
-                    .filter(|pos| self.placed_tiles.contains_key(&pos))
+                    .filter(|pos| self.placed_tiles.contains_key(pos))
                     .count()
                     + 1
             }
@@ -666,15 +666,23 @@ fn test_group_coallating() {
         .unwrap();
     game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
         .unwrap();
-    game.place_tile(EDGE_CITY_ENTRANCE.clone(), GridPos(-1, -1))
-        .unwrap();
 }
 
 #[cfg(test)]
 mod test {
-    use ggez::GameResult;
+    use ggez::{graphics::Color, GameResult};
 
-    use crate::{game::Game, pos::GridPos, util::MapFindExt};
+    use crate::{
+        game::Game,
+        pos::GridPos,
+        tile::{
+            tile_definitions::{CROSSROADS, CURVE_ROAD, MONASTARY, STRAIGHT_ROAD},
+            SegmentType,
+        },
+        util::MapFindExt,
+    };
+
+    use super::player::Player;
 
     #[test]
     pub fn test_group_outline_generation() -> GameResult {
@@ -702,8 +710,6 @@ mod test {
 
     #[test]
     pub fn test_group_outline_generation_2() -> GameResult {
-        use crate::tile::tile_definitions::{CURVE_ROAD, STRAIGHT_ROAD};
-        use crate::tile::SegmentType;
         let mut game = Game::new();
         game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
         game.place_tile(CURVE_ROAD.clone(), GridPos(1, 0))?;
@@ -722,8 +728,6 @@ mod test {
 
     #[test]
     pub fn test_group_outline_generation_3() -> GameResult {
-        use crate::tile::tile_definitions::MONASTARY;
-        use crate::tile::SegmentType;
         let mut game = Game::new();
         game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
         let group_ident = game
@@ -752,6 +756,15 @@ mod test {
         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
         let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
         assert!(!closing_tiles.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_scoring_effects() -> GameResult {
+        let mut game = Game::new_with_library(vec![CROSSROADS.clone(), CROSSROADS.clone()]);
+        let player_ident = game.players.insert(Player::new(Color::RED));
+        game.place_tile(CROSSROADS.clone(), GridPos(0, 0))?;
+        game.place_meeple((GridPos(0, 0), 2), player_ident)?;
         Ok(())
     }
 }

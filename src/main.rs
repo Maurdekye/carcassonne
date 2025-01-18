@@ -23,8 +23,9 @@ mod util;
 
 const GRID_SIZE: f32 = 0.1;
 
-const SCORE_EFFECT_LIFE: f32 = 1.0;
+const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
+const SCORE_EFFECT_DECCEL: f32 = 15.0;
 
 #[derive(Clone)]
 enum TurnPhase {
@@ -36,6 +37,7 @@ enum TurnPhase {
     EndGame,
 }
 
+#[derive(Debug)]
 struct ScoringEffect {
     position: Vec2,
     score: usize,
@@ -73,6 +75,10 @@ impl Client {
         {
             game.players.insert(Player::new(color));
         }
+        Self::new_with_game(ctx, game)
+    }
+
+    fn new_with_game(ctx: &Context, mut game: Game) -> Self {
         let first_tile = game.library.pop().unwrap();
         Self {
             selected_square: None,
@@ -125,26 +131,20 @@ impl Client {
         self.placement_is_valid = true;
     }
 
-    pub fn from_screen_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
+    pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         ((screen_pos + self.offset) / res) / GRID_SIZE
     }
 
-    pub fn to_screen_pos(&self, pos: GridPos, ctx: &Context) -> Vec2 {
+    pub fn to_screen_pos(&self, game_pos: Vec2, ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let pos: Vec2 = pos.into();
-        (pos * GRID_SIZE) * res - self.offset
-    }
-
-    pub fn to_screen_pos_vec2(&self, pos: Vec2, ctx: &Context) -> Vec2 {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
-        (pos * GRID_SIZE) * res - self.offset
+        (game_pos * GRID_SIZE) * res - self.offset
     }
 
     pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         let dims = res * GRID_SIZE;
-        let near_corner = self.to_screen_pos(*pos, ctx);
+        let near_corner = self.to_screen_pos((*pos).into(), ctx);
         Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
     }
 
@@ -315,7 +315,7 @@ impl EventHandler<GameError> for Client {
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse: Vec2 = ctx.mouse.position().into();
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let focused_pos: GridPos = self.from_screen_pos(mouse, ctx).into();
+        let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
 
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
             self.offset -= Vec2::from(ctx.mouse.delta());
@@ -382,7 +382,7 @@ impl EventHandler<GameError> for Client {
                 {
                     self.end_turn(ctx, closed_groups.clone());
                 } else if *placed_position == focused_pos {
-                    let corner: GridPos = self.to_screen_pos(focused_pos, ctx).into();
+                    let corner: GridPos = self.to_screen_pos(focused_pos.into(), ctx).into();
                     let subgrid_pos = mouse - Vec2::from(corner);
                     let subgrid_pos =
                         subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
@@ -460,16 +460,16 @@ impl EventHandler<GameError> for Client {
         // draw score effects
         for effect in &self.scoring_effects {
             let lifetime = (time - effect.initialized_at) / SCORE_EFFECT_LIFE;
-            let alpha = (1.0 - lifetime).max(0.0);
-            let pos = self.to_screen_pos_vec2(
-                effect.position - Vec2::Y * lifetime * SCORE_EFFECT_DISTANCE,
-                ctx,
-            );
+            let alpha = (1.0 - lifetime).max(0.0) * 255.0;
+            let y_shift = ((-((lifetime * SCORE_EFFECT_DECCEL) / SCORE_EFFECT_LIFE)).exp() - 1.0)
+                * SCORE_EFFECT_DISTANCE;
+            let pos = self.to_screen_pos(effect.position + y_shift * Vec2::Y, ctx);
             let mut color = effect.color;
             color.a = alpha;
-            let mut text = Text::new(format!("+{}", effect.score));
-            text.set_scale(2.0);
-            canvas.draw(&text, DrawParam::from(pos).color(color));
+            let mut text = Text::new(format!(" +{} ", effect.score));
+            text.set_scale(20.0);
+            let size: Vec2 = text.measure(ctx)?.into();
+            canvas.draw(&text, DrawParam::from(pos - size / 2.0).color(color));
         }
 
         match &self.turn_phase {
@@ -503,7 +503,7 @@ impl EventHandler<GameError> for Client {
 
                 if !on_ui {
                     if let Some(group_ident) = self.selected_group {
-                        let Vec2 { x, y } = self.to_screen_pos(GridPos(0, 0), ctx);
+                        let Vec2 { x, y } = self.to_screen_pos(Vec2::ZERO, ctx);
                         let outline = self.game.get_group_outline(group_ident).unwrap();
                         let (w, h) = ctx.gfx.drawable_size();
                         let origin_rect = Rect {
@@ -606,5 +606,22 @@ fn main() -> GameResult {
     client
         .game
         .place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+
+    // use tile::tile_definitions::CROSSROADS;
+    // let mut game = Game::new_with_library(vec![
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    //     CROSSROADS.clone(),
+    // ]);
+    // game.players.insert(Player::new(Color::RED));
+    // let player_ident = game.players.insert(Player::new(Color::BLUE));
+    // let mut client = Client::new_with_game(&ctx, game);
+    // client.game.place_tile(CROSSROADS.clone(), GridPos(0, 0))?;
+    // client.game.place_meeple((GridPos(0, 0), 2), player_ident)?;
+
     event::run(ctx, event_loop, client);
 }

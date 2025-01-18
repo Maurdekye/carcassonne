@@ -249,37 +249,6 @@ lazy_static! {
             },
         ]
     );
-    pub static ref EDGE_CITY_ENTRANCE: Tile = Tile::new(
-        vec![
-            vec2(0.35, 0.3),
-            vec2(0.45, 0.3),
-            vec2(0.55, 0.3),
-            vec2(0.65, 0.3)
-        ],
-        vec![
-            Segment {
-                stype: City,
-                edges: vec![Edge((Full, North)), Vert(0), Vert(3)]
-            },
-            Segment {
-                stype: Road,
-                edges: vec![Edge((Middle, South)), Vert(1), Vert(2)]
-            },
-            Segment {
-                stype: Field,
-                edges: vec![Edge((End, South)), Edge((Full, West)), Vert(0), Vert(1)]
-            },
-            Segment {
-                stype: Field,
-                edges: vec![
-                    Edge((Full, East)),
-                    Edge((Beginning, South)),
-                    Vert(2),
-                    Vert(3)
-                ]
-            }
-        ]
-    );
     pub static ref EDGE_CITY_LEFT_CURVE_ROAD: Tile = Tile::new(
         vec![
             vec2(0.35, 0.3),
@@ -438,7 +407,7 @@ lazy_static! {
             },
             Segment {
                 stype: City,
-                edges: vec![Edge((Full, East)), Vert(3), Vert(4),]
+                edges: vec![Edge((Full, East)), Vert(4), Vert(3),]
             },
             Segment {
                 stype: Field,
