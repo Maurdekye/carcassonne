@@ -1,5 +1,5 @@
 #![feature(iter_map_windows)]
-use std::collections::VecDeque;
+use std::{collections::VecDeque, sync::Mutex};
 
 use clap::{arg, Parser};
 use game::{player::Player, Game, GroupIdentifier, PlayerIdentifier, SegmentIdentifier};
@@ -56,6 +56,7 @@ struct Client {
     offset: Vec2,
     skip_meeple_button: Rect,
     scoring_effects: Vec<ScoringEffect>,
+    state_update_lock: Mutex<()>,
     game: Game,
 }
 
@@ -91,6 +92,7 @@ impl Client {
             turn_order: game.players.keys().collect(),
             skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             scoring_effects: Vec::new(),
+            state_update_lock: Mutex::new(()),
             game,
         }
     }
@@ -401,6 +403,7 @@ impl EventHandler<GameError> for Client {
                                         &tile.segment_polygon(i).collect::<Vec<_>>(),
                                     )
                                 {
+                                    let _lock = self.state_update_lock.lock().unwrap();
                                     self.selected_group = Some(group_ident);
                                     self.selected_segment = Some((focused_pos, i));
                                     break 'segment_locate;
@@ -433,6 +436,8 @@ impl EventHandler<GameError> for Client {
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        let lock = self.state_update_lock.lock().unwrap();
+
         ctx.gfx
             .set_window_title(&format!("Carcassone: {:.2} fps", ctx.time.fps()));
         let mouse: Vec2 = ctx.mouse.position().into();
@@ -504,7 +509,7 @@ impl EventHandler<GameError> for Client {
                 if !on_ui {
                     if let Some(group_ident) = self.selected_group {
                         let Vec2 { x, y } = self.to_screen_pos(Vec2::ZERO, ctx);
-                        let outline = self.game.get_group_outline(group_ident).unwrap();
+                        let outline = self.game.get_group_outline(group_ident);
                         let (w, h) = ctx.gfx.drawable_size();
                         let origin_rect = Rect {
                             x,
@@ -578,6 +583,7 @@ impl EventHandler<GameError> for Client {
             )?;
         }
 
+        drop(lock);
         canvas.finish(ctx)
     }
 }
