@@ -6,7 +6,7 @@ use game::{player::Player, Game, GroupIdentifier, PlayerIdentifier, SegmentIdent
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
-    glam::{vec2, Vec2},
+    glam::{vec2, Vec2, Vec2Swizzles},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     input::keyboard::KeyCode,
     Context, ContextBuilder, GameError, GameResult,
@@ -26,7 +26,7 @@ pub mod pos;
 mod tile;
 mod util;
 
-const GRID_SIZE: f32 = 0.1;
+const GRID_SIZE: f32 = 0.1; //80.0;
 
 const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
@@ -138,19 +138,23 @@ impl Client {
         self.placement_is_valid = true;
     }
 
-    pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
+    #[inline]
+    pub fn norm(ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        ((screen_pos + self.offset) / res) / GRID_SIZE
+        ((res / res.yx()).max(Vec2::ONE) / res) / GRID_SIZE
+    }
+
+    pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
+        (screen_pos + self.offset) * Client::norm(ctx)
     }
 
     pub fn to_screen_pos(&self, game_pos: Vec2, ctx: &Context) -> Vec2 {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
-        (game_pos * GRID_SIZE) * res - self.offset
+        (game_pos / Client::norm(ctx)) - self.offset
     }
 
     pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let dims = res * GRID_SIZE;
+        let dims = (res * GRID_SIZE) / (res / res.yx()).max(Vec2::ONE);
         let near_corner = self.to_screen_pos((*pos).into(), ctx);
         Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
     }
@@ -389,11 +393,7 @@ impl EventHandler<GameError> for Client {
                 {
                     self.end_turn(ctx, closed_groups.clone());
                 } else if *placed_position == focused_pos {
-                    let corner: GridPos = self.to_screen_pos(focused_pos.into(), ctx).into();
-                    let subgrid_pos = mouse - Vec2::from(corner);
-                    let subgrid_pos =
-                        subgrid_pos / (Vec2::from(ctx.gfx.drawable_size()) * GRID_SIZE);
-
+                    let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
                     'segment_locate: {
                         if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {
                             for (i, _) in tile.segments.iter().enumerate() {
@@ -451,6 +451,7 @@ impl EventHandler<GameError> for Client {
 
         let time = ctx.time.time_since_start().as_secs_f32();
         let sin_time = time.sin() * 0.1 + 1.0;
+        let origin_rect = self.grid_pos_rect(&GridPos(0, 0), ctx);
 
         // draw tiles
         for (pos, tile) in &self.game.placed_tiles {
@@ -513,15 +514,7 @@ impl EventHandler<GameError> for Client {
 
                 if !on_ui {
                     if let Some(group_ident) = self.selected_group {
-                        let Vec2 { x, y } = self.to_screen_pos(Vec2::ZERO, ctx);
                         let outline = self.game.get_group_outline(group_ident);
-                        let (w, h) = ctx.gfx.drawable_size();
-                        let origin_rect = Rect {
-                            x,
-                            y,
-                            w: GRID_SIZE * w,
-                            h: GRID_SIZE * h,
-                        };
                         for polyline in outline.iter().map(|polyline| {
                             polyline
                                 .iter()
@@ -610,10 +603,10 @@ struct Args {
 fn main() -> GameResult {
     let args = Args::parse();
     let (ctx, event_loop) = ContextBuilder::new("carcassonne", "maurdekye")
-        .window_mode(WindowMode::default().dimensions(800.0, 800.0))
+        .window_mode(WindowMode::default().dimensions(1200.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
-    
+
     let mut client = Client::new(&ctx, args.players);
     client
         .game
