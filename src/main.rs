@@ -26,7 +26,7 @@ pub mod pos;
 mod tile;
 mod util;
 
-const GRID_SIZE: f32 = 0.1; //80.0;
+const ZOOM_SPEED: f32 = 1.1;
 
 const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
@@ -59,6 +59,7 @@ struct Client {
     turn_phase: TurnPhase,
     turn_order: VecDeque<PlayerIdentifier>,
     offset: Vec2,
+    scale: f32,
     skip_meeple_button: Rect,
     scoring_effects: Vec<ScoringEffect>,
     state_update_lock: Mutex<()>,
@@ -86,20 +87,28 @@ impl Client {
 
     fn new_with_game(ctx: &Context, mut game: Game) -> Self {
         let first_tile = game.library.pop().unwrap();
-        Self {
+        let mut this = Self {
             selected_square: None,
             last_selected_square: None,
             selected_group: None,
             selected_segment: None,
             placement_is_valid: false,
             turn_phase: TurnPhase::TilePlacement(first_tile),
-            offset: -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - GRID_SIZE / 2.0),
+            offset: Vec2::ZERO,
+            scale: 1.0,
             turn_order: game.players.keys().collect(),
             skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             scoring_effects: Vec::new(),
             state_update_lock: Mutex::new(()),
             game,
-        }
+        };
+        this.reset_navigation(ctx);
+        this
+    }
+
+    fn reset_navigation(&mut self, ctx: &Context) {
+        self.scale = 0.1;
+        self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
     }
 
     fn reevaluate_selected_square(&mut self) {
@@ -139,22 +148,22 @@ impl Client {
     }
 
     #[inline]
-    pub fn norm(ctx: &Context) -> Vec2 {
+    pub fn norm(&self, ctx: &Context) -> Vec2 {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        ((res / res.yx()).max(Vec2::ONE) / res) / GRID_SIZE
+        ((res / res.yx()).max(Vec2::ONE) / res) / self.scale
     }
 
     pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
-        (screen_pos + self.offset) * Client::norm(ctx)
+        (screen_pos + self.offset) * self.norm(ctx)
     }
 
     pub fn to_screen_pos(&self, game_pos: Vec2, ctx: &Context) -> Vec2 {
-        (game_pos / Client::norm(ctx)) - self.offset
+        (game_pos / self.norm(ctx)) - self.offset
     }
 
     pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let dims = (res * GRID_SIZE) / (res / res.yx()).max(Vec2::ONE);
+        let dims = (res * self.scale) / (res / res.yx()).max(Vec2::ONE);
         let near_corner = self.to_screen_pos((*pos).into(), ctx);
         Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
     }
@@ -165,6 +174,7 @@ impl Client {
         canvas: &mut Canvas,
         pos: Vec2,
         color: Color,
+        scale: Option<f32>,
     ) -> Result<(), GameError> {
         const MEEPLE_SIZE: f32 = 200.0;
         const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
@@ -184,22 +194,15 @@ impl Client {
             vec2(0.25, 0.575),
         ];
         const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
-        let meeple_points =
-            MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * MEEPLE_SIZE * GRID_SIZE + pos);
-        let head_point = (HEAD_POINT - MEEPLE_CENTER) * MEEPLE_SIZE * GRID_SIZE + pos;
+        let scale = scale.unwrap_or(self.scale) * MEEPLE_SIZE;
+        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * scale + pos);
+        let head_point = (HEAD_POINT - MEEPLE_CENTER) * scale + pos;
         canvas.draw(
             &Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?,
             DrawParam::default(),
         );
         canvas.draw(
-            &Mesh::new_circle(
-                ctx,
-                DrawMode::fill(),
-                head_point,
-                GRID_SIZE * MEEPLE_SIZE * 0.175,
-                1.0,
-                color,
-            )?,
+            &Mesh::new_circle(ctx, DrawMode::fill(), head_point, scale * 0.175, 1.0, color)?,
             DrawParam::default(),
         );
         Ok(())
@@ -247,6 +250,7 @@ impl Client {
                 canvas,
                 pos + vec2(20.0, 40.0) + vec2(20.0, 0.0) * i as f32,
                 player.color,
+                Some(0.1),
             )?;
         }
         if highlighted {
@@ -323,13 +327,31 @@ impl Client {
 }
 
 impl EventHandler<GameError> for Client {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
+        // zooming
+        let prev_scale = self.scale;
+        self.scale *= ZOOM_SPEED.powf(y);
+        self.scale = self.scale.clamp(0.01, 1.0);
+        let scale_change = self.scale / prev_scale;
+        let mouse: Vec2 = ctx.mouse.position().into();
+        self.offset = (self.offset + mouse) * scale_change - mouse;
+
+        Ok(())
+    }
+
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse: Vec2 = ctx.mouse.position().into();
         let res: Vec2 = ctx.gfx.drawable_size().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
 
+        // dragging
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
             self.offset -= Vec2::from(ctx.mouse.delta());
+        }
+
+        // reset
+        if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
+            self.reset_navigation(ctx);
         }
 
         // update scoring effects
@@ -465,7 +487,7 @@ impl EventHandler<GameError> for Client {
             let tile = self.game.placed_tiles.get(&pos).unwrap();
             let rect = self.grid_pos_rect(&pos, ctx);
             let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
-            self.draw_meeple(ctx, &mut canvas, segment_meeple_spot, color)?;
+            self.draw_meeple(ctx, &mut canvas, segment_meeple_spot, color, None)?;
         }
 
         // draw score effects
