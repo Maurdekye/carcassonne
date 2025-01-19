@@ -12,8 +12,13 @@ use ggez::{
     Context, ContextBuilder, GameError, GameResult,
 };
 use pos::GridPos;
-use rand::{seq::SliceRandom, thread_rng};
-use tile::{tile_definitions::{CORNER_CITY_CURVE_ROAD, FOUR_WAY_CROSSROADS, FULL_FORTIFIED_CITY, STARTING_TILE}, Orientation, Tile};
+use rand::{rngs::StdRng, seq::SliceRandom, thread_rng, SeedableRng};
+use tile::{
+    tile_definitions::{
+        CORNER_CITY_CURVE_ROAD, FOUR_WAY_CROSSROADS, FULL_FORTIFIED_CITY, STARTING_TILE,
+    },
+    Orientation, Tile,
+};
 use util::{point_in_polygon, refit_to_rect};
 
 mod game;
@@ -608,27 +613,24 @@ fn main() -> GameResult {
         .window_mode(WindowMode::default().dimensions(800.0, 800.0))
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
+    
     let mut client = Client::new(&ctx, args.players);
     client
         .game
         .place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
-    *client.get_held_tile_mut().unwrap() = FULL_FORTIFIED_CITY.clone();
 
-    // use tile::tile_definitions::CROSSROADS;
-    // let mut game = Game::new_with_library(vec![
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    //     CROSSROADS.clone(),
-    // ]);
+    // use tile::{get_tile_library, tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD}};
+    // let mut game = Game::new_with_library(get_tile_library());
+    // game.library.shuffle(&mut StdRng::from_seed([1; 32]));
+    // game.library.push(MONASTARY.clone());
     // game.players.insert(Player::new(Color::RED));
-    // let player_ident = game.players.insert(Player::new(Color::BLUE));
+    // let _player_ident = game.players.insert(Player::new(Color::BLUE));
     // let mut client = Client::new_with_game(&ctx, game);
-    // client.game.place_tile(CROSSROADS.clone(), GridPos(0, 0))?;
-    // client.game.place_meeple((GridPos(0, 0), 2), player_ident)?;
+    // for pos in GridPos(0, 0).surrounding() {
+    //     client
+    //         .game
+    //         .place_tile(_DEBUG_EMPTY_FIELD.clone(), pos)?;
+    // }
 
     event::run(ctx, event_loop, client);
 }

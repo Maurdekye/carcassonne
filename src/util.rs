@@ -124,3 +124,23 @@ impl RotateExt for Vec2 {
         *self = vec2(1.0 - self.y, self.x);
     }
 }
+
+#[macro_export]
+macro_rules! sdbg {
+    ($e:expr) => {
+        match $e {
+            tmp => {
+                std::eprintln!(
+                    "[{}:{}:{}] {} = {:?}",
+                    std::file!(),
+                    std::line!(),
+                    std::column!(),
+                    std::stringify!($e),
+                    &tmp
+                );
+                tmp
+            }
+        };
+    };
+    () => {};
+}

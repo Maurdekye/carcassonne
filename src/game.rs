@@ -6,9 +6,10 @@ use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
     pos::GridPos,
+    sdbg,
     tile::{
-        get_tile_library, GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute,
-        SegmentBorderPiece, SegmentType, Tile,
+        get_tile_library, GridBorderCoordinate, GridBorderCoordinateOffset, Opposite, Orientation,
+        Segment, SegmentAttribute, SegmentBorderPiece, SegmentType, Tile,
     },
     util::{Bag, HashMapBag},
 };
@@ -217,7 +218,7 @@ impl Game {
         self.placed_tiles.insert(pos, tile);
 
         // check for completed monastaries
-        for adjacent_pos in pos.surrounding() {
+        for adjacent_pos in pos.surrounding().chain([pos]) {
             let Some(tile) = self.placed_tiles.get(&adjacent_pos) else {
                 continue;
             };
@@ -436,9 +437,9 @@ impl Game {
                     })
             })
             .collect();
-        // dbg!(&edges_by_gridpos);
+        // sdbg!&edges_by_gridpos);
 
-        #[derive(Debug, Clone, Copy)]
+        #[derive(Clone, Copy)]
         enum LinePiece {
             Vert(Vec2),
             BorderCoordinate(GridBorderCoordinate),
@@ -462,15 +463,24 @@ impl Game {
             }
         }
 
+        impl std::fmt::Debug for LinePiece {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {
+                    Self::Vert(Vec2 { x, y }) => write!(f, "({x}, {y})"),
+                    Self::BorderCoordinate(coord) => write!(f, "{coord:?}"),
+                }
+            }
+        }
+
         // collect all lines together by their grid position
         let line_segments_iter = group.segments.iter().copied().flat_map(|seg_ident| {
-            // dbg!(&seg_ident);
+            // sdgb!(&seg_ident);
             let (tile_pos, seg_index) = seg_ident;
             let tile = self.placed_tiles.get(&tile_pos).unwrap();
 
             let mut pieces: Vec<Option<LinePiece>> = vec![];
             for &edge in &tile.segments[seg_index].edge_definition {
-                // dbg!(edge);
+                // sdgb!(edge);
                 use SegmentBorderPiece::*;
                 match edge {
                     Break => {
@@ -483,19 +493,20 @@ impl Game {
                     }
                     Edge(edge) => {
                         let (span, orientation) = edge;
-                        // dbg!((tile_pos, span.start(), orientation));
+                        // sdgb!((tile_pos, span.start(), orientation));
                         let start = LinePiece::BorderCoordinate(
                             GridBorderCoordinate::from_tile_edge_vertex(
                                 tile_pos,
                                 (span.start(), orientation),
                             ),
                         );
-                        // dbg!(&start);
+                        // sdgb!(&start);
                         if pieces.last() != Some(&Some(start)) {
                             pieces.push(Some(start));
                         }
 
                         // this breaks rustfmt if its a matches! macro
+                        #[allow(clippy::match_like_matches_macro)]
                         if match edges_by_gridpos.get(&(tile_pos + orientation.offset())) {
                             Some(adj_edges) if (adj_edges.contains(&edge.opposite())) => true,
                             _ => false,
@@ -509,11 +520,11 @@ impl Game {
                                 (span.end(), orientation),
                             ),
                         );
-                        // dbg!(&end);
+                        // sdgb!(&end);
                         pieces.push(Some(end));
                     }
                 }
-                // dbg!(&pieces);
+                // sdgb!(&pieces);
             }
 
             let mut lines: Vec<_> = pieces
@@ -521,7 +532,7 @@ impl Game {
                 .map(|lines| lines.iter().copied().flatten().collect::<Vec<_>>())
                 .collect();
 
-            // dbg!(&lines);
+            // sdgb!(&lines);
 
             let closed_loop = lines.len() == 1;
             if !closed_loop {
@@ -537,7 +548,7 @@ impl Game {
                 lines[0].push(first_piece);
             }
 
-            // dbg!(&lines);
+            // sdgb!(&lines);
 
             lines.into_iter().filter_map(move |line| {
                 let closed_loop = closed_loop
@@ -560,14 +571,17 @@ impl Game {
                 lines_by_gridpos.place(gridpos, line);
             }
         }
-        // dbg!(&closed_loops);
-        // dbg!(&lines_by_gridpos);
+        // sdgb!(&closed_loops);
+        // for (GridPos(x, y), len) in lines_by_gridpos.iter().map(|(p, l)| (p, l.len())) {
+        //     // sdgb!(((x, y), len));
+        // }
 
         // connect all lines together
         let mut polylines: Vec<VecDeque<LinePiece>> = closed_loops;
         let mut current_line: VecDeque<LinePiece> = VecDeque::new();
         loop {
-            // dbg!(&current_line);
+            // sdbg!(&lines_by_gridpos)
+            // sdgb!(&current_line);
             match (current_line.front(), current_line.back()) {
                 (None, None) => {
                     if let Some(next_line) = lines_by_gridpos
@@ -584,19 +598,22 @@ impl Game {
                     Some(LinePiece::BorderCoordinate(start)),
                     Some(LinePiece::BorderCoordinate(end)),
                 ) => {
-                    // dbg!((&start, &end));
+                    // sdgb!(&start);
+                    // sdgb!(&end);
                     if start == end {
                         // segment is completed, add to polylines
                         polylines.push(current_line);
                         current_line = VecDeque::new();
-                        // dbg!(&polylines);
+                        // sdgb!(&polylines);
                     } else {
                         // locate a segment to attach to the end
                         let search_result = 'line_search: {
                             for adjacent in end.get_adjacent_gridposes() {
+                                // sdgb!(&adjacent);
                                 let Some(lines) = lines_by_gridpos.get_mut(&adjacent) else {
                                     continue;
                                 };
+                                // sdgb!(&lines);
                                 let Some((i, _)) = lines.iter().enumerate().find(|(_, line)| {
                                     line.first() == Some(&LinePiece::BorderCoordinate(*end))
                                 }) else {
@@ -606,7 +623,7 @@ impl Game {
                             }
                             None
                         };
-                        // dbg!(&search_result);
+                        // sdgb!(&search_result);
                         if let Some(new_line) = search_result {
                             current_line.extend(new_line.into_iter().skip(1));
                             continue;
@@ -615,9 +632,11 @@ impl Game {
                         // locate a segment to attach to the beginning
                         let search_result = 'line_search: {
                             for adjacent in start.get_adjacent_gridposes() {
+                                // sdgb!(&adjacent);
                                 let Some(lines) = lines_by_gridpos.get_mut(&adjacent) else {
                                     continue;
                                 };
+                                // sdgb!(&lines);
                                 let Some((i, _)) = lines.iter().enumerate().find(|(_, line)| {
                                     line.last() == Some(&LinePiece::BorderCoordinate(*start))
                                 }) else {
@@ -627,7 +646,7 @@ impl Game {
                             }
                             None
                         };
-                        // dbg!(&search_result);
+                        // sdgb!(&search_result);
                         if let Some(new_line) = search_result {
                             current_line = new_line
                                 .into_iter()
@@ -639,21 +658,21 @@ impl Game {
                         // no line segments remaining, just place the incomplete line into polylines (and print a warning)
                         polylines.push(current_line);
                         current_line = VecDeque::new();
-                        // dbg!(&polylines);
+                        // sdgb!(&polylines);
                         eprintln!("Incomplete line segment created!");
                     }
                 }
                 _ => unimplemented!("non-border coordinate capped lines"),
             }
         }
-        // dbg!(&polylines);
+        // sdgb!(&polylines);
 
         let final_lines_set = polylines
             .into_iter()
             .map(|polyline| polyline.into_iter().map(Vec2::from).collect())
             .collect();
 
-        // dbg!(&final_lines_set);
+        // sdgb!(&final_lines_set);
 
         final_lines_set
     }

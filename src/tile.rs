@@ -283,10 +283,10 @@ impl Opposite for GridBorderCoordinateOffset {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct GridBorderCoordinate {
-    grid_pos: GridPos,
-    offset: GridBorderCoordinateOffset,
+    pub grid_pos: GridPos,
+    pub offset: GridBorderCoordinateOffset,
 }
 
 impl GridBorderCoordinate {
@@ -304,7 +304,7 @@ impl GridBorderCoordinate {
         use GridBorderCoordinateOffset::*;
         match offset {
             None => vec![
-                // GridPos(x - 1, y - 1),
+                GridPos(x - 1, y - 1),
                 GridPos(x, y - 1),
                 GridPos(x - 1, y),
                 GridPos(x, y),
@@ -322,6 +322,24 @@ impl From<GridBorderCoordinate> for Vec2 {
         let GridPos(x, y) = grid_pos;
         let offset = offset.to_position_offset();
         vec2(x as f32, y as f32) + offset
+    }
+}
+
+impl std::fmt::Debug for GridBorderCoordinate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let GridPos(x, y) = self.grid_pos;
+        use GridBorderCoordinateOffset::*;
+        write!(
+            f,
+            "{{{x}, {y}, {}}}",
+            match self.offset {
+                None => "*",
+                LowMiddleSouth => "v",
+                HighMiddleSouth => "vv",
+                LowMiddleEast => ">",
+                HighMiddleEast => ">>",
+            }
+        )
     }
 }
 
