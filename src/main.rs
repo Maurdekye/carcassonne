@@ -615,17 +615,44 @@ fn player_count_parser(x: &str) -> Result<usize, &'static str> {
     }
 }
 
+fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
+    let parts: Vec<&str> = x.split('x').collect();
+    if parts.len() != 2 {
+        return Err("Invalid format");
+    }
+    let width = parts[0].parse::<usize>().map_err(|_| "Invalid width")?;
+    let height = parts[1].parse::<usize>().map_err(|_| "Invalid height")?;
+    Ok((width, height))
+}
+
 #[derive(Parser)]
 struct Args {
-    /// Number of players
+    /// Number of players.
     #[arg(short, long, default_value_t = 2, value_parser = player_count_parser)]
     players: usize,
+
+    /// Start in fullscreen; optionally provide a resolution to run with that res. Default 1080p.
+    #[arg(short, long, value_parser = fullscreen_value_parser)]
+    fullscreen: Option<Option<(usize, usize)>>,
 }
 
 fn main() -> GameResult {
     let args = Args::parse();
+    
+    let window_mode = if let Some(fullscreen_res) = args.fullscreen {
+        let (w, h) = fullscreen_res.unwrap_or((1920, 1080));
+        WindowMode::default()
+            .dimensions(w as f32, h as f32)
+            .fullscreen_type(ggez::conf::FullscreenType::Desktop)
+            .borderless(true)
+    } else {
+        WindowMode::default()
+            .dimensions(1200.0, 1000.0)
+            .resizable(true)
+    };
+
     let (ctx, event_loop) = ContextBuilder::new("carcassonne", "maurdekye")
-        .window_mode(WindowMode::default().dimensions(1200.0, 800.0))
+        .window_mode(window_mode)
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
@@ -633,19 +660,6 @@ fn main() -> GameResult {
     client
         .game
         .place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
-
-    // use tile::{get_tile_library, tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD}};
-    // let mut game = Game::new_with_library(get_tile_library());
-    // game.library.shuffle(&mut StdRng::from_seed([1; 32]));
-    // game.library.push(MONASTARY.clone());
-    // game.players.insert(Player::new(Color::RED));
-    // let _player_ident = game.players.insert(Player::new(Color::BLUE));
-    // let mut client = Client::new_with_game(&ctx, game);
-    // for pos in GridPos(0, 0).surrounding() {
-    //     client
-    //         .game
-    //         .place_tile(_DEBUG_EMPTY_FIELD.clone(), pos)?;
-    // }
 
     event::run(ctx, event_loop, client);
 }

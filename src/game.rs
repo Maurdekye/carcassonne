@@ -406,7 +406,7 @@ impl Game {
     pub fn get_group_outline(&mut self, group_ident: GroupIdentifier) -> &Vec<Vec<Vec2>> {
         let group = self.groups.get(group_ident).expect("Group not found");
         if group.outline.is_none() {
-            let outline = self.compute_group_outline(&group);
+            let outline = self.compute_group_outline(group);
             let group = self.groups.get_mut(group_ident).unwrap();
             group.outline = Some(outline);
         }
