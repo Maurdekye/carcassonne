@@ -658,13 +658,13 @@ fn main() -> GameResult {
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
-    // let client = Client::new(&ctx, args.players);
+    let client = Client::new(&ctx, args.players);
 
-    let mut game = Game::new_with_library(vec![STARTING_TILE.clone(), STARTING_TILE.clone()]);
-    game.players.insert(Player::new(Color::RED));
-    game.players.insert(Player::new(Color::BLUE));
-    game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
-    let client = Client::new_with_game(&ctx, game);
+    // let mut game = Game::new_with_library(vec![STARTING_TILE.clone(), STARTING_TILE.clone()]);
+    // game.players.insert(Player::new(Color::RED));
+    // game.players.insert(Player::new(Color::BLUE));
+    // game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    // let client = Client::new_with_game(&ctx, game);
 
     event::run(ctx, event_loop, client);
 }
