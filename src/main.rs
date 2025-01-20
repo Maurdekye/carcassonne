@@ -2,7 +2,9 @@
 use std::{collections::VecDeque, sync::Mutex};
 
 use clap::{arg, Parser};
-use game::{player::Player, Game, GroupIdentifier, PlayerIdentifier, SegmentIdentifier};
+use game::{
+    player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
+};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event::{self, EventHandler},
@@ -32,6 +34,10 @@ const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
 const SCORE_EFFECT_DECCEL: f32 = 15.0;
 
+const END_GAME_SCORE_DELAY: f32 = 3.0;
+const END_GAME_SCORE_INTERVAL: f32 = 1.75;
+
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum TurnPhase {
     TilePlacement(Tile),
@@ -39,7 +45,9 @@ enum TurnPhase {
         placed_position: GridPos,
         closed_groups: Vec<GroupIdentifier>,
     },
-    EndGame,
+    EndGame {
+        next_tick: Option<f32>,
+    },
 }
 
 #[derive(Debug)]
@@ -48,6 +56,17 @@ struct ScoringEffect {
     score: usize,
     color: Color,
     initialized_at: f32,
+}
+
+impl ScoringEffect {
+    fn from_scoring_result(ctx: &Context, score_result: ScoringResult) -> Self {
+        ScoringEffect {
+            position: score_result.meeple_location,
+            score: score_result.score,
+            color: score_result.meeple_color,
+            initialized_at: ctx.time.time_since_start().as_secs_f32(),
+        }
+    }
 }
 
 struct Client {
@@ -260,17 +279,11 @@ impl Client {
             match group.gtype {
                 City | Road | Monastary => {
                     let scored_meeples = self.game.score_group(group_ident);
-                    self.scoring_effects
-                        .extend(
-                            scored_meeples
-                                .into_iter()
-                                .map(|score_result| ScoringEffect {
-                                    position: score_result.meeple_location,
-                                    score: score_result.score,
-                                    color: score_result.meeple_color,
-                                    initialized_at: ctx.time.time_since_start().as_secs_f32(),
-                                }),
-                        );
+                    self.scoring_effects.extend(
+                        scored_meeples.into_iter().map(|score_result| {
+                            ScoringEffect::from_scoring_result(ctx, score_result)
+                        }),
+                    );
                 }
                 _ => {}
             }
@@ -286,24 +299,9 @@ impl Client {
     }
 
     fn end_game(&mut self, ctx: &Context) {
-        for group_ident in self.game.groups.keys().collect::<Vec<_>>() {
-            let group = self.game.groups.get(group_ident).unwrap();
-            if !group.meeples.is_empty() {
-                let scored_meeples = self.game.score_group(group_ident);
-                self.scoring_effects
-                    .extend(
-                        scored_meeples
-                            .into_iter()
-                            .map(|score_result| ScoringEffect {
-                                position: score_result.meeple_location,
-                                score: score_result.score,
-                                color: score_result.meeple_color,
-                                initialized_at: ctx.time.time_since_start().as_secs_f32(),
-                            }),
-                    );
-            }
-        }
-        self.turn_phase = TurnPhase::EndGame;
+        self.turn_phase = TurnPhase::EndGame {
+            next_tick: Some(ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_DELAY),
+        };
     }
 }
 
@@ -354,6 +352,8 @@ impl EventHandler<GameError> for Client {
                 {
                     let tile = self.get_held_tile_mut().unwrap().clone();
                     let closed_groups = self.game.place_tile(tile, focused_pos)?;
+                    self.selected_group = None;
+                    self.selected_segment = None;
                     self.reevaluate_selected_square();
                     let tile = self.game.placed_tiles.get(&focused_pos).unwrap();
 
@@ -438,7 +438,31 @@ impl EventHandler<GameError> for Client {
                     }
                 }
             }
-            TurnPhase::EndGame => {}
+            TurnPhase::EndGame { next_tick } => {
+                if let Some(next_tick) = next_tick {
+                    if ctx.time.time_since_start().as_secs_f32() > *next_tick {
+                        let next_tick = 'group_score: {
+                            let Some((group_ident, _)) = self
+                                .game
+                                .groups
+                                .iter()
+                                .find(|(_, group)| !group.meeples.is_empty())
+                            else {
+                                break 'group_score None;
+                            };
+                            let scored_meeples = self.game.score_group(group_ident);
+                            self.scoring_effects.extend(scored_meeples.into_iter().map(
+                                |score_result| {
+                                    ScoringEffect::from_scoring_result(ctx, score_result)
+                                },
+                            ));
+
+                            Some(ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_INTERVAL)
+                        };
+                        self.turn_phase = TurnPhase::EndGame { next_tick };
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -563,7 +587,7 @@ impl EventHandler<GameError> for Client {
                     DrawParam::from(vec2(x, y) + vec2(10.0, 10.0)).color(Color::BLACK),
                 );
             }
-            TurnPhase::EndGame => {}
+            TurnPhase::EndGame { .. } => {}
         }
 
         // draw ui
@@ -578,7 +602,7 @@ impl EventHandler<GameError> for Client {
                     player_ident,
                     vec2(20.0, 20.0) + vec2(0.0, 80.0) * i as f32,
                     player_ident == current_player_ident
-                        && !matches!(self.turn_phase, TurnPhase::EndGame),
+                        && !matches!(self.turn_phase, TurnPhase::EndGame { .. }),
                 )?;
             }
 
@@ -664,11 +688,16 @@ fn main() -> GameResult {
 
     let client = Client::new(&ctx, args.players);
 
-    // let mut game = Game::new_with_library(vec![STARTING_TILE.clone(), STARTING_TILE.clone()]);
-    // game.players.insert(Player::new(Color::RED));
-    // game.players.insert(Player::new(Color::BLUE));
-    // game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
-    // let client = Client::new_with_game(&ctx, game);
+    let mut game = Game::new_with_library(vec![
+        STARTING_TILE.clone(),
+        STARTING_TILE.clone(),
+        STARTING_TILE.clone(),
+        STARTING_TILE.clone(),
+    ]);
+    game.players.insert(Player::new(Color::RED));
+    game.players.insert(Player::new(Color::BLUE));
+    game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    let client = Client::new_with_game(&ctx, game);
 
     event::run(ctx, event_loop, client);
 }
