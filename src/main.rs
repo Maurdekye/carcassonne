@@ -376,13 +376,17 @@ impl EventHandler<GameError> for Client {
                     self.reevaluate_selected_square();
                     let tile = self.game.placed_tiles.get(&focused_pos).unwrap();
 
-                    if (0..tile.segments.len())
-                        .filter_map(|i| {
-                            let (group, _) =
-                                self.game.group_and_key_by_seg_ident((focused_pos, i))?;
-                            Some(!group.meeples.is_empty())
-                        })
-                        .all(|x| x)
+                    let player_ident = *self.turn_order.front().unwrap();
+                    let player = self.game.players.get(player_ident).unwrap();
+
+                    if player.meeples == 0
+                        || (0..tile.segments.len())
+                            .filter_map(|i| {
+                                let (group, _) =
+                                    self.game.group_and_key_by_seg_ident((focused_pos, i))?;
+                                Some(!group.meeples.is_empty())
+                            })
+                            .all(|x| x)
                     {
                         self.end_turn(ctx, closed_groups.clone());
                     } else {
@@ -407,11 +411,8 @@ impl EventHandler<GameError> for Client {
 
                 self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
 
-                let player_ident = *self.turn_order.front().unwrap();
-                let player = self.game.players.get(player_ident).unwrap();
-                if player.meeples == 0
-                    || (self.skip_meeple_button.contains(mouse)
-                        && ctx.mouse.button_just_pressed(event::MouseButton::Left))
+                if self.skip_meeple_button.contains(mouse)
+                    && ctx.mouse.button_just_pressed(event::MouseButton::Left)
                 {
                     self.end_turn(ctx, closed_groups.clone());
                 } else if *placed_position == focused_pos {
@@ -638,7 +639,7 @@ struct Args {
 
 fn main() -> GameResult {
     let args = Args::parse();
-    
+
     let window_mode = if let Some(fullscreen_res) = args.fullscreen {
         let (w, h) = fullscreen_res.unwrap_or((1920, 1080));
         WindowMode::default()
