@@ -26,9 +26,10 @@ lazy_static! {
                 stype: Road,
                 edges: vec![Edge((Middle, West)), Edge((Middle, East)),]
             },
-            Segment {
+            SpecialSegment {
                 stype: Field,
-                edges: vec![Edge((End, West)), Vert(0), Vert(1), Edge((Beginning, East))]
+                edges: vec![Edge((End, West)), Vert(0), Vert(1), Edge((Beginning, East))],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.375))]
             },
             Segment {
                 stype: Field,
@@ -662,7 +663,7 @@ lazy_static! {
                 stype: City,
                 edges: vec![Edge((Full, West)), Edge((Full, North))],
             },
-            Segment {
+            SpecialSegment {
                 stype: Road,
                 edges: vec![
                     Edge((Middle, South)),
@@ -671,7 +672,8 @@ lazy_static! {
                     Edge((Middle, East)),
                     Vert(2),
                     Vert(3)
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.618, 0.618))]
             },
             Segment {
                 stype: Field,
@@ -708,7 +710,7 @@ lazy_static! {
                     shield_location: vec2(0.2, 0.2)
                 }]
             },
-            Segment {
+            SpecialSegment {
                 stype: Road,
                 edges: vec![
                     Edge((Middle, South)),
@@ -717,7 +719,8 @@ lazy_static! {
                     Edge((Middle, East)),
                     Vert(2),
                     Vert(3)
-                ]
+                ],
+                attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.618, 0.618))]
             },
             Segment {
                 stype: Field,
