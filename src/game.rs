@@ -676,6 +676,53 @@ impl Game {
 
         final_lines_set
     }
+
+    pub fn is_valid_tile_position(&self, tile: &Tile, pos: GridPos) -> bool {
+        let mut is_adjacent_tile = false;
+        for (orientation, offset) in Orientation::iter_with_offsets() {
+            let adjacent_pos = pos + offset;
+            let Some(adjacent_tile) = self.placed_tiles.get(&adjacent_pos) else {
+                continue;
+            };
+            is_adjacent_tile = true;
+            if tile.validate_mounting(adjacent_tile, orientation).is_none() {
+                return false;
+            }
+        }
+        is_adjacent_tile
+    }
+
+    pub fn is_tile_placeble(&self, tile: &Tile) -> bool {
+        let mut open_squares: Vec<_> = self
+            .placed_tiles
+            .keys()
+            .flat_map(|pos| pos.adjacent())
+            .filter(|pos| !self.placed_tiles.contains_key(pos))
+            .collect();
+        open_squares.sort();
+        open_squares.dedup();
+        open_squares.iter().any(|pos| {
+            let mut tile = tile.clone();
+            (0..4).any(|_| {
+                tile.rotate();
+                self.is_valid_tile_position(&tile, *pos)
+            })
+        })
+    }
+
+    pub fn draw_placeable_tile(&mut self) -> Option<Tile> {
+        for _ in 0..self.library.len() {
+            let Some(next_tile) = self.library.pop() else {
+                break;
+            };
+            if self.is_tile_placeble(&next_tile) {
+                return Some(next_tile);
+            } else {
+                self.library.insert(0, next_tile);
+            }
+        }
+        None
+    }
 }
 
 #[test]
@@ -690,103 +737,104 @@ fn test_group_coallating() {
         .unwrap();
 }
 
-// #[cfg(test)]
-// mod test {
-//     use ggez::{graphics::Color, GameResult};
+#[cfg(test)]
+mod test {
+    use ggez::{graphics::Color, GameResult};
 
-//     use crate::{
-//         game::Game,
-//         pos::GridPos,
-//         tile::{
-//             tile_definitions::{CROSSROADS, CURVE_ROAD, MONASTARY, STRAIGHT_ROAD},
-//             SegmentType,
-//         },
-//         util::MapFindExt,
-//     };
+    use crate::{
+        game::Game,
+        pos::GridPos,
+        tile::{
+            tile_definitions::{CROSSROADS, CURVE_ROAD, MONASTARY, STARTING_TILE, STRAIGHT_ROAD},
+            SegmentType,
+        },
+    };
 
-//     use super::player::Player;
+    use super::player::Player;
 
-//     #[test]
-//     pub fn test_group_outline_generation() -> GameResult {
-//         use crate::tile::tile_definitions::CORNER_CITY;
-//         use crate::tile::SegmentType;
-//         let mut game = Game::new();
-//         game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
-//         game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
-//         game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
-//         game.place_tile(
-//             CORNER_CITY.clone().rotated().rotated().rotated(),
-//             GridPos(1, 0),
-//         )?;
-//         let city_group_ident = game
-//             .groups
-//             .iter()
-//             .find_map(|(group_ident, group)| {
-//                 (group.gtype == SegmentType::City).then_some(group_ident)
-//             })
-//             .unwrap();
-//         let outline = game.compute_group_outline(city_group_ident);
-//         dbg!(outline);
-//         Ok(())
-//     }
+    #[test]
+    pub fn test_group_outline_generation() -> GameResult {
+        use crate::tile::tile_definitions::CORNER_CITY;
+        use crate::tile::SegmentType;
+        let mut game = Game::new();
+        game.place_tile(CORNER_CITY.clone(), GridPos(1, 1))?;
+        game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, 1))?;
+        game.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, 0))?;
+        game.place_tile(
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            GridPos(1, 0),
+        )?;
+        let group = game
+            .groups
+            .values()
+            .find(|group| group.gtype == SegmentType::City)
+            .unwrap();
+        let outline = game.compute_group_outline(group);
+        dbg!(outline);
+        Ok(())
+    }
 
-//     #[test]
-//     pub fn test_group_outline_generation_2() -> GameResult {
-//         let mut game = Game::new();
-//         game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
-//         game.place_tile(CURVE_ROAD.clone(), GridPos(1, 0))?;
-//         game.place_tile(STRAIGHT_ROAD.clone().rotated(), GridPos(1, -1))?;
-//         let group_ident = game
-//             .groups
-//             .iter()
-//             .map_find(|(group_ident, group)| {
-//                 (group.gtype == SegmentType::Road).then_some(group_ident)
-//             })
-//             .unwrap();
-//         let outline = game.compute_group_outline(group_ident);
-//         dbg!(outline);
-//         Ok(())
-//     }
+    #[test]
+    pub fn test_group_outline_generation_2() -> GameResult {
+        let mut game = Game::new();
+        game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))?;
+        game.place_tile(CURVE_ROAD.clone(), GridPos(1, 0))?;
+        game.place_tile(STRAIGHT_ROAD.clone().rotated(), GridPos(1, -1))?;
+        let group = game
+            .groups
+            .values()
+            .find(|group| group.gtype == SegmentType::Road)
+            .unwrap();
+        let outline = game.compute_group_outline(group);
+        dbg!(outline);
+        Ok(())
+    }
 
-//     #[test]
-//     pub fn test_group_outline_generation_3() -> GameResult {
-//         let mut game = Game::new();
-//         game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
-//         let group_ident = game
-//             .groups
-//             .iter()
-//             .map_find(|(group_ident, group)| {
-//                 (group.gtype == SegmentType::Field).then_some(group_ident)
-//             })
-//             .unwrap();
-//         let outline = game.compute_group_outline(group_ident);
-//         dbg!(outline);
-//         Ok(())
-//     }
+    #[test]
+    pub fn test_group_outline_generation_3() -> GameResult {
+        let mut game = Game::new();
+        game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+        let group = game
+            .groups
+            .values()
+            .find(|group| group.gtype == SegmentType::Field)
+            .unwrap();
+        let outline = game.compute_group_outline(group);
+        dbg!(outline);
+        Ok(())
+    }
 
-//     #[test]
-//     pub fn test_monastary_scoring() -> GameResult {
-//         use crate::tile::tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD};
-//         let mut game = Game::new();
-//         game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, 1))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 0))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 1))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, -1))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, -1))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, -1))?;
-//         game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
-//         let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
-//         assert!(!closing_tiles.is_empty());
-//         Ok(())
-//     }
+    #[test]
+    pub fn test_monastary_scoring() -> GameResult {
+        use crate::tile::tile_definitions::{MONASTARY, _DEBUG_EMPTY_FIELD};
+        let mut game = Game::new();
+        game.place_tile(MONASTARY.clone(), GridPos(0, 0))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, 1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 0))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, 1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(1, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(0, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, -1))?;
+        game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 0))?;
+        let closing_tiles = game.place_tile(_DEBUG_EMPTY_FIELD.clone(), GridPos(-1, 1))?;
+        assert!(!closing_tiles.is_empty());
+        Ok(())
+    }
 
-//     #[test]
-//     pub fn test_scoring_effects() -> GameResult {
-//         let mut game = Game::new_with_library(vec![CROSSROADS.clone(), CROSSROADS.clone()]);
-//         let player_ident = game.players.insert(Player::new(Color::RED));
-//         game.place_tile(CROSSROADS.clone(), GridPos(0, 0))?;
-//         game.place_meeple((GridPos(0, 0), 2), player_ident)?;
-//         Ok(())
-//     }
-// }
+    #[test]
+    pub fn test_scoring_effects() -> GameResult {
+        let mut game = Game::new_with_library(vec![CROSSROADS.clone(), CROSSROADS.clone()]);
+        let player_ident = game.players.insert(Player::new(Color::RED));
+        game.place_tile(CROSSROADS.clone(), GridPos(0, 0))?;
+        game.place_meeple((GridPos(0, 0), 2), player_ident)?;
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_valid_tile_placement() -> GameResult {
+        let mut game = Game::new_with_library(vec![CROSSROADS.clone(), CROSSROADS.clone()]);
+        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+        assert!(!game.is_valid_tile_position(&STARTING_TILE, GridPos(0, -1)));
+        Ok(())
+    }
+}

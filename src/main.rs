@@ -82,11 +82,13 @@ impl Client {
         {
             game.players.insert(Player::new(color));
         }
+        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
+            .unwrap();
         Self::new_with_game(ctx, game)
     }
 
     fn new_with_game(ctx: &Context, mut game: Game) -> Self {
-        let first_tile = game.library.pop().unwrap();
+        let first_tile = game.draw_placeable_tile().unwrap();
         let mut this = Self {
             selected_square: None,
             last_selected_square: None,
@@ -123,28 +125,10 @@ impl Client {
         }
 
         if let TurnPhase::TilePlacement(held_tile) = &self.turn_phase {
-            let mut is_adjacent_tile = false;
-            for (orientation, offset) in Orientation::iter_with_offsets() {
-                let adjacent_pos = *selected_square + offset;
-                let Some(adjacent_tile) = self.game.placed_tiles.get(&adjacent_pos) else {
-                    continue;
-                };
-                is_adjacent_tile = true;
-                if held_tile
-                    .validate_mounting(adjacent_tile, orientation)
-                    .is_none()
-                {
-                    return;
-                }
-            }
-            if !is_adjacent_tile {
-                return;
-            }
-        } else {
-            return;
+            self.placement_is_valid = self
+                .game
+                .is_valid_tile_position(held_tile, *selected_square);
         }
-
-        self.placement_is_valid = true;
     }
 
     #[inline]
@@ -295,12 +279,9 @@ impl Client {
         let player_ident = self.turn_order.pop_front().unwrap();
         self.turn_order.push_back(player_ident);
 
-        self.turn_phase = match self.game.library.pop() {
-            Some(tile) => TurnPhase::TilePlacement(tile),
-            None => {
-                self.end_game(ctx);
-                return;
-            }
+        match self.game.draw_placeable_tile() {
+            Some(tile) => self.turn_phase = TurnPhase::TilePlacement(tile),
+            None => self.end_game(ctx),
         }
     }
 
@@ -585,15 +566,35 @@ impl EventHandler<GameError> for Client {
 
         let current_player_ident = *self.turn_order.front().unwrap();
         if ctx.keyboard.is_key_pressed(KeyCode::Tab) {
+            // draw player cards
             for (i, &player_ident) in self.turn_order.iter().enumerate() {
                 self.render_player_card(
                     ctx,
                     &mut canvas,
                     player_ident,
                     vec2(20.0, 20.0) + vec2(0.0, 80.0) * i as f32,
-                    player_ident == current_player_ident,
+                    player_ident == current_player_ident
+                        && !matches!(self.turn_phase, TurnPhase::EndGame),
                 )?;
             }
+
+            // draw remaining tile count
+            let tile_count_rect = Rect::new(200.0, 20.0, 60.0, 60.0);
+            canvas.draw(
+                &Mesh::new_rounded_rectangle(
+                    ctx,
+                    DrawMode::fill(),
+                    tile_count_rect,
+                    5.0,
+                    Color::from_rgb(192, 173, 138),
+                )?,
+                DrawParam::default(),
+            );
+            let mut count_text = Text::new(format!("{}", self.game.library.len()));
+            count_text.set_scale(24.0);
+            let text_pos: Vec2 =
+                Vec2::from(tile_count_rect.center()) - Vec2::from(count_text.measure(ctx)?) / 2.0;
+            canvas.draw(&count_text, DrawParam::from(text_pos));
         } else {
             self.render_player_card(
                 ctx,
@@ -657,10 +658,13 @@ fn main() -> GameResult {
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
-    let mut client = Client::new(&ctx, args.players);
-    client
-        .game
-        .place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    // let client = Client::new(&ctx, args.players);
+
+    let mut game = Game::new_with_library(vec![STARTING_TILE.clone(), STARTING_TILE.clone()]);
+    game.players.insert(Player::new(Color::RED));
+    game.players.insert(Player::new(Color::BLUE));
+    game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    let client = Client::new_with_game(&ctx, game);
 
     event::run(ctx, event_loop, client);
 }
