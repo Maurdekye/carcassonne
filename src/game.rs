@@ -403,19 +403,14 @@ impl Game {
         Ok(())
     }
 
-    pub fn get_group_outline(&mut self, group_ident: GroupIdentifier) -> &Vec<Vec<Vec2>> {
-        let group = self.groups.get(group_ident).expect("Group not found");
+    pub fn get_group_outline(&mut self, group_ident: GroupIdentifier) -> Option<&Vec<Vec<Vec2>>> {
+        let group = self.groups.get(group_ident)?;
         if group.outline.is_none() {
             let outline = self.compute_group_outline(group);
-            let group = self.groups.get_mut(group_ident).unwrap();
+            let group = self.groups.get_mut(group_ident)?;
             group.outline = Some(outline);
         }
-        self.groups
-            .get(group_ident)
-            .unwrap()
-            .outline
-            .as_ref()
-            .unwrap()
+        self.groups.get(group_ident).unwrap().outline.as_ref()
     }
 
     fn compute_group_outline(&self, group: &SegmentGroup) -> Vec<Vec<Vec2>> {

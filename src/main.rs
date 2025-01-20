@@ -517,27 +517,31 @@ impl EventHandler<GameError> for Client {
                 let on_ui = self.skip_meeple_button.contains(mouse);
 
                 if !on_ui {
-                    if let Some(group_ident) = self.selected_group {
-                        let outline = self.game.get_group_outline(group_ident);
-                        for polyline in outline.iter().map(|polyline| {
-                            polyline
-                                .iter()
-                                .map(|vert| refit_to_rect(*vert, origin_rect))
-                                .collect::<Vec<_>>()
-                        }) {
-                            canvas.draw(
-                                &Mesh::new_line(
-                                    ctx,
-                                    &polyline,
-                                    2.0,
-                                    Color::from_rgb(
-                                        (200.0 * sin_time) as u8,
-                                        (20.0 * sin_time) as u8,
-                                        (70.0 * sin_time) as u8,
-                                    ),
-                                )?,
-                                DrawParam::default(),
-                            );
+                    'draw_outline: {
+                        if let Some(group_ident) = self.selected_group {
+                            let Some(outline) = self.game.get_group_outline(group_ident) else {
+                                break 'draw_outline;
+                            };
+                            for polyline in outline.iter().map(|polyline| {
+                                polyline
+                                    .iter()
+                                    .map(|vert| refit_to_rect(*vert, origin_rect))
+                                    .collect::<Vec<_>>()
+                            }) {
+                                canvas.draw(
+                                    &Mesh::new_line(
+                                        ctx,
+                                        &polyline,
+                                        2.0,
+                                        Color::from_rgb(
+                                            (200.0 * sin_time) as u8,
+                                            (20.0 * sin_time) as u8,
+                                            (70.0 * sin_time) as u8,
+                                        ),
+                                    )?,
+                                    DrawParam::default(),
+                                );
+                            }
                         }
                     }
                 }
