@@ -86,7 +86,6 @@ impl GameClient {
     pub fn new(ctx: &Context, players: usize, parent_channel: Sender<MainEvent>) -> Self {
         let mut game = Game::new();
         game.library.shuffle(&mut thread_rng());
-        game.library.drain(10..);
         for color in [
             Color::RED,
             Color::YELLOW,
