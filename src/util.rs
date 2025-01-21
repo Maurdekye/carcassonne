@@ -2,7 +2,7 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::Rect,
+    graphics::{Color, Rect},
 };
 
 pub fn refit_to_rect(vec: Vec2, rect: Rect) -> Vec2 {
@@ -123,6 +123,14 @@ impl RotateExt for Vec2 {
     fn rotate_(&mut self) {
         *self = vec2(1.0 - self.y, self.x);
     }
+}
+
+pub fn color_mul(color: Color, factor: f32) -> Color {
+    Color::from((
+        (color.r * factor).clamp(0.0, 1.0),
+        (color.g * factor).clamp(0.0, 1.0),
+        (color.b * factor).clamp(0.0, 1.0),
+    ))
 }
 
 #[macro_export]

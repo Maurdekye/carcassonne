@@ -1,10 +1,13 @@
+use std::sync::mpsc::Sender;
 use std::{collections::VecDeque, sync::Mutex};
 
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
 };
+use crate::main_client::MainEvent;
 use crate::pos::GridPos;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
+use crate::ui_manager::{Button, ButtonBounds, UIManager};
 use crate::util::{point_in_polygon, refit_to_rect};
 
 use ggez::input::keyboard::KeyCode;
@@ -23,6 +26,12 @@ const SCORE_EFFECT_DECCEL: f32 = 15.0;
 
 const END_GAME_SCORE_DELAY: f32 = 3.0;
 const END_GAME_SCORE_INTERVAL: f32 = 1.75;
+
+#[derive(Debug, Clone)]
+enum UIEvent {
+    SkipMeeples,
+    ReturnToMenu,
+}
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
@@ -57,6 +66,8 @@ impl ScoringEffect {
 }
 
 pub struct GameClient {
+    parent_channel: Sender<MainEvent>,
+    ui: UIManager<UIEvent>,
     selected_square: Option<GridPos>,
     last_selected_square: Option<GridPos>,
     selected_segment: Option<SegmentIdentifier>,
@@ -66,16 +77,16 @@ pub struct GameClient {
     turn_order: VecDeque<PlayerIdentifier>,
     offset: Vec2,
     scale: f32,
-    skip_meeple_button: Rect,
     scoring_effects: Vec<ScoringEffect>,
     state_update_lock: Mutex<()>,
     game: Game,
 }
 
 impl GameClient {
-    pub fn new(ctx: &Context, players: usize) -> Self {
+    pub fn new(ctx: &Context, players: usize, parent_channel: Sender<MainEvent>) -> Self {
         let mut game = Game::new();
         game.library.shuffle(&mut thread_rng());
+        game.library.drain(10..);
         for color in [
             Color::RED,
             Color::YELLOW,
@@ -90,12 +101,13 @@ impl GameClient {
         }
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
             .unwrap();
-        Self::new_with_game(ctx, game)
+        Self::new_with_game(ctx, game, parent_channel)
     }
 
-    pub fn new_with_game(ctx: &Context, mut game: Game) -> Self {
+    pub fn new_with_game(ctx: &Context, mut game: Game, parent_channel: Sender<MainEvent>) -> Self {
         let first_tile = game.draw_placeable_tile().unwrap();
         let mut this = Self {
+            parent_channel,
             selected_square: None,
             last_selected_square: None,
             selected_group: None,
@@ -105,10 +117,31 @@ impl GameClient {
             offset: Vec2::ZERO,
             scale: 1.0,
             turn_order: game.players.keys().collect(),
-            skip_meeple_button: Rect::new(0.0, 20.0, 120.0, 40.0),
             scoring_effects: Vec::new(),
             state_update_lock: Mutex::new(()),
             game,
+            ui: UIManager::new(vec![
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-180.0, 20.0, 160.0, 40.0),
+                    },
+                    Text::new("Skip meeples"),
+                    Color::BLACK,
+                    Color::from_rgb(0, 128, 192),
+                    UIEvent::SkipMeeples,
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
+                    },
+                    Text::new("Return to main menu"),
+                    Color::BLACK,
+                    Color::from_rgb(160, 160, 160),
+                    UIEvent::ReturnToMenu,
+                ),
+            ]),
         };
         this.reset_navigation(ctx);
         this
@@ -116,8 +149,7 @@ impl GameClient {
 
     fn reset_navigation(&mut self, ctx: &Context) {
         self.scale = 0.1;
-        self.offset =
-            -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
+        self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
     }
 
     fn reevaluate_selected_square(&mut self) {
@@ -267,9 +299,11 @@ impl GameClient {
             match group.gtype {
                 City | Road | Monastary => {
                     let scored_meeples = self.game.score_group(group_ident);
-                    self.scoring_effects.extend(scored_meeples.into_iter().map(
-                        |score_result| ScoringEffect::from_scoring_result(ctx, score_result),
-                    ));
+                    self.scoring_effects.extend(
+                        scored_meeples.into_iter().map(|score_result| {
+                            ScoringEffect::from_scoring_result(ctx, score_result)
+                        }),
+                    );
                 }
                 _ => {}
             }
@@ -292,12 +326,7 @@ impl GameClient {
 }
 
 impl EventHandler<GameError> for GameClient {
-    fn mouse_wheel_event(
-        &mut self,
-        ctx: &mut Context,
-        _x: f32,
-        y: f32,
-    ) -> Result<(), GameError> {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
         // zooming
         let prev_scale = self.scale;
         self.scale *= ZOOM_SPEED.powf(y);
@@ -311,8 +340,20 @@ impl EventHandler<GameError> for GameClient {
 
     fn update(&mut self, ctx: &mut Context) -> GameResult {
         let mouse: Vec2 = ctx.mouse.position().into();
-        let res: Vec2 = ctx.gfx.drawable_size().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
+        let mut skip_meeples = false;
+
+        self.ui.buttons[0].enabled = matches!(self.turn_phase, TurnPhase::MeeplePlacement { .. });
+        self.ui.buttons[1].enabled =
+            matches!(self.turn_phase, TurnPhase::EndGame { next_tick: None });
+
+        // ui events
+        for event in self.ui.update(ctx) {
+            match event {
+                UIEvent::SkipMeeples => skip_meeples = true,
+                UIEvent::ReturnToMenu => self.parent_channel.send(MainEvent::ReturnToMenu).unwrap(),
+            }
+        }
 
         // dragging
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
@@ -326,8 +367,7 @@ impl EventHandler<GameError> for GameClient {
 
         // update scoring effects
         self.scoring_effects.retain(|effect| {
-            ctx.time.time_since_start().as_secs_f32() - effect.initialized_at
-                < SCORE_EFFECT_LIFE
+            ctx.time.time_since_start().as_secs_f32() - effect.initialized_at < SCORE_EFFECT_LIFE
         });
 
         match &self.turn_phase {
@@ -382,11 +422,7 @@ impl EventHandler<GameError> for GameClient {
                 self.selected_group = None;
                 self.selected_segment = None;
 
-                self.skip_meeple_button.x = res.x - self.skip_meeple_button.w - 20.0;
-
-                if self.skip_meeple_button.contains(mouse)
-                    && ctx.mouse.button_just_pressed(event::MouseButton::Left)
-                {
+                if skip_meeples {
                     self.end_turn(ctx, closed_groups.clone());
                 } else if *placed_position == focused_pos {
                     let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
@@ -450,8 +486,7 @@ impl EventHandler<GameError> for GameClient {
                             ));
 
                             Some(
-                                ctx.time.time_since_start().as_secs_f32()
-                                    + END_GAME_SCORE_INTERVAL,
+                                ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_INTERVAL,
                             )
                         };
                         self.turn_phase = TurnPhase::EndGame { next_tick };
@@ -465,10 +500,7 @@ impl EventHandler<GameError> for GameClient {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
         let lock = self.state_update_lock.lock().unwrap();
-
-        ctx.gfx
-            .set_window_title(&format!("Carcassone: {:.2} fps", ctx.time.fps()));
-        let mouse: Vec2 = ctx.mouse.position().into();
+        let res: Vec2 = ctx.gfx.drawable_size().into();
 
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
@@ -495,8 +527,7 @@ impl EventHandler<GameError> for GameClient {
         for effect in &self.scoring_effects {
             let lifetime = (time - effect.initialized_at) / SCORE_EFFECT_LIFE;
             let alpha = (1.0 - lifetime).max(0.0) * 255.0;
-            let y_shift = ((-((lifetime * SCORE_EFFECT_DECCEL) / SCORE_EFFECT_LIFE)).exp()
-                - 1.0)
+            let y_shift = ((-((lifetime * SCORE_EFFECT_DECCEL) / SCORE_EFFECT_LIFE)).exp() - 1.0)
                 * SCORE_EFFECT_DISTANCE;
             let pos = self.to_screen_pos(effect.position + y_shift * Vec2::Y, ctx);
             let mut color = effect.color;
@@ -534,9 +565,7 @@ impl EventHandler<GameError> for GameClient {
                     DrawParam::default(),
                 );
 
-                let on_ui = self.skip_meeple_button.contains(mouse);
-
-                if !on_ui {
+                if !self.ui.on_ui {
                     'draw_outline: {
                         if let Some(group_ident) = self.selected_group {
                             let Some(outline) = self.game.get_group_outline(group_ident) else {
@@ -565,31 +594,16 @@ impl EventHandler<GameError> for GameClient {
                         }
                     }
                 }
-
-                // draw skip meeples button
-                canvas.draw(
-                    &Mesh::new_rounded_rectangle(
-                        ctx,
-                        DrawMode::fill(),
-                        self.skip_meeple_button,
-                        4.0,
-                        Color::from_rgb(0, 128, 192),
-                    )?,
-                    DrawParam::default(),
-                );
-                let Rect { x, y, .. } = self.skip_meeple_button;
-                canvas.draw(
-                    &Text::new("Skip meeples"),
-                    DrawParam::from(vec2(x, y) + vec2(10.0, 10.0)).color(Color::BLACK),
-                );
             }
             TurnPhase::EndGame { .. } => {}
         }
 
         // draw ui
+        self.ui.draw(ctx, &mut canvas)?;
 
         let current_player_ident = *self.turn_order.front().unwrap();
-        if ctx.keyboard.is_key_pressed(KeyCode::Tab) {
+        let is_endgame = matches!(self.turn_phase, TurnPhase::EndGame { .. });
+        if ctx.keyboard.is_key_pressed(KeyCode::Tab) || is_endgame {
             // draw player cards
             for (i, &player_ident) in self.turn_order.iter().enumerate() {
                 self.render_player_card(
@@ -597,29 +611,31 @@ impl EventHandler<GameError> for GameClient {
                     &mut canvas,
                     player_ident,
                     vec2(20.0, 20.0) + vec2(0.0, 80.0) * i as f32,
-                    player_ident == current_player_ident
-                        && !matches!(self.turn_phase, TurnPhase::EndGame { .. }),
+                    player_ident == current_player_ident && !is_endgame,
                 )?;
             }
 
             // draw remaining tile count
-            let tile_count_rect = Rect::new(200.0, 20.0, 60.0, 60.0);
-            canvas.draw(
-                &Mesh::new_rounded_rectangle(
-                    ctx,
-                    DrawMode::fill(),
-                    tile_count_rect,
-                    5.0,
-                    Color::from_rgb(192, 173, 138),
-                )?,
-                DrawParam::default(),
-            );
-            let mut count_text = Text::new(format!("{}", self.game.library.len()));
-            count_text.set_scale(24.0);
-            let text_pos: Vec2 = Vec2::from(tile_count_rect.center())
-                - Vec2::from(count_text.measure(ctx)?) / 2.0;
-            canvas.draw(&count_text, DrawParam::from(text_pos));
+            if !is_endgame {
+                let tile_count_rect = Rect::new(200.0, 20.0, 60.0, 60.0);
+                canvas.draw(
+                    &Mesh::new_rounded_rectangle(
+                        ctx,
+                        DrawMode::fill(),
+                        tile_count_rect,
+                        5.0,
+                        Color::from_rgb(192, 173, 138),
+                    )?,
+                    DrawParam::default(),
+                );
+                let mut count_text = Text::new(format!("{}", self.game.library.len()));
+                count_text.set_scale(24.0);
+                let text_pos: Vec2 = Vec2::from(tile_count_rect.center())
+                    - Vec2::from(count_text.measure(ctx)?) / 2.0;
+                canvas.draw(&count_text, DrawParam::from(text_pos));
+            }
         } else {
+            // draw card of current player
             self.render_player_card(
                 ctx,
                 &mut canvas,
@@ -627,6 +643,19 @@ impl EventHandler<GameError> for GameClient {
                 vec2(20.0, 20.0),
                 false,
             )?;
+        }
+
+        // draw player color outline
+        if !is_endgame {
+            canvas.draw(
+                &Mesh::new_rectangle(
+                    ctx,
+                    DrawMode::stroke(8.0),
+                    Rect::new(0.0, 0.0, res.x, res.y),
+                    self.game.players.get(current_player_ident).unwrap().color,
+                )?,
+                DrawParam::default(),
+            );
         }
 
         drop(lock);

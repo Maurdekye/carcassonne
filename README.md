@@ -19,7 +19,7 @@ The boardgame Carcassone implemented in Rust using the ggez graphics library.
 ## Todo
 
 * ~~Failsafe if tile can't be placed~~
-* Main menu
+* ~~Main menu~~
 * ~~Better game ending animation~~
 * More animations in general
 * Undo

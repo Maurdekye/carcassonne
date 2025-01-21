@@ -6,10 +6,9 @@ use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
     pos::GridPos,
-    sdbg,
     tile::{
-        get_tile_library, GridBorderCoordinate, GridBorderCoordinateOffset, Opposite, Orientation,
-        Segment, SegmentAttribute, SegmentBorderPiece, SegmentType, Tile,
+        get_tile_library, GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute,
+        SegmentBorderPiece, SegmentType, Tile,
     },
     util::{Bag, HashMapBag},
 };
@@ -662,14 +661,10 @@ impl Game {
         }
         // sdgb!(&polylines);
 
-        let final_lines_set = polylines
+        polylines
             .into_iter()
             .map(|polyline| polyline.into_iter().map(Vec2::from).collect())
-            .collect();
-
-        // sdgb!(&final_lines_set);
-
-        final_lines_set
+            .collect()
     }
 
     pub fn is_valid_tile_position(&self, tile: &Tile, pos: GridPos) -> bool {
