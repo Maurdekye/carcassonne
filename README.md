@@ -1,10 +1,9 @@
 # Carcassonne
 
-The boardgame Carcassone implemented in Rust using the ggez graphics library.
+The boardgame Carcassonne implemented in Rust using the ggez game engine.
 
 ### Options
 
- * `--players` / `-p`: Number of players from 2-5, default 2
  * `--fullscreen` / `-f`: Start in fullscreen. Provide a resolution to start in that fullscreen resolution. Default 1920x1080
 
 ### Controls
@@ -15,6 +14,7 @@ The boardgame Carcassone implemented in Rust using the ggez graphics library.
 * R to rotate a tile clockwise
 * Left click to place a tile / meeple
 * Tab to see all player stats
+* Escape to pause
 
 ## Todo
 
@@ -22,6 +22,7 @@ The boardgame Carcassone implemented in Rust using the ggez graphics library.
 * ~~Main menu~~
 * ~~Better game ending animation~~
 * ~~Pause Menu~~
+* Choose player colors
 * More animations in general
 * Undo
 * Inspect segment groups
