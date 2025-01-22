@@ -28,6 +28,10 @@ impl MainClient {
 }
 
 impl EventHandler<GameError> for MainClient {
+    fn mouse_wheel_event(&mut self, ctx: &mut ggez::Context, x: f32, y: f32) -> Result<(), GameError> {
+        self.scene.mouse_wheel_event(ctx, x, y)
+    }
+
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
 
