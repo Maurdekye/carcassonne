@@ -152,7 +152,7 @@ impl GameClient {
                             relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                             absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
                         },
-                        Text::new("Return to main menu"),
+                        Text::new("Return to Main Menu"),
                         GameEvent::MainEvent(MainEvent::ReturnToMainMenu),
                     ),
                 ],
