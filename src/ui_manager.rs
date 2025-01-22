@@ -1,3 +1,5 @@
+use std::sync::mpsc::Sender;
+
 use ggez::{
     event::MouseButton,
     glam::Vec2,
@@ -6,7 +8,14 @@ use ggez::{
     Context, GameError,
 };
 
-use crate::util::color_mul;
+use crate::util::{color_mul, DrawableWihParamsExt};
+
+pub const BUTTON_COLOR: Color = Color {
+    r: 0.5,
+    g: 0.5,
+    b: 0.5,
+    a: 1.0,
+};
 
 pub struct ButtonBounds {
     pub relative: Rect,
@@ -43,7 +52,7 @@ pub struct Button<E> {
 }
 
 impl<E> Button<E> {
-    pub fn new(
+    pub fn new_with_styling(
         bounds: ButtonBounds,
         text: Text,
         text_drawparam: DrawParam,
@@ -60,6 +69,10 @@ impl<E> Button<E> {
             event,
             enabled: true,
         }
+    }
+
+    pub fn new(bounds: ButtonBounds, text: Text, event: E) -> Button<E> {
+        Button::new_with_styling(bounds, text, DrawParam::default(), BUTTON_COLOR, event)
     }
 
     fn corrected_bounds(&self, res: Vec2) -> Rect {
@@ -79,62 +92,58 @@ impl<E> Button<E> {
 pub struct UIManager<E> {
     pub buttons: Vec<Button<E>>,
     pub on_ui: bool,
+    event_sender: Sender<E>,
+    mouse_position: Vec2,
 }
 
 impl<E> UIManager<E> {
-    pub fn new(buttons: Vec<Button<E>>) -> UIManager<E> {
+    pub fn new(event_sender: Sender<E>, buttons: Vec<Button<E>>) -> UIManager<E> {
         UIManager {
             buttons,
             on_ui: false,
+            event_sender,
+            mouse_position: Vec2::ZERO,
         }
     }
 
     pub fn draw(&self, ctx: &Context, canvas: &mut Canvas) -> Result<(), GameError> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let mouse: Vec2 = ctx.mouse.position().into();
         for button in self.buttons.iter().filter(|b| b.enabled) {
             let bounds = button.corrected_bounds(res);
-            let contains = bounds.contains(mouse);
+            let contains = bounds.contains(self.mouse_position);
             let color = match (contains, ctx.mouse.button_pressed(MouseButton::Left)) {
                 (true, true) => button.depress_color,
                 (true, _) => button.highlight_color,
                 _ => button.body_color,
             };
-            canvas.draw(
-                &Mesh::new_rounded_rectangle(ctx, DrawMode::fill(), bounds, 5.0, color)?,
-                DrawParam::default(),
-            );
-            let text_size = button.text.measure(ctx)?;
-            let text_position = Vec2::from(bounds.center()) - Vec2::from(text_size) / 2.0;
-            canvas.draw(&button.text, button.text_drawparam.dest(text_position));
+            Mesh::new_rounded_rectangle(ctx, DrawMode::fill(), bounds, 5.0, color)?.draw(canvas);
+            button
+                .text
+                .with_params(button.text_drawparam)
+                .centered_on(ctx, bounds.center().into())?
+                .draw(canvas);
         }
         Ok(())
     }
 
-    pub fn update(&mut self, ctx: &mut Context) -> Vec<E>
+    pub fn update(&mut self, ctx: &mut Context)
     where
         E: Clone,
     {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let mouse: Vec2 = ctx.mouse.position().into();
-        let mut events = Vec::new();
+        self.mouse_position = ctx.mouse.position().into();
         self.on_ui = false;
         for button in self.buttons.iter().filter(|b| b.enabled) {
             let bounds = button.corrected_bounds(res);
-            if bounds.contains(mouse) {
+            if bounds.contains(self.mouse_position) {
                 self.on_ui = true;
                 if ctx.mouse.button_just_released(MouseButton::Left) {
-                    events.push(button.event.clone());
+                    self.event_sender.send(button.event.clone()).unwrap();
                 }
             }
         }
-        set_cursor_type(
-            ctx,
-            match self.on_ui {
-                true => CursorIcon::Hand,
-                false => CursorIcon::Arrow,
-            },
-        );
-        events
+        if self.on_ui {
+            set_cursor_type(ctx, CursorIcon::Hand);
+        }
     }
 }

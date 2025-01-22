@@ -2,7 +2,8 @@ use std::collections::{hash_map::Entry, HashMap, HashSet};
 
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::{Color, Rect},
+    graphics::{Canvas, Color, DrawParam, Drawable, Rect, Text},
+    Context, GameError,
 };
 
 pub fn refit_to_rect(vec: Vec2, rect: Rect) -> Vec2 {
@@ -131,6 +132,130 @@ pub fn color_mul(color: Color, factor: f32) -> Color {
         (color.g * factor).clamp(0.0, 1.0),
         (color.b * factor).clamp(0.0, 1.0),
     ))
+}
+
+pub trait TextExt: Sized {
+    fn pos(&self, pos: Vec2) -> DrawableWihParams<'_, Self>;
+    fn centered_on<'a>(
+        &'a self,
+        ctx: &Context,
+        pos: Vec2,
+    ) -> Result<DrawableWihParams<'a, Self>, GameError>;
+    fn size(self, size: f32) -> Self;
+}
+
+impl TextExt for Text {
+    fn centered_on<'a>(
+        &'a self,
+        ctx: &Context,
+        pos: Vec2,
+    ) -> Result<DrawableWihParams<'a, Self>, GameError> {
+        let bounds: Vec2 = self.measure(ctx)?.into();
+        Ok(self.with_dest(pos - bounds / 2.0))
+    }
+
+    fn size(mut self, size: f32) -> Self {
+        self.set_scale(size);
+        self
+    }
+
+    fn pos(&self, pos: Vec2) -> DrawableWihParams<'_, Self> {
+        self.with_dest(pos)
+    }
+}
+
+pub struct DrawableWihParams<'a, T> {
+    pub drawable: &'a T,
+    pub draw_param: DrawParam,
+}
+
+impl DrawableWihParams<'_, Text> {
+    pub fn centered_on(self, ctx: &Context, pos: Vec2) -> Result<Self, GameError> {
+        let DrawableWihParams {
+            drawable,
+            draw_param,
+        } = self;
+        let bounds: Vec2 = drawable.measure(ctx)?.into();
+        Ok(DrawableWihParams {
+            drawable,
+            draw_param: draw_param.dest(pos - bounds / 2.0),
+        })
+    }
+}
+
+impl<T> DrawableWihParams<'_, T> {
+    pub fn color(self, color: Color) -> Self {
+        let DrawableWihParams {
+            drawable,
+            draw_param,
+        } = self;
+        DrawableWihParams {
+            drawable,
+            draw_param: draw_param.color(color),
+        }
+    }
+
+    pub fn draw(self, canvas: &mut Canvas)
+    where
+        T: Drawable,
+    {
+        let DrawableWihParams {
+            drawable,
+            draw_param,
+        } = self;
+        canvas.draw(drawable, draw_param)
+    }
+}
+
+// impl<T> Deref for DrawableWihParams<T> {
+//     type Target = DrawParam;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.draw_param
+//     }
+// }
+
+// impl<T> DerefMut for DrawableWihParams<T> {
+//     fn deref_mut(&mut self) -> &mut Self::Target {
+//         &mut self.draw_param
+//     }
+// }
+
+pub trait DrawableWihParamsExt: Sized {
+    fn draw(self, canvas: &mut Canvas);
+    fn default_params(&self) -> DrawableWihParams<'_, Self>;
+    fn with_dest(&self, dest: Vec2) -> DrawableWihParams<'_, Self>;
+    fn with_params(&self, draw_param: DrawParam) -> DrawableWihParams<'_, Self>;
+}
+
+impl<T> DrawableWihParamsExt for T
+where
+    T: Drawable,
+{
+    fn default_params(&self) -> DrawableWihParams<'_, Self> {
+        DrawableWihParams {
+            drawable: self,
+            draw_param: DrawParam::default(),
+        }
+    }
+
+    fn with_dest(&self, dest: Vec2) -> DrawableWihParams<'_, Self> {
+        DrawableWihParams {
+            drawable: self,
+            draw_param: DrawParam::default().dest(dest),
+        }
+    }
+
+    fn draw(self, canvas: &mut Canvas) {
+        self.default_params().draw(canvas);
+    }
+
+    fn with_params(&self, draw_param: DrawParam) -> DrawableWihParams<'_, Self> {
+        DrawableWihParams {
+            drawable: self,
+            draw_param,
+        }
+    }
 }
 
 #[macro_export]
