@@ -39,6 +39,7 @@ enum GameEvent {
     SkipMeeples,
     ClosePauseMenu,
     EndGame,
+    ResetCamera,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -322,6 +323,27 @@ impl GameClient {
             next_tick: Some(ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_DELAY),
         };
     }
+
+    fn handle_event(&mut self, ctx: &mut Context, event: GameEvent) -> Result<(), GameError> {
+        match event {
+            GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
+            GameEvent::SkipMeeples => {
+                if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.turn_phase {
+                    self.end_turn(ctx, closed_groups.clone());
+                }
+            }
+            GameEvent::ClosePauseMenu => self.pause_menu = None,
+            GameEvent::EndGame => {
+                self.pause_menu = None;
+                self.end_game(ctx)
+            }
+            GameEvent::ResetCamera => {
+                self.pause_menu = None;
+                self.reset_camera(ctx)
+            }
+        }
+        Ok(())
+    }
 }
 
 impl EventHandler<GameError> for GameClient {
@@ -342,20 +364,9 @@ impl EventHandler<GameError> for GameClient {
     }
 
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        let mut skip_meeples = false;
-        let mut on_clickable = false;
-
         // process events
         while let Ok(event) = self.event_receiver.try_recv() {
-            match event {
-                GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
-                GameEvent::SkipMeeples => skip_meeples = true,
-                GameEvent::ClosePauseMenu => self.pause_menu = None,
-                GameEvent::EndGame => {
-                    self.pause_menu = None;
-                    self.end_game(ctx)
-                }
-            }
+            self.handle_event(ctx, event)?;
         }
 
         // update pause menu
@@ -365,6 +376,7 @@ impl EventHandler<GameError> for GameClient {
             return Ok(());
         }
 
+        let mut on_clickable = false;
         let mouse: Vec2 = ctx.mouse.position().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
 
@@ -378,11 +390,6 @@ impl EventHandler<GameError> for GameClient {
         // dragging
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
             self.offset -= Vec2::from(ctx.mouse.delta());
-        }
-
-        // reset
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
-            self.reset_camera(ctx);
         }
 
         // open pause menu
@@ -447,9 +454,7 @@ impl EventHandler<GameError> for GameClient {
             } => {
                 self.selected_segment_and_group = None;
 
-                if skip_meeples {
-                    self.end_turn(ctx, closed_groups.clone());
-                } else if *placed_position == focused_pos {
+                if *placed_position == focused_pos {
                     let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
                     'segment_locate: {
                         if let Some(tile) = self.game.placed_tiles.get(&focused_pos) {

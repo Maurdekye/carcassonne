@@ -51,7 +51,7 @@ impl MainPauseScreenSubclient {
                     Button::new(
                         ButtonBounds {
                             relative: button_center,
-                            absolute: Rect::new(-120.0, 0.0, 240.0, 40.0),
+                            absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
                         },
                         Text::new("End Game"),
                         MainPauseScreenEvent::game_event(GameEvent::EndGame),
@@ -59,7 +59,15 @@ impl MainPauseScreenSubclient {
                     Button::new(
                         ButtonBounds {
                             relative: button_center,
-                            absolute: Rect::new(-120.0, 60.0, 240.0, 40.0),
+                            absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
+                        },
+                        Text::new("Reset Camera"),
+                        MainPauseScreenEvent::game_event(GameEvent::ResetCamera),
+                    ),
+                    Button::new(
+                        ButtonBounds {
+                            relative: button_center,
+                            absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
                         },
                         Text::new("Return to Main Menu"),
                         MainPauseScreenEvent::main_event(MainEvent::ReturnToMainMenu),

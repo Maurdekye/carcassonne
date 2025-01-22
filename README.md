@@ -10,11 +10,10 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 
 * Right click to drag
 * Scroll to zoom
-* Space to reset camera position
 * R to rotate a tile clockwise
 * Left click to place a tile / meeple
-* Tab to see all player stats
-* Escape to pause
+* Hold Tab to see detailed game stats
+* Esc to pause
 
 ## Todo
 
@@ -22,6 +21,8 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Main menu~~
 * ~~Better game ending animation~~
 * ~~Pause Menu~~
+* Controls screen
+* Counterclockwise rotation
 * Choose player colors
 * More animations in general
 * Undo
