@@ -1,6 +1,6 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use ggez::{event::EventHandler, GameError};
+use ggez::{event::EventHandler, Context, GameError};
 
 use crate::{game_client::GameClient, menu_client::MenuClient};
 
@@ -25,30 +25,35 @@ impl MainClient {
             event_receiver,
         }
     }
+
+    fn handle_event(&mut self, ctx: &Context, event: MainEvent) {
+        match event {
+            MainEvent::StartGame(player_count) => {
+                self.scene = Box::new(GameClient::new(
+                    ctx,
+                    player_count,
+                    self.event_sender.clone(),
+                ))
+            }
+            MainEvent::ReturnToMenu => {
+                self.scene = Box::new(MenuClient::new(self.event_sender.clone()))
+            }
+        }
+    }
 }
 
 impl EventHandler<GameError> for MainClient {
-    fn mouse_wheel_event(&mut self, ctx: &mut ggez::Context, x: f32, y: f32) -> Result<(), GameError> {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, x: f32, y: f32) -> Result<(), GameError> {
         self.scene.mouse_wheel_event(ctx, x, y)
     }
 
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
-
-        while let Ok(event) = self.event_receiver.try_recv() {
-            match event {
-                MainEvent::StartGame(player_count) => {
-                    self.scene = Box::new(GameClient::new(
-                        ctx,
-                        player_count,
-                        self.event_sender.clone(),
-                    ))
-                }
-                MainEvent::ReturnToMenu => {
-                    self.scene = Box::new(MenuClient::new(self.event_sender.clone()))
-                }
-            }
-        }
+        self.event_receiver
+            .try_iter()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .for_each(|event| self.handle_event(ctx, event));
 
         Ok(())
     }

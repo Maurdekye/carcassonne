@@ -1,5 +1,9 @@
 use ggez::{
-    event::MouseButton, glam::Vec2, graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text}, input::mouse::{set_cursor_type, CursorIcon}, Context, GameError
+    event::MouseButton,
+    glam::Vec2,
+    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
+    input::mouse::{set_cursor_type, CursorIcon},
+    Context, GameError,
 };
 
 use crate::util::color_mul;
@@ -10,6 +14,7 @@ pub struct ButtonBounds {
 }
 
 impl ButtonBounds {
+    #[allow(unused)]
     pub fn relative(bounds: Rect) -> ButtonBounds {
         ButtonBounds {
             relative: bounds,
@@ -32,17 +37,23 @@ pub struct Button<E> {
     body_color: Color,
     highlight_color: Color,
     depress_color: Color,
-    text_color: Color,
+    text_drawparam: DrawParam,
     event: E,
     pub enabled: bool,
 }
 
 impl<E> Button<E> {
-    pub fn new(bounds: ButtonBounds, text: Text, text_color: Color, color: Color, event: E) -> Button<E> {
+    pub fn new(
+        bounds: ButtonBounds,
+        text: Text,
+        text_drawparam: DrawParam,
+        color: Color,
+        event: E,
+    ) -> Button<E> {
         Button {
             bounds,
             text,
-            text_color,
+            text_drawparam,
             body_color: color,
             highlight_color: color_mul(color, 1.2),
             depress_color: color_mul(color, 0.8),
@@ -84,10 +95,7 @@ impl<E> UIManager<E> {
         for button in self.buttons.iter().filter(|b| b.enabled) {
             let bounds = button.corrected_bounds(res);
             let contains = bounds.contains(mouse);
-            let color = match (
-                contains,
-                ctx.mouse.button_pressed(MouseButton::Left),
-            ) {
+            let color = match (contains, ctx.mouse.button_pressed(MouseButton::Left)) {
                 (true, true) => button.depress_color,
                 (true, _) => button.highlight_color,
                 _ => button.body_color,
@@ -98,7 +106,7 @@ impl<E> UIManager<E> {
             );
             let text_size = button.text.measure(ctx)?;
             let text_position = Vec2::from(bounds.center()) - Vec2::from(text_size) / 2.0;
-            canvas.draw(&button.text, DrawParam::from(text_position).color(button.text_color));
+            canvas.draw(&button.text, button.text_drawparam.dest(text_position));
         }
         Ok(())
     }
@@ -120,10 +128,13 @@ impl<E> UIManager<E> {
                 }
             }
         }
-        set_cursor_type(ctx, match self.on_ui {
-            true => CursorIcon::Hand,
-            false => CursorIcon::Arrow,
-        });
+        set_cursor_type(
+            ctx,
+            match self.on_ui {
+                true => CursorIcon::Hand,
+                false => CursorIcon::Arrow,
+            },
+        );
         events
     }
 }

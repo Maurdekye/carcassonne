@@ -1,5 +1,5 @@
+use std::collections::VecDeque;
 use std::sync::mpsc::Sender;
-use std::{collections::VecDeque, sync::Mutex};
 
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
@@ -11,6 +11,7 @@ use crate::ui_manager::{Button, ButtonBounds, UIManager};
 use crate::util::{point_in_polygon, refit_to_rect};
 
 use ggez::input::keyboard::KeyCode;
+use ggez::input::mouse::{set_cursor_type, CursorIcon};
 use ggez::{
     event::{self, EventHandler},
     glam::{vec2, Vec2, Vec2Swizzles},
@@ -36,7 +37,10 @@ enum UIEvent {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone)]
 enum TurnPhase {
-    TilePlacement(Tile),
+    TilePlacement {
+        tile: Tile,
+
+    },
     MeeplePlacement {
         placed_position: GridPos,
         closed_groups: Vec<GroupIdentifier>,
@@ -70,15 +74,13 @@ pub struct GameClient {
     ui: UIManager<UIEvent>,
     selected_square: Option<GridPos>,
     last_selected_square: Option<GridPos>,
-    selected_segment: Option<SegmentIdentifier>,
-    selected_group: Option<GroupIdentifier>,
+    selected_segment_and_group: Option<(SegmentIdentifier, GroupIdentifier)>,
     placement_is_valid: bool,
     turn_phase: TurnPhase,
     turn_order: VecDeque<PlayerIdentifier>,
     offset: Vec2,
     scale: f32,
     scoring_effects: Vec<ScoringEffect>,
-    state_update_lock: Mutex<()>,
     game: Game,
 }
 
@@ -109,15 +111,13 @@ impl GameClient {
             parent_channel,
             selected_square: None,
             last_selected_square: None,
-            selected_group: None,
-            selected_segment: None,
+            selected_segment_and_group: None,
             placement_is_valid: false,
-            turn_phase: TurnPhase::TilePlacement(first_tile),
+            turn_phase: TurnPhase::TilePlacement { tile: first_tile },
             offset: Vec2::ZERO,
             scale: 1.0,
             turn_order: game.players.keys().collect(),
             scoring_effects: Vec::new(),
-            state_update_lock: Mutex::new(()),
             game,
             ui: UIManager::new(vec![
                 Button::new(
@@ -126,7 +126,7 @@ impl GameClient {
                         absolute: Rect::new(-180.0, 20.0, 160.0, 40.0),
                     },
                     Text::new("Skip meeples"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(0, 128, 192),
                     UIEvent::SkipMeeples,
                 ),
@@ -136,17 +136,17 @@ impl GameClient {
                         absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
                     },
                     Text::new("Return to main menu"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(160, 160, 160),
                     UIEvent::ReturnToMenu,
                 ),
             ]),
         };
-        this.reset_navigation(ctx);
+        this.reset_camera(ctx);
         this
     }
 
-    fn reset_navigation(&mut self, ctx: &Context) {
+    fn reset_camera(&mut self, ctx: &Context) {
         self.scale = 0.1;
         self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
     }
@@ -162,7 +162,7 @@ impl GameClient {
             return;
         }
 
-        if let TurnPhase::TilePlacement(held_tile) = &self.turn_phase {
+        if let TurnPhase::TilePlacement { tile: held_tile } = &self.turn_phase {
             self.placement_is_valid = self
                 .game
                 .is_valid_tile_position(held_tile, *selected_square);
@@ -232,7 +232,7 @@ impl GameClient {
 
     fn get_held_tile_mut(&mut self) -> Option<&mut Tile> {
         match &mut self.turn_phase {
-            TurnPhase::TilePlacement(tile) => Some(tile),
+            TurnPhase::TilePlacement { tile } => Some(tile),
             _ => None,
         }
     }
@@ -312,7 +312,7 @@ impl GameClient {
         self.turn_order.push_back(player_ident);
 
         match self.game.draw_placeable_tile() {
-            Some(tile) => self.turn_phase = TurnPhase::TilePlacement(tile),
+            Some(tile) => self.turn_phase = TurnPhase::TilePlacement { tile },
             None => self.end_game(ctx),
         }
     }
@@ -341,6 +341,7 @@ impl EventHandler<GameError> for GameClient {
         let mouse: Vec2 = ctx.mouse.position().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
         let mut skip_meeples = false;
+        let mut on_clickable = false;
 
         self.ui.buttons[0].enabled = matches!(self.turn_phase, TurnPhase::MeeplePlacement { .. });
         self.ui.buttons[1].enabled =
@@ -361,7 +362,7 @@ impl EventHandler<GameError> for GameClient {
 
         // reset
         if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
-            self.reset_navigation(ctx);
+            self.reset_camera(ctx);
         }
 
         // update scoring effects
@@ -370,7 +371,7 @@ impl EventHandler<GameError> for GameClient {
         });
 
         match &self.turn_phase {
-            TurnPhase::TilePlacement(_) => {
+            TurnPhase::TilePlacement { .. } => {
                 self.selected_square = Some(focused_pos);
 
                 if self.selected_square != self.last_selected_square {
@@ -383,8 +384,6 @@ impl EventHandler<GameError> for GameClient {
                 {
                     let tile = self.get_held_tile_mut().unwrap().clone();
                     let closed_groups = self.game.place_tile(tile, focused_pos)?;
-                    self.selected_group = None;
-                    self.selected_segment = None;
                     self.reevaluate_selected_square();
                     let tile = self.game.placed_tiles.get(&focused_pos).unwrap();
 
@@ -413,13 +412,14 @@ impl EventHandler<GameError> for GameClient {
                     self.get_held_tile_mut().unwrap().rotate();
                     self.reevaluate_selected_square();
                 }
+
+                on_clickable = self.placement_is_valid;
             }
             TurnPhase::MeeplePlacement {
                 placed_position,
                 closed_groups,
             } => {
-                self.selected_group = None;
-                self.selected_segment = None;
+                self.selected_segment_and_group = None;
 
                 if skip_meeples {
                     self.end_turn(ctx, closed_groups.clone());
@@ -439,26 +439,29 @@ impl EventHandler<GameError> for GameClient {
                                         &tile.segment_polygon(i).collect::<Vec<_>>(),
                                     )
                                 {
-                                    let _lock = self.state_update_lock.lock().unwrap();
-                                    self.selected_group = Some(group_ident);
-                                    self.selected_segment = Some((focused_pos, i));
+                                    self.selected_segment_and_group =
+                                        Some(((focused_pos, i), group_ident));
                                     break 'segment_locate;
                                 }
                             }
                         }
                     }
 
+                    on_clickable = self.selected_segment_and_group.is_some();
+
                     if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                        if let (Some(seg_ident), Some(group)) = (
-                            self.selected_segment,
-                            self.selected_group
-                                .and_then(|group_ident| self.game.groups.get(group_ident)),
-                        ) {
+                        if let Some((seg_ident, Some(group))) =
+                            self.selected_segment_and_group
+                                .map(|(seg_ident, group_ident)| {
+                                    (seg_ident, self.game.groups.get(group_ident))
+                                })
+                        {
                             let player_ident = *self.turn_order.front().unwrap();
                             let player = self.game.players.get(player_ident).unwrap();
                             if group.meeples.is_empty() && player.meeples > 0 {
                                 // place meeple and advance turn
                                 self.game.place_meeple(seg_ident, player_ident)?;
+                                self.selected_segment_and_group = None;
                                 self.end_turn(ctx, closed_groups.clone());
                             }
                         }
@@ -494,11 +497,20 @@ impl EventHandler<GameError> for GameClient {
             }
         }
 
+        if !self.ui.on_ui {
+            set_cursor_type(
+                ctx,
+                match on_clickable {
+                    true => CursorIcon::Hand,
+                    false => CursorIcon::Arrow,
+                },
+            );
+        }
+
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult {
-        let lock = self.state_update_lock.lock().unwrap();
         let res: Vec2 = ctx.gfx.drawable_size().into();
 
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
@@ -538,7 +550,7 @@ impl EventHandler<GameError> for GameClient {
         }
 
         match &self.turn_phase {
-            TurnPhase::TilePlacement(tile) => {
+            TurnPhase::TilePlacement { tile } => {
                 if let Some(pos) = self.selected_square {
                     let rect = self.grid_pos_rect(&pos, ctx);
                     let cursor_color = if !self.placement_is_valid {
@@ -566,7 +578,7 @@ impl EventHandler<GameError> for GameClient {
 
                 if !self.ui.on_ui {
                     'draw_outline: {
-                        if let Some(group_ident) = self.selected_group {
+                        if let Some((_, group_ident)) = self.selected_segment_and_group {
                             let Some(outline) = self.game.get_group_outline(group_ident) else {
                                 break 'draw_outline;
                             };
@@ -657,7 +669,6 @@ impl EventHandler<GameError> for GameClient {
             );
         }
 
-        drop(lock);
         canvas.finish(ctx)
     }
 }

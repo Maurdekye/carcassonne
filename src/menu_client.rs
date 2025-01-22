@@ -24,34 +24,47 @@ pub struct MenuClient {
 
 impl MenuClient {
     pub fn new(parent_channel: Sender<MainEvent>) -> MenuClient {
+        let buttons_center = Rect::new(0.5, 0.65, 0.0, 0.0);
         MenuClient {
             parent_channel,
             ui: UIManager::new(vec![
                 Button::new(
-                    ButtonBounds::relative(Rect::new(0.2, 0.5, 0.1, 0.045)),
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(-200.0, -80.0, 180.0, 60.0),
+                    },
                     Text::new("2 Players"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(127, 127, 127),
                     MenuEvent::StartGame(2),
                 ),
                 Button::new(
-                    ButtonBounds::relative(Rect::new(0.35, 0.5, 0.1, 0.045)),
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(20.0, -80.0, 180.0, 60.0),
+                    },
                     Text::new("3 Players"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(127, 127, 127),
                     MenuEvent::StartGame(3),
                 ),
                 Button::new(
-                    ButtonBounds::relative(Rect::new(0.5, 0.5, 0.1, 0.045)),
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(-200.0, 20.0, 180.0, 60.0),
+                    },
                     Text::new("4 Players"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(127, 127, 127),
                     MenuEvent::StartGame(4),
                 ),
                 Button::new(
-                    ButtonBounds::relative(Rect::new(0.65, 0.5, 0.1, 0.045)),
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(20.0, 20.0, 180.0, 60.0),
+                    },
                     Text::new("5 Players"),
-                    Color::BLACK,
+                    DrawParam::default(),
                     Color::from_rgb(127, 127, 127),
                     MenuEvent::StartGame(5),
                 ),

@@ -26,3 +26,4 @@ The boardgame Carcassone implemented in Rust using the ggez graphics library.
 * Inspect segment groups
 * River tiles
 * Multiplayer
+* Use scans of actual tiles
