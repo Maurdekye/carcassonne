@@ -36,6 +36,10 @@ struct Args {
     /// Enable debug mode
     #[arg(short, long, action = ArgAction::SetTrue)]
     debug: bool,
+
+    /// Start immediately playing a debug game
+    #[arg(short = 'D', long, action = ArgAction::SetTrue)]
+    debug_game: bool,
 }
 
 fn main() -> GameResult {

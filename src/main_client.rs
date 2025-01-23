@@ -30,6 +30,9 @@ pub struct MainClient {
 impl MainClient {
     pub fn new(args: Args) -> MainClient {
         let (event_sender, event_receiver) = channel();
+        if args.debug_game {
+            event_sender.send(MainEvent::StartDebugGame).unwrap();
+        }
         MainClient {
             scene: Box::new(MainMenuClient::new(event_sender.clone(), args.clone())),
             event_sender,
