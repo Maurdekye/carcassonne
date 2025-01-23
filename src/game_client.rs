@@ -321,7 +321,6 @@ impl GameClient {
     }
 
     fn end_turn(&mut self, ctx: &Context, groups_to_close: Vec<GroupIdentifier>) {
-        self.push_history();
         for group_ident in groups_to_close {
             use crate::tile::SegmentType::*;
             let group = self.state.game.groups.get(group_ident).unwrap();
@@ -358,12 +357,15 @@ impl GameClient {
             GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
             GameEvent::SkipMeeples => {
                 if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.state.turn_phase {
-                    self.end_turn(ctx, closed_groups.clone());
+                    let groups_to_close = closed_groups.clone();
+                    self.push_history();
+                    self.end_turn(ctx, groups_to_close);
                 }
             }
             GameEvent::ClosePauseMenu => self.pause_menu = None,
             GameEvent::EndGame => {
                 self.pause_menu = None;
+                self.push_history();
                 self.end_game(ctx)
             }
             GameEvent::ResetCamera => {
@@ -377,6 +379,62 @@ impl GameClient {
             }
         }
         Ok(())
+    }
+
+    fn place_tile(&mut self, ctx: &mut Context, focused_pos: GridPos) -> Result<(), GameError> {
+        self.push_history();
+
+        let tile = self.get_held_tile_mut().unwrap().clone();
+        let closed_groups = self.state.game.place_tile(tile, focused_pos)?;
+        self.reevaluate_selected_square();
+
+        let tile = self.state.game.placed_tiles.get(&focused_pos).unwrap();
+        let player_ident = *self.state.turn_order.front().unwrap();
+        let player = self.state.game.players.get(player_ident).unwrap();
+
+        if player.meeples == 0
+            || (0..tile.segments.len())
+                .filter_map(|i| {
+                    let (group, _) = self
+                        .state
+                        .game
+                        .group_and_key_by_seg_ident((focused_pos, i))?;
+                    Some(!group.meeples.is_empty())
+                })
+                .all(|x| x)
+        {
+            self.end_turn(ctx, closed_groups.clone());
+        } else {
+            self.state.turn_phase = TurnPhase::MeeplePlacement {
+                placed_position: focused_pos,
+                closed_groups,
+            };
+        }
+        Ok(())
+    }
+
+    fn get_selected_segment(
+        &self,
+        focused_pos: GridPos,
+        placed_position: &GridPos,
+        subgrid_pos: Vec2,
+    ) -> Option<(SegmentIdentifier, GroupIdentifier)> {
+        if let Some(tile) = self.state.game.placed_tiles.get(&focused_pos) {
+            for (i, _) in tile.segments.iter().enumerate() {
+                let (group, group_ident) = self
+                    .state
+                    .game
+                    .group_and_key_by_seg_ident((*placed_position, i))
+                    .unwrap();
+                if group.gtype.placeable()
+                    && group.meeples.is_empty()
+                    && point_in_polygon(subgrid_pos, &tile.segment_polygon(i).collect::<Vec<_>>())
+                {
+                    return Some(((focused_pos, i), group_ident));
+                }
+            }
+        }
+        None
     }
 }
 
@@ -460,33 +518,7 @@ impl EventHandler<GameError> for GameClient {
                 if ctx.mouse.button_just_pressed(event::MouseButton::Left)
                     && self.placement_is_valid
                 {
-                    let tile = self.get_held_tile_mut().unwrap().clone();
-                    let closed_groups = self.state.game.place_tile(tile, focused_pos)?;
-                    self.reevaluate_selected_square();
-                    let tile = self.state.game.placed_tiles.get(&focused_pos).unwrap();
-
-                    let player_ident = *self.state.turn_order.front().unwrap();
-                    let player = self.state.game.players.get(player_ident).unwrap();
-
-                    if player.meeples == 0
-                        || (0..tile.segments.len())
-                            .filter_map(|i| {
-                                let (group, _) = self
-                                    .state
-                                    .game
-                                    .group_and_key_by_seg_ident((focused_pos, i))?;
-                                Some(!group.meeples.is_empty())
-                            })
-                            .all(|x| x)
-                    {
-                        self.end_turn(ctx, closed_groups.clone());
-                    } else {
-                        self.push_history();
-                        self.state.turn_phase = TurnPhase::MeeplePlacement {
-                            placed_position: focused_pos,
-                            closed_groups,
-                        };
-                    }
+                    self.place_tile(ctx, focused_pos)?;
                 }
 
                 if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
@@ -504,28 +536,8 @@ impl EventHandler<GameError> for GameClient {
 
                 if *placed_position == focused_pos {
                     let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
-                    'segment_locate: {
-                        if let Some(tile) = self.state.game.placed_tiles.get(&focused_pos) {
-                            for (i, _) in tile.segments.iter().enumerate() {
-                                let (group, group_ident) = self
-                                    .state
-                                    .game
-                                    .group_and_key_by_seg_ident((*placed_position, i))
-                                    .unwrap();
-                                if group.gtype.placeable()
-                                    && group.meeples.is_empty()
-                                    && point_in_polygon(
-                                        subgrid_pos,
-                                        &tile.segment_polygon(i).collect::<Vec<_>>(),
-                                    )
-                                {
-                                    self.selected_segment_and_group =
-                                        Some(((focused_pos, i), group_ident));
-                                    break 'segment_locate;
-                                }
-                            }
-                        }
-                    }
+                    self.selected_segment_and_group =
+                        self.get_selected_segment(focused_pos, placed_position, subgrid_pos);
 
                     on_clickable = self.selected_segment_and_group.is_some();
 
@@ -539,10 +551,13 @@ impl EventHandler<GameError> for GameClient {
                             let player_ident = *self.state.turn_order.front().unwrap();
                             let player = self.state.game.players.get(player_ident).unwrap();
                             if group.meeples.is_empty() && player.meeples > 0 {
+                                let closed_groups = closed_groups.clone();
+                                self.push_history();
+
                                 // place meeple and advance turn
                                 self.state.game.place_meeple(seg_ident, player_ident)?;
                                 self.selected_segment_and_group = None;
-                                self.end_turn(ctx, closed_groups.clone());
+                                self.end_turn(ctx, closed_groups);
                             }
                         }
                     }
