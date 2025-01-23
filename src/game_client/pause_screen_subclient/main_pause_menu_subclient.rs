@@ -12,16 +12,16 @@ use crate::{
     ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
 };
 
-use super::PauseMenuEvent;
+use super::PauseScreenEvent;
 
 #[derive(Debug, Clone)]
-pub enum MainPauseScreenEvent {
-    PauseMenuEvent(PauseMenuEvent),
+pub enum MainPauseMenuEvent {
+    PauseMenuEvent(PauseScreenEvent),
 }
 
-impl MainPauseScreenEvent {
+impl MainPauseMenuEvent {
     fn game_event(event: GameEvent) -> Self {
-        Self::PauseMenuEvent(PauseMenuEvent::GameEvent(event))
+        Self::PauseMenuEvent(PauseScreenEvent::GameEvent(event))
     }
 
     fn main_event(event: MainEvent) -> Self {
@@ -29,22 +29,23 @@ impl MainPauseScreenEvent {
     }
 }
 
-pub struct MainPauseScreenSubclient {
-    parent_channel: Sender<PauseMenuEvent>,
-    event_sender: Sender<MainPauseScreenEvent>,
-    event_receiver: Receiver<MainPauseScreenEvent>,
-    ui: UIManager<MainPauseScreenEvent>,
+pub struct MainPauseMenuSubclient {
+    parent_channel: Sender<PauseScreenEvent>,
+    event_sender: Sender<MainPauseMenuEvent>,
+    event_receiver: Receiver<MainPauseMenuEvent>,
+    ui: UIManager<MainPauseMenuEvent>,
 }
 
-impl MainPauseScreenSubclient {
+impl MainPauseMenuSubclient {
     pub fn new(
-        parent_channel: Sender<PauseMenuEvent>,
+        parent_channel: Sender<PauseScreenEvent>,
         is_endgame: bool,
-    ) -> MainPauseScreenSubclient {
+        has_history: bool,
+    ) -> MainPauseMenuSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let button_center = Rect::new(0.5, 0.2, 0.0, 0.0);
-        let (ui, [end_game_button, ..]) = UIManager::new_and_rc_buttons(
+        let (ui, [end_game_button, _, _, undo_button]) = UIManager::new_and_rc_buttons(
             ui_sender,
             [
                 Button::new(
@@ -53,7 +54,7 @@ impl MainPauseScreenSubclient {
                         absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
                     },
                     Text::new("End Game"),
-                    MainPauseScreenEvent::game_event(GameEvent::EndGame),
+                    MainPauseMenuEvent::game_event(GameEvent::EndGame),
                 ),
                 Button::new(
                     ButtonBounds {
@@ -61,7 +62,7 @@ impl MainPauseScreenSubclient {
                         absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
                     },
                     Text::new("Reset Camera"),
-                    MainPauseScreenEvent::game_event(GameEvent::ResetCamera),
+                    MainPauseMenuEvent::game_event(GameEvent::ResetCamera),
                 ),
                 Button::new(
                     ButtonBounds {
@@ -69,12 +70,21 @@ impl MainPauseScreenSubclient {
                         absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
                     },
                     Text::new("Return to Main Menu"),
-                    MainPauseScreenEvent::main_event(MainEvent::ReturnToMainMenu),
+                    MainPauseMenuEvent::main_event(MainEvent::ReturnToMainMenu),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: button_center,
+                        absolute: Rect::new(10.0, 60.0, 240.0, 40.0),
+                    },
+                    Text::new("Undo Last Move"),
+                    MainPauseMenuEvent::game_event(GameEvent::Undo),
                 ),
             ],
         );
         end_game_button.borrow_mut().state = ButtonState::disabled_if(is_endgame);
-        MainPauseScreenSubclient {
+        undo_button.borrow_mut().state = ButtonState::disabled_if(!has_history);
+        MainPauseMenuSubclient {
             parent_channel,
             event_sender,
             event_receiver,
@@ -85,9 +95,9 @@ impl MainPauseScreenSubclient {
     fn handle_event(
         &mut self,
         _ctx: &mut Context,
-        event: MainPauseScreenEvent,
+        event: MainPauseMenuEvent,
     ) -> Result<(), GameError> {
-        use MainPauseScreenEvent::*;
+        use MainPauseMenuEvent::*;
         match event {
             PauseMenuEvent(event) => self.parent_channel.send(event).unwrap(),
         }
@@ -95,13 +105,13 @@ impl MainPauseScreenSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for MainPauseScreenSubclient {
+impl SubEventHandler<GameError> for MainPauseMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx);
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
             self.event_sender
-                .send(MainPauseScreenEvent::game_event(GameEvent::ClosePauseMenu))
+                .send(MainPauseMenuEvent::game_event(GameEvent::ClosePauseMenu))
                 .unwrap();
         }
 

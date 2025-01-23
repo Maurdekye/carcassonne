@@ -20,6 +20,7 @@ use crate::{
 pub mod player {
     use ggez::graphics::Color;
 
+    #[derive(Clone)]
     pub struct Player {
         pub meeples: usize,
         pub color: Color,
@@ -44,7 +45,7 @@ pub type EdgeIdentifier = (GridPos, Orientation);
 pub type PlayerIdentifier = DefaultKey;
 pub type PlacedMeeple = (SegmentIdentifier, PlayerIdentifier);
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SegmentGroup {
     pub gtype: SegmentType,
     pub segments: Vec<SegmentIdentifier>,
@@ -59,6 +60,7 @@ pub struct ScoringResult {
     pub score: usize,
 }
 
+#[derive(Clone)]
 pub struct Game {
     pub library: Vec<Tile>,
     pub placed_tiles: HashMap<GridPos, Tile>,

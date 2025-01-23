@@ -3,7 +3,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     Context, GameError,
 };
-use main_pause_screen_subclient::MainPauseScreenSubclient;
+use main_pause_menu_subclient::MainPauseMenuSubclient;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
@@ -13,28 +13,28 @@ use crate::{
     util::{DrawableWihParamsExt, TextExt},
 };
 
-mod main_pause_screen_subclient;
+mod main_pause_menu_subclient;
 
 #[derive(Debug, Clone)]
-pub enum PauseMenuEvent {
+pub enum PauseScreenEvent {
     GameEvent(GameEvent),
 }
 
-pub struct PauseMenuSubclient {
+pub struct PauseScreenSubclient {
     scene: Box<dyn SubEventHandler<GameError>>,
     parent_channel: Sender<GameEvent>,
-    _event_sender: Sender<PauseMenuEvent>,
-    event_receiver: Receiver<PauseMenuEvent>,
-    ui: UIManager<PauseMenuEvent>,
+    _event_sender: Sender<PauseScreenEvent>,
+    event_receiver: Receiver<PauseScreenEvent>,
+    ui: UIManager<PauseScreenEvent>,
 }
 
-impl PauseMenuSubclient {
-    pub fn new(parent_channel: Sender<GameEvent>, is_endgame: bool) -> PauseMenuSubclient {
+impl PauseScreenSubclient {
+    pub fn new(parent_channel: Sender<GameEvent>, is_endgame: bool, has_history: bool) -> PauseScreenSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        PauseMenuSubclient {
+        PauseScreenSubclient {
             parent_channel,
-            scene: Box::new(MainPauseScreenSubclient::new(event_sender.clone(), is_endgame)),
+            scene: Box::new(MainPauseMenuSubclient::new(event_sender.clone(), is_endgame, has_history)),
             _event_sender: event_sender,
             event_receiver,
             ui: UIManager::new(
@@ -42,7 +42,7 @@ impl PauseMenuSubclient {
                 [Button::new(
                     ButtonBounds::absolute(Rect::new(15.0, 15.0, 30.0, 30.0)),
                     Text::new("X"),
-                    PauseMenuEvent::GameEvent(GameEvent::ClosePauseMenu),
+                    PauseScreenEvent::GameEvent(GameEvent::ClosePauseMenu),
                 )],
             ),
         }
@@ -51,9 +51,9 @@ impl PauseMenuSubclient {
     pub fn handle_event(
         &mut self,
         _ctx: &mut Context,
-        event: PauseMenuEvent,
+        event: PauseScreenEvent,
     ) -> Result<(), GameError> {
-        use PauseMenuEvent::*;
+        use PauseScreenEvent::*;
         match event {
             GameEvent(event) => self.parent_channel.send(event).unwrap(),
         }
@@ -61,7 +61,7 @@ impl PauseMenuSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for PauseMenuSubclient {
+impl SubEventHandler<GameError> for PauseScreenSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
         self.ui.update(ctx);

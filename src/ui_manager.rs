@@ -129,16 +129,9 @@ impl<E> UIManager<E> {
     pub fn new_and_rc_buttons<const N: usize>(
         event_sender: Sender<E>,
         buttons: [Button<E>; N],
-    ) -> (UIManager<E>, [Rc<RefCell<Button<E>>>; N])
-    where
-        E: std::fmt::Debug,
-    {
-        let (buttons, return_buttons): (Vec<_>, Vec<_>) = buttons
-            .into_iter()
-            .map(RefCell::new)
-            .map(Rc::new)
-            .map(|button| (button.clone(), button))
-            .unzip();
+    ) -> (UIManager<E>, [Rc<RefCell<Button<E>>>; N]) {
+        let return_buttons = buttons.map(RefCell::new).map(Rc::new);
+        let buttons = return_buttons.clone().into();
         (
             UIManager {
                 buttons,
@@ -146,7 +139,7 @@ impl<E> UIManager<E> {
                 event_sender,
                 mouse_position: Vec2::ZERO,
             },
-            return_buttons.try_into().unwrap(),
+            return_buttons,
         )
     }
 
