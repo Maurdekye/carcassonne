@@ -9,7 +9,7 @@ use ggez::{
 
 use crate::{
     main_client::MainEvent,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    ui_manager::{Button, ButtonBounds, UIManager},
     Args,
 };
 
@@ -31,7 +31,7 @@ impl MainMenuClient {
         let buttons_center = Rect::new(0.5, 0.65, 0.0, 0.0);
         let (_event_sender, event_receiver) = channel();
         let ui_sender = _event_sender.clone();
-        let (ui, [.., debug_button]) = UIManager::new_and_rc_buttons(
+        let (ui, [..]) = UIManager::new_and_rc_buttons(
             ui_sender,
             [
                 Button::new(
@@ -74,17 +74,8 @@ impl MainMenuClient {
                     Text::new("Quit"),
                     MainMenuEvent::MainEvent(MainEvent::Close),
                 ),
-                Button::new(
-                    ButtonBounds {
-                        relative: Rect::new(1.0, 1.0, 0.0, 0.0),
-                        absolute: Rect::new(-140.0, -80.0, 120.0, 60.0),
-                    },
-                    Text::new("Debug game"),
-                    MainMenuEvent::MainEvent(MainEvent::StartDebugGame),
-                ),
             ],
         );
-        debug_button.borrow_mut().state = ButtonState::inactive_if(!args.debug);
         MainMenuClient {
             parent_channel,
             _event_sender,

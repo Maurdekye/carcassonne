@@ -1,6 +1,6 @@
 #![feature(iter_map_windows)]
 
-use clap::{ArgAction, Parser};
+use clap::{Parser, ValueEnum};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event, ContextBuilder, GameResult,
@@ -27,19 +27,21 @@ fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     Ok((width, height))
 }
 
+#[derive(ValueEnum, Clone, Debug)]
+enum DebugGameConfiguration {
+    MeeplePlacement,
+    MultipleSegmentsPerTileScoring,
+}
+
 #[derive(Parser, Clone)]
 struct Args {
     /// Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
     #[arg(short, long, value_parser = fullscreen_value_parser)]
     fullscreen: Option<Option<(usize, usize)>>,
 
-    /// Enable debug mode
-    #[arg(short, long, action = ArgAction::SetTrue)]
-    debug: bool,
-
-    /// Start immediately playing a debug game
-    #[arg(short = 'D', long, action = ArgAction::SetTrue)]
-    debug_game: bool,
+    /// Immediately start a debug game configuration
+    #[arg(short, long)]
+    debug_config: Option<DebugGameConfiguration>,
 }
 
 fn main() -> GameResult {

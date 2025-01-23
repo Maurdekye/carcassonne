@@ -7,8 +7,12 @@ use slotmap::{DefaultKey, SlotMap};
 use crate::{
     pos::GridPos,
     tile::{
-        tile_definitions::STARTING_TILE, GridBorderCoordinate, Opposite, Orientation, Segment,
-        SegmentAttribute, SegmentBorderPiece, SegmentType, Tile,
+        tile_definitions::{
+            ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
+            FORTIFIED_CORNER_CITY, OPPOSING_EDGE_CITIES, STARTING_TILE,
+        },
+        GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
+        SegmentType, Tile,
     },
     util::{Bag, HashMapBag},
 };
@@ -78,7 +82,7 @@ impl Game {
         }
     }
 
-    pub fn meeple_locations_debug_game() -> Game {
+    pub fn meeple_locations_debug_game() -> Result<Game, GameError> {
         let library: Vec<Tile> = Tile::default_library_tallies()
             .into_iter()
             .map(|(tile, _)| tile)
@@ -96,12 +100,72 @@ impl Game {
                 ((i / width) as i32 - (height as i32 / 2)) * 2,
             );
             let segments = tile.segments.len();
-            this.place_tile(tile, pos).unwrap();
+            this.place_tile(tile, pos)?;
             for seg_index in 0..segments {
-                this.place_meeple((pos, seg_index), player_ident).unwrap();
+                this.place_meeple((pos, seg_index), player_ident)?;
             }
         }
-        this
+        Ok(this)
+    }
+
+    pub fn multiple_segments_per_tile_scoring_debug_game() -> Result<Game, GameError> {
+        let mut this = Game::new_with_library(vec![
+            BRIDGE_CITY.clone(),
+            BRIDGE_CITY.clone(),
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            CURVE_ROAD.clone().rotated().rotated().rotated(),
+        ]);
+
+        let player_ident = this.players.insert(Player::new(Color::BLACK));
+
+        // opposing edge cities
+
+        this.place_tile(OPPOSING_EDGE_CITIES.clone().rotated(), GridPos(-3, 0))?;
+        this.place_meeple((GridPos(-3, 0), 0), player_ident)?;
+        this.place_tile(CORNER_CITY.clone().rotated(), GridPos(-4, 0))?;
+        this.place_tile(CORNER_CITY.clone(), GridPos(-2, 0))?;
+        this.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(-4, -1))?;
+        this.place_tile(
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            GridPos(-2, -1),
+        )?;
+
+        this.place_tile(OPPOSING_EDGE_CITIES.clone().rotated(), GridPos(-3, -3))?;
+        this.place_meeple((GridPos(-3, -3), 0), player_ident)?;
+        this.place_tile(FORTIFIED_CORNER_CITY.clone().rotated(), GridPos(-4, -3))?;
+        this.place_tile(CORNER_CITY.clone(), GridPos(-2, -3))?;
+        this.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(-4, -4))?;
+        this.place_tile(
+            CORNER_CITY.clone().rotated().rotated().rotated(),
+            GridPos(-2, -4),
+        )?;
+
+        // adjacent edge cities
+
+        this.place_tile(ADJACENT_EDGE_CITIES.clone(), GridPos(0, 0))?;
+        this.place_meeple((GridPos(0, 0), 0), player_ident)?;
+        this.place_tile(CORNER_CITY.clone(), GridPos(1, 0))?;
+        this.place_tile(
+            CORNER_CITY.clone().rotated().rotated(),
+            GridPos(0, -1),
+        )?;
+
+        this.place_tile(ADJACENT_EDGE_CITIES.clone(), GridPos(0, -3))?;
+        this.place_meeple((GridPos(0, -3), 0), player_ident)?;
+        this.place_tile(FORTIFIED_CORNER_CITY.clone(), GridPos(1, -3))?;
+        this.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, -4))?;
+
+        // crossroads
+
+        this.place_tile(CROSSROADS.clone().rotated().rotated(), GridPos(3, 0))?;
+        this.place_meeple((GridPos(3, 0), 4), player_ident)?;
+        this.place_tile(CURVE_ROAD.clone(), GridPos(4, 0))?;
+        this.place_tile(CURVE_ROAD.clone().rotated().rotated(), GridPos(3, -1))?;
+
+        this.players.get_mut(player_ident).unwrap().meeples = 0;
+
+        Ok(this)
     }
 
     pub fn place_tile(
@@ -322,10 +386,11 @@ impl Game {
 
         let group_score = match group.gtype {
             SegmentType::City | SegmentType::Road => {
-                let tile_span: usize = group
+                let Bag(tile_scores) = group
                     .segments
                     .iter()
                     .map(|seg_ident| {
+                        let (pos, _) = seg_ident;
                         if self
                             .segment_by_ident(*seg_ident)
                             .unwrap()
@@ -333,11 +398,15 @@ impl Game {
                             .iter()
                             .any(|a| matches!(a, SegmentAttribute::Fortified { .. }))
                         {
-                            2
+                            (pos, 2)
                         } else {
-                            1
+                            (pos, 1)
                         }
                     })
+                    .collect();
+                let tile_span: usize = tile_scores
+                    .values()
+                    .flat_map(|scores| scores.iter().max())
                     .sum();
                 let base_score = match group.gtype {
                     SegmentType::City if !group.free_edges.is_empty() => 1,
@@ -740,18 +809,6 @@ impl Game {
     }
 }
 
-#[test]
-fn test_group_coallating() {
-    use crate::tile::tile_definitions::*;
-    let mut game = Game::new();
-    game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))
-        .unwrap();
-    game.place_tile(CURVE_ROAD.clone().rotated(), GridPos(-1, 0))
-        .unwrap();
-    game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
-        .unwrap();
-}
-
 #[cfg(test)]
 mod test {
     use ggez::{graphics::Color, GameResult};
@@ -766,6 +823,18 @@ mod test {
     };
 
     use super::player::Player;
+
+    #[test]
+    fn test_group_coallating() {
+        use crate::tile::tile_definitions::*;
+        let mut game = Game::new();
+        game.place_tile(STRAIGHT_ROAD.clone(), GridPos(0, 0))
+            .unwrap();
+        game.place_tile(CURVE_ROAD.clone().rotated(), GridPos(-1, 0))
+            .unwrap();
+        game.place_tile(CORNER_CITY.clone().rotated(), GridPos(0, -1))
+            .unwrap();
+    }
 
     #[test]
     pub fn test_group_outline_generation() -> GameResult {

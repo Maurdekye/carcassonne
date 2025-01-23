@@ -9,12 +9,22 @@ use ggez::{
     Context, GameError,
 };
 
-use crate::{game::Game, game_client::GameClient, main_menu_client::MainMenuClient, Args};
+use crate::{game::Game, game_client::GameClient, main_menu_client::MainMenuClient, Args, DebugGameConfiguration};
+
+impl DebugGameConfiguration {
+    pub fn get_game(&self) -> Result<Game, GameError> {
+        use DebugGameConfiguration::*;
+        match self {
+            MeeplePlacement => Game::meeple_locations_debug_game(),
+            MultipleSegmentsPerTileScoring => Game::multiple_segments_per_tile_scoring_debug_game(),
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
     StartGame(usize),
-    StartDebugGame,
+    StartDebugGame(DebugGameConfiguration),
     ReturnToMainMenu,
     Close,
 }
@@ -30,8 +40,8 @@ pub struct MainClient {
 impl MainClient {
     pub fn new(args: Args) -> MainClient {
         let (event_sender, event_receiver) = channel();
-        if args.debug_game {
-            event_sender.send(MainEvent::StartDebugGame).unwrap();
+        if let Some(debug_config) = &args.debug_config {
+            event_sender.send(MainEvent::StartDebugGame(debug_config.clone())).unwrap();
         }
         MainClient {
             scene: Box::new(MainMenuClient::new(event_sender.clone(), args.clone())),
@@ -61,10 +71,10 @@ impl MainClient {
                 self.quitting = true;
                 ctx.request_quit();
             }
-            MainEvent::StartDebugGame => {
+            MainEvent::StartDebugGame(config) => {
                 self.scene = Box::new(GameClient::new_with_game(
                     ctx,
-                    Game::meeple_locations_debug_game(),
+                    config.get_game()?,
                     self.event_sender.clone(),
                 ))
             }
