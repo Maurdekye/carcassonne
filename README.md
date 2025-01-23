@@ -5,6 +5,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 ### Options
 
  * `--fullscreen` / `-f`: Start in fullscreen. Provide a resolution to start in that fullscreen resolution. Default 1920x1080
+ * `--debug <CONFIG>` / `-d <CONFIG>`: Open up immediately into a debug game configuration.
 
 ### Controls
 
@@ -21,12 +22,12 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Main menu~~
 * ~~Better game ending animation~~
 * ~~Pause Menu~~
+* ~~Undo~~
 * Controls screen
-* Counterclockwise rotation
 * Choose player colors
-* More animations in general
-* Undo
 * Inspect segment groups
+* Counterclockwise rotation
+* More animations in general
 * River tiles
 * Multiplayer
 * Use scans of actual tiles
