@@ -99,7 +99,7 @@ impl EventHandler<GameError> for MainMenuClient {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         // render title
-        let mut menu_text = Text::new("Carcassone");
+        let mut menu_text = Text::new("Carcassonne");
         menu_text.set_scale(144.0);
         let text_size: Vec2 = menu_text.measure(ctx)?.into();
         canvas.draw(
