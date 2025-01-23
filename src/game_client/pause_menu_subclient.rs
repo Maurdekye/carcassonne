@@ -15,7 +15,7 @@ use crate::{
 
 mod main_pause_screen_subclient;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub enum PauseMenuEvent {
     GameEvent(GameEvent),
 }
@@ -29,12 +29,12 @@ pub struct PauseMenuSubclient {
 }
 
 impl PauseMenuSubclient {
-    pub fn new(parent_channel: Sender<GameEvent>) -> PauseMenuSubclient {
+    pub fn new(parent_channel: Sender<GameEvent>, is_endgame: bool) -> PauseMenuSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         PauseMenuSubclient {
             parent_channel,
-            scene: Box::new(MainPauseScreenSubclient::new(event_sender.clone())),
+            scene: Box::new(MainPauseScreenSubclient::new(event_sender.clone(), is_endgame)),
             _event_sender: event_sender,
             event_receiver,
             ui: UIManager::new(

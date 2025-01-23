@@ -10,7 +10,7 @@ use crate::main_client::MainEvent;
 use crate::pos::GridPos;
 use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
-use crate::ui_manager::{Button, ButtonBounds, UIManager};
+use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
 use crate::util::{point_in_polygon, refit_to_rect, DrawableWihParamsExt, TextExt};
 
 use ggez::input::keyboard::KeyCode;
@@ -386,11 +386,16 @@ impl EventHandler<GameError> for GameClient {
         let mut on_clickable = false;
         let mouse: Vec2 = ctx.mouse.position().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
+        let is_endgame = matches!(self.turn_phase, TurnPhase::EndGame { .. });
 
-        self.skip_meeples_button.borrow_mut().enabled =
-            matches!(self.turn_phase, TurnPhase::MeeplePlacement { .. });
-        self.return_to_main_menu_button.borrow_mut().enabled =
-            matches!(self.turn_phase, TurnPhase::EndGame { next_tick: None });
+        self.skip_meeples_button.borrow_mut().state = ButtonState::inactive_if(!matches!(
+            self.turn_phase,
+            TurnPhase::MeeplePlacement { .. }
+        ));
+        self.return_to_main_menu_button.borrow_mut().state = ButtonState::inactive_if(!matches!(
+            self.turn_phase,
+            TurnPhase::EndGame { next_tick: None }
+        ));
 
         // update ui
         self.ui.update(ctx);
@@ -402,7 +407,7 @@ impl EventHandler<GameError> for GameClient {
 
         // open pause menu
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
-            self.pause_menu = Some(PauseMenuSubclient::new(self.event_sender.clone()));
+            self.pause_menu = Some(PauseMenuSubclient::new(self.event_sender.clone(), is_endgame));
         }
 
         // update scoring effects

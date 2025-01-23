@@ -41,6 +41,30 @@ impl ButtonBounds {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum ButtonState {
+    Enabled,
+    Disabled,
+    Inactive,
+}
+
+impl ButtonState {
+    pub fn disabled_if(is_disabled: bool) -> ButtonState {
+        if is_disabled {
+            ButtonState::Disabled
+        } else {
+            ButtonState::Enabled
+        }
+    }
+    pub fn inactive_if(is_inactive: bool) -> ButtonState {
+        if is_inactive {
+            ButtonState::Inactive
+        } else {
+            ButtonState::Enabled
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Button<E> {
     bounds: ButtonBounds,
@@ -48,9 +72,10 @@ pub struct Button<E> {
     body_color: Color,
     highlight_color: Color,
     depress_color: Color,
+    disabled_color: Color,
     text_drawparam: DrawParam,
     event: E,
-    pub enabled: bool,
+    pub state: ButtonState,
 }
 
 impl<E> Button<E> {
@@ -68,8 +93,9 @@ impl<E> Button<E> {
             body_color: color,
             highlight_color: color_mul(color, 1.2),
             depress_color: color_mul(color, 0.8),
+            disabled_color: color_mul(BUTTON_COLOR, 1.75),
             event,
-            enabled: true,
+            state: ButtonState::Enabled,
         }
     }
 
@@ -99,6 +125,7 @@ pub struct UIManager<E> {
 }
 
 impl<E> UIManager<E> {
+    #[allow(clippy::type_complexity)]
     pub fn new_and_rc_buttons<const N: usize>(
         event_sender: Sender<E>,
         buttons: [Button<E>; N],
@@ -138,13 +165,18 @@ impl<E> UIManager<E> {
             .buttons
             .iter()
             .map(|button| button.borrow())
-            .filter(|b| b.enabled)
+            .filter(|b| !matches!(b.state, ButtonState::Inactive))
         {
             let bounds = button.corrected_bounds(res);
             let contains = bounds.contains(self.mouse_position);
-            let color = match (contains, ctx.mouse.button_pressed(MouseButton::Left)) {
-                (true, true) => button.depress_color,
-                (true, _) => button.highlight_color,
+            let color = match (
+                &button.state,
+                contains,
+                ctx.mouse.button_pressed(MouseButton::Left),
+            ) {
+                (ButtonState::Disabled, _, _) => button.disabled_color,
+                (_, true, true) => button.depress_color,
+                (_, true, _) => button.highlight_color,
                 _ => button.body_color,
             };
             Mesh::new_rounded_rectangle(ctx, DrawMode::fill(), bounds, 5.0, color)?.draw(canvas);
@@ -168,7 +200,7 @@ impl<E> UIManager<E> {
             .buttons
             .iter()
             .map(|button| button.borrow())
-            .filter(|b| b.enabled)
+            .filter(|b| matches!(b.state, ButtonState::Enabled))
         {
             let bounds = button.corrected_bounds(res);
             if bounds.contains(self.mouse_position) {

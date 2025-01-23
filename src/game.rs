@@ -78,7 +78,6 @@ impl Game {
         }
     }
 
-    #[allow(unused)]
     pub fn meeple_locations_debug_game() -> Game {
         let library: Vec<Tile> = Tile::default_library_tallies()
             .into_iter()
@@ -298,7 +297,6 @@ impl Game {
             .and_then(|key| self.groups.get_mut(*key).map(|group| (group, *key)))
     }
 
-    #[allow(unused)]
     pub fn segment_by_ident(&self, (grid_pos, seg_index): SegmentIdentifier) -> Option<&Segment> {
         self.placed_tiles
             .get(&grid_pos)

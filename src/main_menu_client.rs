@@ -9,7 +9,7 @@ use ggez::{
 
 use crate::{
     main_client::MainEvent,
-    ui_manager::{Button, ButtonBounds, UIManager},
+    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
     Args,
 };
 
@@ -84,7 +84,7 @@ impl MainMenuClient {
                 ),
             ],
         );
-        debug_button.borrow_mut().enabled = args.debug;
+        debug_button.borrow_mut().state = ButtonState::inactive_if(!args.debug);
         MainMenuClient {
             parent_channel,
             _event_sender,

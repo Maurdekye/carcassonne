@@ -9,13 +9,13 @@ use crate::{
     game_client::GameEvent,
     main_client::MainEvent,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, UIManager},
+    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
 };
 
 use super::PauseMenuEvent;
 
-#[derive(Clone)]
-enum MainPauseScreenEvent {
+#[derive(Debug, Clone)]
+pub enum MainPauseScreenEvent {
     PauseMenuEvent(PauseMenuEvent),
 }
 
@@ -37,43 +37,48 @@ pub struct MainPauseScreenSubclient {
 }
 
 impl MainPauseScreenSubclient {
-    pub fn new(parent_channel: Sender<PauseMenuEvent>) -> MainPauseScreenSubclient {
+    pub fn new(
+        parent_channel: Sender<PauseMenuEvent>,
+        is_endgame: bool,
+    ) -> MainPauseScreenSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let button_center = Rect::new(0.5, 0.2, 0.0, 0.0);
+        let (ui, [end_game_button, ..]) = UIManager::new_and_rc_buttons(
+            ui_sender,
+            [
+                Button::new(
+                    ButtonBounds {
+                        relative: button_center,
+                        absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
+                    },
+                    Text::new("End Game"),
+                    MainPauseScreenEvent::game_event(GameEvent::EndGame),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: button_center,
+                        absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
+                    },
+                    Text::new("Reset Camera"),
+                    MainPauseScreenEvent::game_event(GameEvent::ResetCamera),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: button_center,
+                        absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
+                    },
+                    Text::new("Return to Main Menu"),
+                    MainPauseScreenEvent::main_event(MainEvent::ReturnToMainMenu),
+                ),
+            ],
+        );
+        end_game_button.borrow_mut().state = ButtonState::disabled_if(is_endgame);
         MainPauseScreenSubclient {
             parent_channel,
             event_sender,
             event_receiver,
-            ui: UIManager::new(
-                ui_sender,
-                [
-                    Button::new(
-                        ButtonBounds {
-                            relative: button_center,
-                            absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
-                        },
-                        Text::new("End Game"),
-                        MainPauseScreenEvent::game_event(GameEvent::EndGame),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: button_center,
-                            absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
-                        },
-                        Text::new("Reset Camera"),
-                        MainPauseScreenEvent::game_event(GameEvent::ResetCamera),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: button_center,
-                            absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
-                        },
-                        Text::new("Return to Main Menu"),
-                        MainPauseScreenEvent::main_event(MainEvent::ReturnToMainMenu),
-                    ),
-                ],
-            ),
+            ui,
         }
     }
 
