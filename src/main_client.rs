@@ -9,11 +9,12 @@ use ggez::{
     Context, GameError,
 };
 
-use crate::{game_client::GameClient, main_menu_client::MainMenuClient};
+use crate::{game::Game, game_client::GameClient, main_menu_client::MainMenuClient, Args};
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
     StartGame(usize),
+    StartDebugGame,
     ReturnToMainMenu,
     Close,
 }
@@ -23,16 +24,18 @@ pub struct MainClient {
     event_sender: Sender<MainEvent>,
     event_receiver: Receiver<MainEvent>,
     quitting: bool,
+    args: Args,
 }
 
 impl MainClient {
-    pub fn new() -> MainClient {
+    pub fn new(args: Args) -> MainClient {
         let (event_sender, event_receiver) = channel();
         MainClient {
-            scene: Box::new(MainMenuClient::new(event_sender.clone())),
+            scene: Box::new(MainMenuClient::new(event_sender.clone(), args.clone())),
             event_sender,
             event_receiver,
             quitting: false,
+            args,
         }
     }
 
@@ -46,11 +49,21 @@ impl MainClient {
                 ))
             }
             MainEvent::ReturnToMainMenu => {
-                self.scene = Box::new(MainMenuClient::new(self.event_sender.clone()))
+                self.scene = Box::new(MainMenuClient::new(
+                    self.event_sender.clone(),
+                    self.args.clone(),
+                ))
             }
             MainEvent::Close => {
                 self.quitting = true;
                 ctx.request_quit();
+            }
+            MainEvent::StartDebugGame => {
+                self.scene = Box::new(GameClient::new_with_game(
+                    ctx,
+                    Game::meeple_locations_debug_game(),
+                    self.event_sender.clone(),
+                ))
             }
         }
         Ok(())

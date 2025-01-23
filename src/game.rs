@@ -7,8 +7,8 @@ use slotmap::{DefaultKey, SlotMap};
 use crate::{
     pos::GridPos,
     tile::{
-        get_tile_library, GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute,
-        SegmentBorderPiece, SegmentType, Tile,
+        tile_definitions::STARTING_TILE, GridBorderCoordinate, Opposite, Orientation, Segment,
+        SegmentAttribute, SegmentBorderPiece, SegmentType, Tile,
     },
     util::{Bag, HashMapBag},
 };
@@ -65,7 +65,7 @@ pub struct Game {
 
 impl Game {
     pub fn new() -> Game {
-        Game::new_with_library(get_tile_library())
+        Game::new_with_library(Tile::default_library())
     }
 
     pub fn new_with_library(library: Vec<Tile>) -> Game {
@@ -76,6 +76,33 @@ impl Game {
             group_associations: HashMap::new(),
             players: SlotMap::new(),
         }
+    }
+
+    #[allow(unused)]
+    pub fn meeple_locations_debug_game() -> Game {
+        let library: Vec<Tile> = Tile::default_library_tallies()
+            .into_iter()
+            .map(|(tile, _)| tile)
+            .cloned()
+            .collect();
+        let width = library.len().isqrt().max(1);
+        let height = library.len() / width;
+        let mut this = Game::new_with_library(vec![STARTING_TILE.clone()]);
+        let player_ident = this.players.insert(Player::new(Color::BLACK));
+        this.players.get_mut(player_ident).unwrap().meeples =
+            library.iter().map(|tile| tile.segments.len()).sum();
+        for (i, tile) in library.into_iter().enumerate() {
+            let pos = GridPos(
+                ((i % width) as i32 - (width as i32 / 2)) * 2,
+                ((i / width) as i32 - (height as i32 / 2)) * 2,
+            );
+            let segments = tile.segments.len();
+            this.place_tile(tile, pos).unwrap();
+            for seg_index in 0..segments {
+                this.place_meeple((pos, seg_index), player_ident).unwrap();
+            }
+        }
+        this
     }
 
     pub fn place_tile(

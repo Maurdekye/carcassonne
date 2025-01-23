@@ -47,7 +47,7 @@ impl MainPauseScreenSubclient {
             event_receiver,
             ui: UIManager::new(
                 ui_sender,
-                vec![
+                [
                     Button::new(
                         ButtonBounds {
                             relative: button_center,

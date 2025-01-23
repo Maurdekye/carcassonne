@@ -1,4 +1,4 @@
-use std::sync::mpsc::Sender;
+use std::{cell::RefCell, rc::Rc, sync::mpsc::Sender};
 
 use ggez::{
     event::MouseButton,
@@ -17,6 +17,7 @@ pub const BUTTON_COLOR: Color = Color {
     a: 1.0,
 };
 
+#[derive(Debug)]
 pub struct ButtonBounds {
     pub relative: Rect,
     pub absolute: Rect,
@@ -40,6 +41,7 @@ impl ButtonBounds {
     }
 }
 
+#[derive(Debug)]
 pub struct Button<E> {
     bounds: ButtonBounds,
     text: Text,
@@ -90,16 +92,40 @@ impl<E> Button<E> {
 }
 
 pub struct UIManager<E> {
-    pub buttons: Vec<Button<E>>,
+    buttons: Vec<Rc<RefCell<Button<E>>>>,
     pub on_ui: bool,
     event_sender: Sender<E>,
     mouse_position: Vec2,
 }
 
 impl<E> UIManager<E> {
-    pub fn new(event_sender: Sender<E>, buttons: Vec<Button<E>>) -> UIManager<E> {
+    pub fn new_and_rc_buttons<const N: usize>(
+        event_sender: Sender<E>,
+        buttons: [Button<E>; N],
+    ) -> (UIManager<E>, [Rc<RefCell<Button<E>>>; N])
+    where
+        E: std::fmt::Debug,
+    {
+        let (buttons, return_buttons): (Vec<_>, Vec<_>) = buttons
+            .into_iter()
+            .map(RefCell::new)
+            .map(Rc::new)
+            .map(|button| (button.clone(), button))
+            .unzip();
+        (
+            UIManager {
+                buttons,
+                on_ui: false,
+                event_sender,
+                mouse_position: Vec2::ZERO,
+            },
+            return_buttons.try_into().unwrap(),
+        )
+    }
+
+    pub fn new<const N: usize>(event_sender: Sender<E>, buttons: [Button<E>; N]) -> UIManager<E> {
         UIManager {
-            buttons,
+            buttons: buttons.into_iter().map(RefCell::new).map(Rc::new).collect(),
             on_ui: false,
             event_sender,
             mouse_position: Vec2::ZERO,
@@ -108,7 +134,12 @@ impl<E> UIManager<E> {
 
     pub fn draw(&self, ctx: &Context, canvas: &mut Canvas) -> Result<(), GameError> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        for button in self.buttons.iter().filter(|b| b.enabled) {
+        for button in self
+            .buttons
+            .iter()
+            .map(|button| button.borrow())
+            .filter(|b| b.enabled)
+        {
             let bounds = button.corrected_bounds(res);
             let contains = bounds.contains(self.mouse_position);
             let color = match (contains, ctx.mouse.button_pressed(MouseButton::Left)) {
@@ -133,7 +164,12 @@ impl<E> UIManager<E> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         self.mouse_position = ctx.mouse.position().into();
         self.on_ui = false;
-        for button in self.buttons.iter().filter(|b| b.enabled) {
+        for button in self
+            .buttons
+            .iter()
+            .map(|button| button.borrow())
+            .filter(|b| b.enabled)
+        {
             let bounds = button.corrected_bounds(res);
             if bounds.contains(self.mouse_position) {
                 self.on_ui = true;

@@ -39,7 +39,7 @@ impl PauseMenuSubclient {
             event_receiver,
             ui: UIManager::new(
                 ui_sender,
-                vec![Button::new(
+                [Button::new(
                     ButtonBounds::absolute(Rect::new(15.0, 15.0, 30.0, 30.0)),
                     Text::new("X"),
                     PauseMenuEvent::GameEvent(GameEvent::ClosePauseMenu),

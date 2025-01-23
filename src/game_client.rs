@@ -1,4 +1,6 @@
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::game::{
@@ -80,7 +82,6 @@ pub struct GameClient {
     parent_channel: Sender<MainEvent>,
     event_sender: Sender<GameEvent>,
     event_receiver: Receiver<GameEvent>,
-    ui: UIManager<GameEvent>,
     pause_menu: Option<PauseMenuSubclient>,
     selected_square: Option<GridPos>,
     last_selected_square: Option<GridPos>,
@@ -92,6 +93,9 @@ pub struct GameClient {
     scale: f32,
     scoring_effects: Vec<ScoringEffect>,
     game: Game,
+    skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
+    return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
+    ui: UIManager<GameEvent>,
 }
 
 impl GameClient {
@@ -119,6 +123,29 @@ impl GameClient {
         let first_tile = game.draw_placeable_tile().unwrap();
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
+        let (ui, [skip_meeples_button, return_to_main_menu_button]) = UIManager::new_and_rc_buttons(
+            ui_sender,
+            [
+                Button::new_with_styling(
+                    ButtonBounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-180.0, 20.0, 160.0, 40.0),
+                    },
+                    Text::new("Skip meeples"),
+                    DrawParam::default(),
+                    Color::from_rgb(0, 128, 192),
+                    GameEvent::SkipMeeples,
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
+                    },
+                    Text::new("Return to Main Menu"),
+                    GameEvent::MainEvent(MainEvent::ReturnToMainMenu),
+                ),
+            ],
+        );
         let mut this = Self {
             parent_channel,
             event_sender,
@@ -134,29 +161,9 @@ impl GameClient {
             turn_order: game.players.keys().collect(),
             scoring_effects: Vec::new(),
             game,
-            ui: UIManager::new(
-                ui_sender,
-                vec![
-                    Button::new_with_styling(
-                        ButtonBounds {
-                            relative: Rect::new(1.0, 0.0, 0.0, 0.0),
-                            absolute: Rect::new(-180.0, 20.0, 160.0, 40.0),
-                        },
-                        Text::new("Skip meeples"),
-                        DrawParam::default(),
-                        Color::from_rgb(0, 128, 192),
-                        GameEvent::SkipMeeples,
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: Rect::new(1.0, 0.0, 0.0, 0.0),
-                            absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
-                        },
-                        Text::new("Return to Main Menu"),
-                        GameEvent::MainEvent(MainEvent::ReturnToMainMenu),
-                    ),
-                ],
-            ),
+            skip_meeples_button,
+            return_to_main_menu_button,
+            ui,
         };
         this.reset_camera(ctx);
         this
@@ -380,8 +387,9 @@ impl EventHandler<GameError> for GameClient {
         let mouse: Vec2 = ctx.mouse.position().into();
         let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
 
-        self.ui.buttons[0].enabled = matches!(self.turn_phase, TurnPhase::MeeplePlacement { .. });
-        self.ui.buttons[1].enabled =
+        self.skip_meeples_button.borrow_mut().enabled =
+            matches!(self.turn_phase, TurnPhase::MeeplePlacement { .. });
+        self.return_to_main_menu_button.borrow_mut().enabled =
             matches!(self.turn_phase, TurnPhase::EndGame { next_tick: None });
 
         // update ui

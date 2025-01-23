@@ -446,6 +446,42 @@ pub struct Tile {
 }
 
 impl Tile {
+    pub fn default_library_tallies() -> Vec<(&'static Tile, usize)> {
+        vec![
+            (&*STARTING_TILE, 3),
+            (&*STRAIGHT_ROAD, 8),
+            (&*CURVE_ROAD, 9),
+            (&*CROSSROADS, 4),
+            (&*FOUR_WAY_CROSSROADS, 1),
+            (&*EDGE_CITY, 5),
+            (&*EDGE_CITY_LEFT_CURVE_ROAD, 3),
+            (&*EDGE_CITY_RIGHT_CURVE_ROAD, 3),
+            (&*EDGE_CITY_CROSSROADS, 3),
+            (&*ADJACENT_EDGE_CITIES, 2),
+            (&*OPPOSING_EDGE_CITIES, 3),
+            (&*CORNER_CITY, 3),
+            (&*FORTIFIED_CORNER_CITY, 2),
+            (&*CORNER_CITY_CURVE_ROAD, 3),
+            (&*FORTIFIED_CORNER_CITY_CURVE_ROAD, 2),
+            (&*BRIDGE_CITY, 1),
+            (&*FORTIFIED_BRIDGE_CITY, 2),
+            (&*THREE_QUARTER_CITY, 3),
+            (&*FORTIFIED_THREE_QUARTER_CITY, 1),
+            (&*THREE_QUARTER_CITY_ENTRANCE, 1),
+            (&*FORITIFED_THREE_QUARTER_CITY_ENTRANCE, 2),
+            (&*FULL_FORTIFIED_CITY, 1),
+            (&*MONASTARY, 4),
+            (&*ROAD_MONASTARY, 2),
+        ]
+    }
+
+    pub fn default_library() -> Vec<Tile> {
+        Self::default_library_tallies()
+            .into_iter()
+            .flat_map(|(tile, count)| (0..count).map(|_| tile.clone()))
+            .collect()
+    }
+
     pub fn new_with_attributes(
         mut verts: Vec<Vec2>,
         segment_definitions: Vec<SegmentDefinition>,
@@ -746,45 +782,4 @@ impl Tile {
             .enumerate()
             .filter_map(|(i, a)| a.then_some((i, &self.segments[i])))
     }
-}
-
-#[rustfmt::skip]
-pub fn get_tile_library() -> Vec<Tile> {
-    [
-        (&*STARTING_TILE, 3),
-
-        (&*STRAIGHT_ROAD, 8),
-        (&*CURVE_ROAD, 9),
-        (&*CROSSROADS, 4),
-        (&*FOUR_WAY_CROSSROADS, 1),
-
-        (&*EDGE_CITY, 5),
-        (&*EDGE_CITY_LEFT_CURVE_ROAD, 3),
-        (&*EDGE_CITY_RIGHT_CURVE_ROAD, 3),
-        (&*EDGE_CITY_CROSSROADS, 3),
-
-        (&*ADJACENT_EDGE_CITIES, 2),
-        (&*OPPOSING_EDGE_CITIES, 3),
-
-        (&*CORNER_CITY, 3),
-        (&*FORTIFIED_CORNER_CITY, 2),
-        (&*CORNER_CITY_CURVE_ROAD, 3),
-        (&*FORTIFIED_CORNER_CITY_CURVE_ROAD, 2),
-
-        (&*BRIDGE_CITY, 1),
-        (&*FORTIFIED_BRIDGE_CITY, 2),
-
-        (&*THREE_QUARTER_CITY, 3),
-        (&*FORTIFIED_THREE_QUARTER_CITY, 1),
-        (&*THREE_QUARTER_CITY_ENTRANCE, 1),
-        (&*FORITIFED_THREE_QUARTER_CITY_ENTRANCE, 2),
-
-        (&*FULL_FORTIFIED_CITY, 1),
-
-        (&*MONASTARY, 4),
-        (&*ROAD_MONASTARY, 2),
-    ]
-    .into_iter()
-    .flat_map(|(tile, count)| vec![tile.clone(); count])
-    .collect()
 }

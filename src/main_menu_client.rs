@@ -10,9 +10,10 @@ use ggez::{
 use crate::{
     main_client::MainEvent,
     ui_manager::{Button, ButtonBounds, UIManager},
+    Args,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum MainMenuEvent {
     MainEvent(MainEvent),
 }
@@ -21,63 +22,75 @@ pub struct MainMenuClient {
     parent_channel: Sender<MainEvent>,
     _event_sender: Sender<MainMenuEvent>,
     event_receiver: Receiver<MainMenuEvent>,
+    _args: Args,
     ui: UIManager<MainMenuEvent>,
 }
 
 impl MainMenuClient {
-    pub fn new(parent_channel: Sender<MainEvent>) -> MainMenuClient {
+    pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MainMenuClient {
         let buttons_center = Rect::new(0.5, 0.65, 0.0, 0.0);
         let (_event_sender, event_receiver) = channel();
         let ui_sender = _event_sender.clone();
+        let (ui, [.., debug_button]) = UIManager::new_and_rc_buttons(
+            ui_sender,
+            [
+                Button::new(
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(-200.0, -80.0, 180.0, 60.0),
+                    },
+                    Text::new("2 Players"),
+                    MainMenuEvent::MainEvent(MainEvent::StartGame(2)),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(20.0, -80.0, 180.0, 60.0),
+                    },
+                    Text::new("3 Players"),
+                    MainMenuEvent::MainEvent(MainEvent::StartGame(3)),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(-200.0, 20.0, 180.0, 60.0),
+                    },
+                    Text::new("4 Players"),
+                    MainMenuEvent::MainEvent(MainEvent::StartGame(4)),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: buttons_center,
+                        absolute: Rect::new(20.0, 20.0, 180.0, 60.0),
+                    },
+                    Text::new("5 Players"),
+                    MainMenuEvent::MainEvent(MainEvent::StartGame(5)),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                        absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
+                    },
+                    Text::new("Quit"),
+                    MainMenuEvent::MainEvent(MainEvent::Close),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(1.0, 1.0, 0.0, 0.0),
+                        absolute: Rect::new(-140.0, -80.0, 120.0, 60.0),
+                    },
+                    Text::new("Debug game"),
+                    MainMenuEvent::MainEvent(MainEvent::StartDebugGame),
+                ),
+            ],
+        );
+        debug_button.borrow_mut().enabled = args.debug;
         MainMenuClient {
             parent_channel,
             _event_sender,
             event_receiver,
-            ui: UIManager::new(
-                ui_sender,
-                vec![
-                    Button::new(
-                        ButtonBounds {
-                            relative: buttons_center,
-                            absolute: Rect::new(-200.0, -80.0, 180.0, 60.0),
-                        },
-                        Text::new("2 Players"),
-                        MainMenuEvent::MainEvent(MainEvent::StartGame(2)),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: buttons_center,
-                            absolute: Rect::new(20.0, -80.0, 180.0, 60.0),
-                        },
-                        Text::new("3 Players"),
-                        MainMenuEvent::MainEvent(MainEvent::StartGame(3)),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: buttons_center,
-                            absolute: Rect::new(-200.0, 20.0, 180.0, 60.0),
-                        },
-                        Text::new("4 Players"),
-                        MainMenuEvent::MainEvent(MainEvent::StartGame(4)),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: buttons_center,
-                            absolute: Rect::new(20.0, 20.0, 180.0, 60.0),
-                        },
-                        Text::new("5 Players"),
-                        MainMenuEvent::MainEvent(MainEvent::StartGame(5)),
-                    ),
-                    Button::new(
-                        ButtonBounds {
-                            relative: Rect::new(0.5, 1.0, 0.0, 0.0),
-                            absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
-                        },
-                        Text::new("Quit"),
-                        MainMenuEvent::MainEvent(MainEvent::Close),
-                    ),
-                ],
-            ),
+            _args: args,
+            ui,
         }
     }
 }

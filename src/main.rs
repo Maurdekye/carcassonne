@@ -1,6 +1,6 @@
 #![feature(iter_map_windows)]
 
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event, ContextBuilder, GameResult,
@@ -27,11 +27,15 @@ fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     Ok((width, height))
 }
 
-#[derive(Parser)]
+#[derive(Parser, Clone)]
 struct Args {
     /// Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
     #[arg(short, long, value_parser = fullscreen_value_parser)]
     fullscreen: Option<Option<(usize, usize)>>,
+
+    /// Enable debug mode
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    debug: bool,
 }
 
 fn main() -> GameResult {
@@ -54,7 +58,7 @@ fn main() -> GameResult {
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
-    let client = MainClient::new();
+    let client = MainClient::new(args);
 
     event::run(ctx, event_loop, client);
 }
