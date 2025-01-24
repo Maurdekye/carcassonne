@@ -45,7 +45,7 @@ impl ButtonBounds {
 pub enum ButtonState {
     Enabled,
     Disabled,
-    Inactive,
+    Invisible,
 }
 
 impl ButtonState {
@@ -56,9 +56,9 @@ impl ButtonState {
             ButtonState::Enabled
         }
     }
-    pub fn inactive_if(is_inactive: bool) -> ButtonState {
-        if is_inactive {
-            ButtonState::Inactive
+    pub fn invisible_if(is_invisible: bool) -> ButtonState {
+        if is_invisible {
+            ButtonState::Invisible
         } else {
             ButtonState::Enabled
         }
@@ -144,12 +144,7 @@ impl<E> UIManager<E> {
     }
 
     pub fn new<const N: usize>(event_sender: Sender<E>, buttons: [Button<E>; N]) -> UIManager<E> {
-        UIManager {
-            buttons: buttons.into_iter().map(RefCell::new).map(Rc::new).collect(),
-            on_ui: false,
-            event_sender,
-            mouse_position: Vec2::ZERO,
-        }
+        Self::new_and_rc_buttons(event_sender, buttons).0
     }
 
     pub fn draw(&self, ctx: &Context, canvas: &mut Canvas) -> Result<(), GameError> {
@@ -158,7 +153,7 @@ impl<E> UIManager<E> {
             .buttons
             .iter()
             .map(|button| button.borrow())
-            .filter(|b| !matches!(b.state, ButtonState::Inactive))
+            .filter(|b| !matches!(b.state, ButtonState::Invisible))
         {
             let bounds = button.corrected_bounds(res);
             let contains = bounds.contains(self.mouse_position);

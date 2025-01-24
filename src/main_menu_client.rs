@@ -3,13 +3,14 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use ggez::{
     event::EventHandler,
     glam::{vec2, Vec2},
-    graphics::{Canvas, Color, DrawParam, Rect, Text},
+    graphics::{Canvas, Color, Rect, Text},
     GameError,
 };
 
 use crate::{
     main_client::MainEvent,
     ui_manager::{Button, ButtonBounds, UIManager},
+    util::TextExt,
     Args,
 };
 
@@ -103,13 +104,11 @@ impl EventHandler<GameError> for MainMenuClient {
         let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         // render title
-        let mut menu_text = Text::new("Carcassonne");
-        menu_text.set_scale(144.0);
-        let text_size: Vec2 = menu_text.measure(ctx)?.into();
-        canvas.draw(
-            &menu_text,
-            DrawParam::from((res - text_size) * vec2(0.5, 0.2)).color(Color::BLACK),
-        );
+        Text::new("Carcassonne")
+            .size(144.0)
+            .centered_on(ctx, res * vec2(0.5, 0.2))?
+            .color(Color::BLACK)
+            .draw(&mut canvas);
 
         // render ui
         self.ui.draw(ctx, &mut canvas)?;

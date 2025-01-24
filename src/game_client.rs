@@ -474,11 +474,11 @@ impl EventHandler<GameError> for GameClient {
         let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
         let has_history = !self.history.is_empty();
 
-        self.skip_meeples_button.borrow_mut().state = ButtonState::inactive_if(!matches!(
+        self.skip_meeples_button.borrow_mut().state = ButtonState::invisible_if(!matches!(
             self.state.turn_phase,
             TurnPhase::MeeplePlacement { .. }
         ));
-        self.return_to_main_menu_button.borrow_mut().state = ButtonState::inactive_if(!matches!(
+        self.return_to_main_menu_button.borrow_mut().state = ButtonState::invisible_if(!matches!(
             self.state.turn_phase,
             TurnPhase::EndGame { next_tick: None }
         ));

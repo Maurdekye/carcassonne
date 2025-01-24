@@ -134,12 +134,28 @@ pub fn color_mul(color: Color, factor: f32) -> Color {
     ))
 }
 
+#[allow(unused)]
+#[derive(Clone, Copy)]
+pub enum AnchorPoint {
+    NorthWest,
+    NorthEast,
+    SouthWest,
+    SouthEast,
+    Center,
+}
+
 pub trait TextExt: Sized {
     fn pos(&self, pos: Vec2) -> DrawableWihParams<'_, Self>;
     fn centered_on<'a>(
         &'a self,
         ctx: &Context,
         pos: Vec2,
+    ) -> Result<DrawableWihParams<'a, Self>, GameError>;
+    fn anchored_by<'a>(
+        &'a self,
+        ctx: &Context,
+        pos: Vec2,
+        anchor: AnchorPoint,
     ) -> Result<DrawableWihParams<'a, Self>, GameError>;
     fn size(self, size: f32) -> Self;
 }
@@ -150,8 +166,25 @@ impl TextExt for Text {
         ctx: &Context,
         pos: Vec2,
     ) -> Result<DrawableWihParams<'a, Self>, GameError> {
+        self.anchored_by(ctx, pos, AnchorPoint::Center)
+    }
+
+    fn anchored_by<'a>(
+        &'a self,
+        ctx: &Context,
+        pos: Vec2,
+        anchor: AnchorPoint,
+    ) -> Result<DrawableWihParams<'a, Self>, GameError> {
         let bounds: Vec2 = self.measure(ctx)?.into();
-        Ok(self.with_dest(pos - bounds / 2.0))
+        use AnchorPoint::*;
+        let anchor_offset = match anchor {
+            NorthWest => vec2(0.0, 0.0),
+            NorthEast => vec2(1.0, 0.0),
+            SouthWest => vec2(0.0, 1.0),
+            SouthEast => vec2(1.0, 1.0),
+            Center => vec2(0.5, 0.5),
+        };
+        Ok(self.with_dest(pos - bounds * anchor_offset))
     }
 
     fn size(mut self, size: f32) -> Self {
