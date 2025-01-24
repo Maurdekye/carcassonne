@@ -35,6 +35,15 @@ const SCORE_EFFECT_DECCEL: f32 = 15.0;
 const END_GAME_SCORE_DELAY: f32 = 3.0;
 const END_GAME_SCORE_INTERVAL: f32 = 1.75;
 
+pub const NUM_PLAYERS: usize = 5;
+pub const PLAYER_COLORS: [Color; NUM_PLAYERS] = [
+    Color::RED,
+    Color::YELLOW,
+    Color::BLUE,
+    Color::GREEN,
+    Color::BLACK,
+];
+
 #[derive(Debug, Clone)]
 enum GameEvent {
     MainEvent(MainEvent),
@@ -106,19 +115,10 @@ pub struct GameClient {
 }
 
 impl GameClient {
-    pub fn new(ctx: &Context, players: usize, parent_channel: Sender<MainEvent>) -> Self {
+    pub fn new(ctx: &Context, players: Vec<Color>, parent_channel: Sender<MainEvent>) -> Self {
         let mut game = Game::new();
         game.library.shuffle(&mut thread_rng());
-        for color in [
-            Color::RED,
-            Color::YELLOW,
-            Color::BLUE,
-            Color::GREEN,
-            Color::BLACK,
-        ]
-        .into_iter()
-        .take(players)
-        {
+        for color in players {
             game.players.insert(Player::new(color));
         }
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
@@ -235,13 +235,12 @@ impl GameClient {
     }
 
     pub fn draw_meeple(
-        &self,
         ctx: &Context,
         canvas: &mut Canvas,
         pos: Vec2,
         color: Color,
-        scale: Option<f32>,
-    ) -> Result<(), GameError> {
+        scale: f32,
+    ) -> GameResult<()> {
         const MEEPLE_SIZE: f32 = 200.0;
         const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
         const MEEPLE_POINTS: [Vec2; 13] = [
@@ -260,7 +259,7 @@ impl GameClient {
             vec2(0.25, 0.575),
         ];
         const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
-        let scale = scale.unwrap_or(self.scale) * MEEPLE_SIZE;
+        let scale = scale * MEEPLE_SIZE;
         let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * scale + pos);
         let head_point = (HEAD_POINT - MEEPLE_CENTER) * scale + pos;
         Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?.draw(canvas);
@@ -304,12 +303,12 @@ impl GameClient {
             .color(Color::BLACK)
             .draw(canvas);
         for i in 0..player.meeples {
-            self.draw_meeple(
+            GameClient::draw_meeple(
                 ctx,
                 canvas,
                 pos + vec2(20.0, 40.0) + vec2(20.0, 0.0) * i as f32,
                 player.color,
-                Some(0.1),
+                0.1,
             )?;
         }
         if highlighted {
@@ -627,7 +626,7 @@ impl EventHandler<GameError> for GameClient {
             let tile = self.state.game.placed_tiles.get(&pos).unwrap();
             let rect = self.grid_pos_rect(&pos, ctx);
             let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
-            self.draw_meeple(ctx, &mut canvas, segment_meeple_spot, color, None)?;
+            GameClient::draw_meeple(ctx, &mut canvas, segment_meeple_spot, color, self.scale)?;
         }
 
         // draw score effects

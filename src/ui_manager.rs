@@ -67,14 +67,11 @@ impl ButtonState {
 
 #[derive(Debug)]
 pub struct Button<E> {
-    bounds: ButtonBounds,
-    text: Text,
-    body_color: Color,
-    highlight_color: Color,
-    depress_color: Color,
-    disabled_color: Color,
+    pub bounds: ButtonBounds,
+    pub text: Text,
+    pub color: Color,
     text_drawparam: DrawParam,
-    event: E,
+    pub event: E,
     pub state: ButtonState,
 }
 
@@ -90,10 +87,7 @@ impl<E> Button<E> {
             bounds,
             text,
             text_drawparam,
-            body_color: color,
-            highlight_color: color_mul(color, 1.2),
-            depress_color: color_mul(color, 0.8),
-            disabled_color: color_mul(BUTTON_COLOR, 1.75),
+            color,
             event,
             state: ButtonState::Enabled,
         }
@@ -103,7 +97,7 @@ impl<E> Button<E> {
         Button::new_with_styling(bounds, text, DrawParam::default(), BUTTON_COLOR, event)
     }
 
-    fn corrected_bounds(&self, res: Vec2) -> Rect {
+    pub fn corrected_bounds(&self, res: Vec2) -> Rect {
         let ButtonBounds {
             relative: relative_bounds,
             absolute: absolute_bounds,
@@ -162,10 +156,12 @@ impl<E> UIManager<E> {
                 contains,
                 ctx.mouse.button_pressed(MouseButton::Left),
             ) {
-                (ButtonState::Disabled, _, _) => button.disabled_color,
-                (_, true, true) => button.depress_color,
-                (_, true, _) => button.highlight_color,
-                _ => button.body_color,
+                (ButtonState::Disabled, _, _) => <[f32; 4]>::from(button.color)
+                .map(|x| (x - 0.5) * 0.25 + 0.5)
+                .into(),
+                (_, true, true) => color_mul(button.color, 0.8),
+                (_, true, _) => color_mul(button.color, 1.2),
+                _ => button.color,
             };
             Mesh::new_rounded_rectangle(ctx, DrawMode::fill(), bounds, 5.0, color)?.draw(canvas);
             button

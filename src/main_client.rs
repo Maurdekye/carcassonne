@@ -1,12 +1,10 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use ggez::{
-    event::EventHandler,
-    input::{
+    event::EventHandler, graphics::Color, input::{
         keyboard::KeyCode,
         mouse::{set_cursor_type, CursorIcon},
-    },
-    Context, GameError,
+    }, Context, GameError
 };
 
 use crate::{game::Game, game_client::GameClient, main_menu_client::MainMenuClient, Args, DebugGameConfiguration};
@@ -23,7 +21,7 @@ impl DebugGameConfiguration {
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
-    StartGame(usize),
+    StartGame(Vec<Color>),
     StartDebugGame(DebugGameConfiguration),
     ReturnToMainMenu,
     Close,
@@ -54,10 +52,10 @@ impl MainClient {
 
     fn handle_event(&mut self, ctx: &mut Context, event: MainEvent) -> Result<(), GameError> {
         match event {
-            MainEvent::StartGame(player_count) => {
+            MainEvent::StartGame(player_colors) => {
                 self.scene = Box::new(GameClient::new(
                     ctx,
-                    player_count,
+                    player_colors,
                     self.event_sender.clone(),
                 ))
             }
