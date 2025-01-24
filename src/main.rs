@@ -1,4 +1,5 @@
 #![feature(iter_map_windows)]
+#![feature(try_blocks)]
 
 use clap::{Parser, ValueEnum};
 use ggez::{

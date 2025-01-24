@@ -11,7 +11,7 @@ use crate::pos::GridPos;
 use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
-use crate::util::{point_in_polygon, refit_to_rect, DrawableWihParamsExt, TextExt};
+use crate::util::{point_in_polygon, refit_to_rect, AnchorPoint, DrawableWihParamsExt, TextExt};
 
 use ggez::input::keyboard::KeyCode;
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -52,6 +52,7 @@ enum GameEvent {
     EndGame,
     ResetCamera,
     Undo,
+    InspectGroups,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -88,6 +89,10 @@ impl ScoringEffect {
     }
 }
 
+struct GroupInspection {
+    selected_group: Option<GroupIdentifier>,
+}
+
 #[derive(Clone)]
 pub struct GameState {
     game: Game,
@@ -111,6 +116,7 @@ pub struct GameClient {
     skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
     return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
     state: GameState,
+    inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent>,
 }
 
@@ -171,6 +177,7 @@ impl GameClient {
                 turn_order: game.players.keys().collect(),
                 game,
             },
+            inspecting_groups: None,
             skip_meeples_button,
             return_to_main_menu_button,
             ui,
@@ -376,6 +383,12 @@ impl GameClient {
                 self.pop_history();
                 self.reevaluate_selected_square();
             }
+            GameEvent::InspectGroups => {
+                self.pause_menu = None;
+                self.inspecting_groups = Some(GroupInspection {
+                    selected_group: None,
+                });
+            }
         }
         Ok(())
     }
@@ -455,7 +468,7 @@ impl EventHandler<GameError> for GameClient {
     }
 
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        // process events
+        self.ui.update(ctx);
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }
@@ -482,9 +495,6 @@ impl EventHandler<GameError> for GameClient {
             TurnPhase::EndGame { next_tick: None }
         ));
 
-        // update ui
-        self.ui.update(ctx);
-
         // dragging
         if ctx.mouse.button_pressed(event::MouseButton::Right) {
             self.offset -= Vec2::from(ctx.mouse.delta());
@@ -492,11 +502,15 @@ impl EventHandler<GameError> for GameClient {
 
         // open pause menu
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
-            self.pause_menu = Some(PauseScreenSubclient::new(
-                self.event_sender.clone(),
-                is_endgame,
-                has_history,
-            ));
+            if self.inspecting_groups.is_some() {
+                self.inspecting_groups = None;
+            } else {
+                self.pause_menu = Some(PauseScreenSubclient::new(
+                    self.event_sender.clone(),
+                    is_endgame,
+                    has_history,
+                ));
+            }
         }
 
         // update scoring effects
@@ -504,89 +518,107 @@ impl EventHandler<GameError> for GameClient {
             ctx.time.time_since_start().as_secs_f32() - effect.initialized_at < SCORE_EFFECT_LIFE
         });
 
-        match &self.state.turn_phase {
-            TurnPhase::TilePlacement { .. } => {
-                self.selected_square = Some(focused_pos);
+        let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
+        if let Some(group_inspection) = &mut self.inspecting_groups {
+            group_inspection.selected_group = self
+                .state
+                .game
+                .placed_tiles
+                .get(&focused_pos)
+                .and_then(|tile| {
+                    (0..tile.segments.len()).find(|seg_index| {
+                        let segment_poly: Vec<_> = tile.segment_polygon(*seg_index).collect();
+                        point_in_polygon(subgrid_pos, &segment_poly)
+                    })
+                })
+                .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
+                .cloned();
+        } else {
+            match &self.state.turn_phase {
+                TurnPhase::TilePlacement { .. } => {
+                    self.selected_square = Some(focused_pos);
 
-                // update selected square validity
-                if self.selected_square != self.last_selected_square {
-                    self.reevaluate_selected_square();
-                    self.last_selected_square = self.selected_square;
+                    // update selected square validity
+                    if self.selected_square != self.last_selected_square {
+                        self.reevaluate_selected_square();
+                        self.last_selected_square = self.selected_square;
+                    }
+
+                    if ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                        && self.placement_is_valid
+                    {
+                        self.place_tile(ctx, focused_pos)?;
+                    }
+
+                    if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
+                        self.get_held_tile_mut().unwrap().rotate();
+                        self.reevaluate_selected_square();
+                    }
+
+                    on_clickable = self.placement_is_valid;
                 }
+                TurnPhase::MeeplePlacement {
+                    placed_position,
+                    closed_groups,
+                } => {
+                    self.selected_segment_and_group = None;
 
-                if ctx.mouse.button_just_pressed(event::MouseButton::Left)
-                    && self.placement_is_valid
-                {
-                    self.place_tile(ctx, focused_pos)?;
-                }
+                    if *placed_position == focused_pos {
+                        let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
+                        self.selected_segment_and_group =
+                            self.get_selected_segment(focused_pos, placed_position, subgrid_pos);
 
-                if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
-                    self.get_held_tile_mut().unwrap().rotate();
-                    self.reevaluate_selected_square();
-                }
+                        on_clickable = self.selected_segment_and_group.is_some();
 
-                on_clickable = self.placement_is_valid;
-            }
-            TurnPhase::MeeplePlacement {
-                placed_position,
-                closed_groups,
-            } => {
-                self.selected_segment_and_group = None;
-
-                if *placed_position == focused_pos {
-                    let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
-                    self.selected_segment_and_group =
-                        self.get_selected_segment(focused_pos, placed_position, subgrid_pos);
-
-                    on_clickable = self.selected_segment_and_group.is_some();
-
-                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                        if let Some((seg_ident, Some(group))) =
-                            self.selected_segment_and_group
+                        if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                            if let Some((seg_ident, Some(group))) = self
+                                .selected_segment_and_group
                                 .map(|(seg_ident, group_ident)| {
                                     (seg_ident, self.state.game.groups.get(group_ident))
                                 })
-                        {
-                            let player_ident = *self.state.turn_order.front().unwrap();
-                            let player = self.state.game.players.get(player_ident).unwrap();
-                            if group.meeples.is_empty() && player.meeples > 0 {
-                                let closed_groups = closed_groups.clone();
-                                self.push_history();
+                            {
+                                let player_ident = *self.state.turn_order.front().unwrap();
+                                let player = self.state.game.players.get(player_ident).unwrap();
+                                if group.meeples.is_empty() && player.meeples > 0 {
+                                    let closed_groups = closed_groups.clone();
+                                    self.push_history();
 
-                                // place meeple and advance turn
-                                self.state.game.place_meeple(seg_ident, player_ident)?;
-                                self.selected_segment_and_group = None;
-                                self.end_turn(ctx, closed_groups);
+                                    // place meeple and advance turn
+                                    self.state.game.place_meeple(seg_ident, player_ident)?;
+                                    self.selected_segment_and_group = None;
+                                    self.end_turn(ctx, closed_groups);
+                                }
                             }
                         }
                     }
                 }
-            }
-            TurnPhase::EndGame { next_tick } => {
-                if let Some(next_tick) = next_tick {
-                    if ctx.time.time_since_start().as_secs_f32() > *next_tick {
-                        let next_tick = 'group_score: {
-                            let Some((group_ident, _)) = self
-                                .state
-                                .game
-                                .groups
-                                .iter()
-                                .find(|(_, group)| !group.meeples.is_empty())
-                            else {
-                                break 'group_score None;
-                            };
-                            let scored_meeples = self.state.game.score_group(group_ident);
-                            self.scoring_effects.extend(scored_meeples.into_iter().map(
-                                |score_result| {
-                                    ScoringEffect::from_scoring_result(ctx, score_result)
-                                },
-                            ));
+                TurnPhase::EndGame { next_tick } => {
+                    if let Some(next_tick) = next_tick {
+                        if ctx.time.time_since_start().as_secs_f32() > *next_tick {
+                            let next_tick = 'group_score: {
+                                let Some((group_ident, _)) = self
+                                    .state
+                                    .game
+                                    .groups
+                                    .iter()
+                                    .find(|(_, group)| !group.meeples.is_empty())
+                                else {
+                                    break 'group_score None;
+                                };
+                                let scored_meeples = self.state.game.score_group(group_ident);
+                                self.scoring_effects.extend(scored_meeples.into_iter().map(
+                                    |score_result| {
+                                        ScoringEffect::from_scoring_result(ctx, score_result)
+                                    },
+                                ));
 
-                            Some(
-                                ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_INTERVAL,
-                            )
-                        };
-                        self.state.turn_phase = TurnPhase::EndGame { next_tick };
+                                Some(
+                                    ctx.time.time_since_start().as_secs_f32()
+                                        + END_GAME_SCORE_INTERVAL,
+                                )
+                            };
+                            self.state.turn_phase = TurnPhase::EndGame { next_tick };
+                        }
                     }
                 }
             }
@@ -645,59 +677,103 @@ impl EventHandler<GameError> for GameClient {
                 .draw(&mut canvas);
         }
 
-        match &self.state.turn_phase {
-            TurnPhase::TilePlacement { tile } => {
-                if let Some(pos) = self.selected_square {
-                    let rect = self.grid_pos_rect(&pos, ctx);
-                    let cursor_color = if !self.placement_is_valid {
-                        Color::RED
-                    } else {
-                        Color::GREEN
-                    };
-                    if !self.state.game.placed_tiles.contains_key(&pos) {
-                        tile.render(ctx, &mut canvas, rect)?;
-                    }
-                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
-                        .draw(&mut canvas);
-                }
-            }
-            TurnPhase::MeeplePlacement {
-                placed_position, ..
-            } => {
-                let rect = self.grid_pos_rect(placed_position, ctx);
-                Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?
-                    .draw(&mut canvas);
+        if let Some(group_inspection) = &self.inspecting_groups {
+            Text::new("Press Esc to return")
+                .size(32.0)
+                .anchored_by(
+                    ctx,
+                    vec2(res.x, 0.0) + vec2(-10.0, 10.0),
+                    AnchorPoint::NorthEast,
+                )?
+                .color(Color::BLACK)
+                .draw(&mut canvas);
 
-                if !self.ui.on_ui {
-                    'draw_outline: {
-                        if let Some((_, group_ident)) = self.selected_segment_and_group {
-                            let Some(outline) = self.state.game.get_group_outline(group_ident)
-                            else {
-                                break 'draw_outline;
-                            };
-                            for polyline in outline.iter().map(|polyline| {
-                                polyline
-                                    .iter()
-                                    .map(|vert| refit_to_rect(*vert, origin_rect))
-                                    .collect::<Vec<_>>()
-                            }) {
-                                Mesh::new_line(
-                                    ctx,
-                                    &polyline,
-                                    2.0,
-                                    Color::from_rgb(
-                                        (200.0 * sin_time) as u8,
-                                        (20.0 * sin_time) as u8,
-                                        (70.0 * sin_time) as u8,
-                                    ),
-                                )?
-                                .draw(&mut canvas);
+            let _: Option<()> = try {
+                let group_ident = group_inspection.selected_group?;
+                let outline = self.state.game.get_group_outline(group_ident)?;
+                for polyline in outline.iter().map(|polyline| {
+                    polyline
+                        .iter()
+                        .map(|vert| refit_to_rect(*vert, origin_rect))
+                        .collect::<Vec<_>>()
+                }) {
+                    Mesh::new_line(
+                        ctx,
+                        &polyline,
+                        2.0,
+                        Color::from_rgb(
+                            (200.0 * sin_time) as u8,
+                            (20.0 * sin_time) as u8,
+                            (70.0 * sin_time) as u8,
+                        ),
+                    )
+                    .ok()?
+                    .draw(&mut canvas);
+                }
+            };
+
+            Mesh::new_rectangle(
+                ctx,
+                DrawMode::stroke(6.0),
+                Rect::new(0.0, 0.0, res.x, res.y),
+                Color::CYAN,
+            )?
+            .draw(&mut canvas);
+        } else {
+            match &self.state.turn_phase {
+                TurnPhase::TilePlacement { tile } => {
+                    if let Some(pos) = self.selected_square {
+                        let rect = self.grid_pos_rect(&pos, ctx);
+                        let cursor_color = if !self.placement_is_valid {
+                            Color::RED
+                        } else {
+                            Color::GREEN
+                        };
+                        if !self.state.game.placed_tiles.contains_key(&pos) {
+                            tile.render(ctx, &mut canvas, rect)?;
+                        }
+                        Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
+                            .draw(&mut canvas);
+                    }
+                }
+                TurnPhase::MeeplePlacement {
+                    placed_position, ..
+                } => {
+                    let rect = self.grid_pos_rect(placed_position, ctx);
+                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?
+                        .draw(&mut canvas);
+
+                    if !self.ui.on_ui {
+                        'draw_outline: {
+                            if let Some((_, group_ident)) = self.selected_segment_and_group {
+                                let Some(outline) = self.state.game.get_group_outline(group_ident)
+                                else {
+                                    break 'draw_outline;
+                                };
+                                for polyline in outline.iter().map(|polyline| {
+                                    polyline
+                                        .iter()
+                                        .map(|vert| refit_to_rect(*vert, origin_rect))
+                                        .collect::<Vec<_>>()
+                                }) {
+                                    Mesh::new_line(
+                                        ctx,
+                                        &polyline,
+                                        2.0,
+                                        Color::from_rgb(
+                                            (200.0 * sin_time) as u8,
+                                            (20.0 * sin_time) as u8,
+                                            (70.0 * sin_time) as u8,
+                                        ),
+                                    )?
+                                    .draw(&mut canvas);
+                                }
                             }
                         }
                     }
                 }
+                TurnPhase::EndGame { .. } => {}
             }
-            TurnPhase::EndGame { .. } => {}
         }
 
         // draw ui
@@ -745,7 +821,7 @@ impl EventHandler<GameError> for GameClient {
         }
 
         // draw player color outline
-        if !is_endgame {
+        if !is_endgame && self.inspecting_groups.is_none() {
             Mesh::new_rectangle(
                 ctx,
                 DrawMode::stroke(8.0),
