@@ -1,22 +1,32 @@
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use ggez::{
-    event::EventHandler, graphics::Color, input::{
+    event::EventHandler,
+    graphics::Color,
+    input::{
         keyboard::KeyCode,
         mouse::{set_cursor_type, CursorIcon},
-    }, Context, GameError
+    },
+    Context, GameError,
 };
 
-use crate::{game::Game, game_client::GameClient, main_menu_client::MainMenuClient, Args, DebugGameConfiguration};
+use crate::{
+    game::{debug_game_configs, Game},
+    game_client::GameClient,
+    main_menu_client::MainMenuClient,
+    Args, DebugGameConfiguration,
+};
 
 impl DebugGameConfiguration {
     pub fn get_game(&self) -> Result<Game, GameError> {
         use DebugGameConfiguration::*;
         match self {
-            MeeplePlacement => Game::meeple_locations_debug_game(),
-            MultipleSegmentsPerTileScoring => Game::multiple_segments_per_tile_scoring_debug_game(),
-            MultiplePlayerOwnership => Game::multiple_player_ownership_debug_game(),
-            RotationTest => Game::rotation_test_debug_game(),
+            MeeplePlacement => debug_game_configs::meeple_locations(),
+            MultipleSegmentsPerTileScoring => {
+                debug_game_configs::multiple_segments_per_tile_scoring()
+            }
+            MultiplePlayerOwnership => debug_game_configs::multiple_player_ownership(),
+            RotationTest => debug_game_configs::rotation_test(),
         }
     }
 }
@@ -41,7 +51,9 @@ impl MainClient {
     pub fn new(args: Args) -> MainClient {
         let (event_sender, event_receiver) = channel();
         if let Some(debug_config) = &args.debug_config {
-            event_sender.send(MainEvent::StartDebugGame(debug_config.clone())).unwrap();
+            event_sender
+                .send(MainEvent::StartDebugGame(debug_config.clone()))
+                .unwrap();
         }
         MainClient {
             scene: Box::new(MainMenuClient::new(event_sender.clone(), args.clone())),
@@ -57,6 +69,7 @@ impl MainClient {
             MainEvent::StartGame(player_colors) => {
                 self.scene = Box::new(GameClient::new(
                     ctx,
+                    self.args.clone(),
                     player_colors,
                     self.event_sender.clone(),
                 ))
@@ -74,6 +87,7 @@ impl MainClient {
             MainEvent::StartDebugGame(config) => {
                 self.scene = Box::new(GameClient::new_with_game(
                     ctx,
+                    self.args.clone(),
                     config.get_game()?,
                     self.event_sender.clone(),
                 ))

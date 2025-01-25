@@ -48,7 +48,7 @@ fn straight_road_curve_road_mount_west() {
 #[test]
 fn straight_road_curve_road_rotate_mount_west() {
     let mut curve_road = CURVE_ROAD.clone();
-    curve_road.rotate();
+    curve_road.rotate_clockwise();
     let result = STRAIGHT_ROAD.validate_mounting(&curve_road, Orientation::West);
     assert_eq!(
         result,

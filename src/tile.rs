@@ -723,7 +723,14 @@ impl Tile {
         Ok(())
     }
 
-    pub fn rotate(&mut self) {
+    /// dumb hack but works lol
+    pub fn rotate_counterclockwise(&mut self) {
+        self.rotate_clockwise();
+        self.rotate_clockwise();
+        self.rotate_clockwise();
+    }
+
+    pub fn rotate_clockwise(&mut self) {
         self.verts.iter_mut().for_each(RotateExt::rotate_);
         for segment in &mut self.segments {
             segment.meeple_spot.rotate_();
@@ -749,7 +756,7 @@ impl Tile {
 
     #[allow(unused)]
     pub fn rotated(mut self) -> Self {
-        self.rotate();
+        self.rotate_clockwise();
         self
     }
 

@@ -14,6 +14,7 @@ use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
 use crate::util::{point_in_polygon, refit_to_rect, AnchorPoint, DrawableWihParamsExt, TextExt};
+use crate::Args;
 
 use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -65,6 +66,7 @@ enum GameEvent {
 enum TurnPhase {
     TilePlacement {
         tile: Tile,
+        placeable_positions: Vec<GridPos>,
     },
     MeeplePlacement {
         placed_position: GridPos,
@@ -124,10 +126,16 @@ pub struct GameClient {
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent>,
     camera_movement: Vec2,
+    args: Args,
 }
 
 impl GameClient {
-    pub fn new(ctx: &Context, players: Vec<Color>, parent_channel: Sender<MainEvent>) -> Self {
+    pub fn new(
+        ctx: &Context,
+        args: Args,
+        players: Vec<Color>,
+        parent_channel: Sender<MainEvent>,
+    ) -> Self {
         let mut game = Game::new();
         game.library.shuffle(&mut thread_rng());
         for color in players {
@@ -135,11 +143,16 @@ impl GameClient {
         }
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
             .unwrap();
-        Self::new_with_game(ctx, game, parent_channel)
+        Self::new_with_game(ctx, args, game, parent_channel)
     }
 
-    pub fn new_with_game(ctx: &Context, mut game: Game, parent_channel: Sender<MainEvent>) -> Self {
-        let first_tile = game.draw_placeable_tile().unwrap();
+    pub fn new_with_game(
+        ctx: &Context,
+        args: Args,
+        mut game: Game,
+        parent_channel: Sender<MainEvent>,
+    ) -> Self {
+        let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let (ui, [skip_meeples_button, return_to_main_menu_button]) = UIManager::new_and_rc_buttons(
@@ -179,7 +192,10 @@ impl GameClient {
             scoring_effects: Vec::new(),
             history: Vec::new(),
             state: GameState {
-                turn_phase: TurnPhase::TilePlacement { tile: first_tile },
+                turn_phase: TurnPhase::TilePlacement {
+                    tile: first_tile,
+                    placeable_positions,
+                },
                 turn_order: game.players.keys().collect(),
                 game,
             },
@@ -188,6 +204,7 @@ impl GameClient {
             return_to_main_menu_button,
             ui,
             camera_movement: Vec2::ZERO,
+            args,
         };
         this.reset_camera(ctx);
         this
@@ -210,6 +227,14 @@ impl GameClient {
     }
 
     fn reevaluate_selected_square(&mut self) {
+        self.reevaluate_selected_square_inner(true);
+    }
+
+    fn reevaluate_selected_square_counterclockwise(&mut self) {
+        self.reevaluate_selected_square_inner(false);
+    }
+
+    fn reevaluate_selected_square_inner(&mut self, clockwise: bool) {
         self.placement_is_valid = false;
 
         let Some(selected_square) = &self.selected_square else {
@@ -220,11 +245,29 @@ impl GameClient {
             return;
         }
 
-        if let TurnPhase::TilePlacement { tile: held_tile } = &self.state.turn_phase {
-            self.placement_is_valid = self
-                .state
-                .game
-                .is_valid_tile_position(held_tile, *selected_square);
+        if let TurnPhase::TilePlacement {
+            tile: held_tile, ..
+        } = &mut self.state.turn_phase
+        {
+            if self.args.snap_placement {
+                while !self
+                    .state
+                    .game
+                    .is_valid_tile_position(held_tile, *selected_square)
+                {
+                    if clockwise {
+                        held_tile.rotate_clockwise();
+                    } else {
+                        held_tile.rotate_counterclockwise();
+                    }
+                }
+                self.placement_is_valid = true;
+            } else {
+                self.placement_is_valid = self
+                    .state
+                    .game
+                    .is_valid_tile_position(held_tile, *selected_square);
+            }
         }
     }
 
@@ -285,7 +328,7 @@ impl GameClient {
 
     fn get_held_tile_mut(&mut self) -> Option<&mut Tile> {
         match &mut self.state.turn_phase {
-            TurnPhase::TilePlacement { tile } => Some(tile),
+            TurnPhase::TilePlacement { tile, .. } => Some(tile),
             _ => None,
         }
     }
@@ -355,7 +398,12 @@ impl GameClient {
         self.state.turn_order.push_back(player_ident);
 
         match self.state.game.draw_placeable_tile() {
-            Some(tile) => self.state.turn_phase = TurnPhase::TilePlacement { tile },
+            Some((tile, placeable_positions)) => {
+                self.state.turn_phase = TurnPhase::TilePlacement {
+                    tile,
+                    placeable_positions,
+                }
+            }
             None => self.end_game(ctx),
         }
     }
@@ -559,7 +607,8 @@ impl EventHandler<GameError> for GameClient {
             ctx.time.time_since_start().as_secs_f32() - effect.initialized_at < SCORE_EFFECT_LIFE
         });
 
-        let subgrid_pos = self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
+        let gameboard_pos = self.to_game_pos(mouse, ctx);
+        let subgrid_pos = gameboard_pos - Vec2::from(focused_pos);
         if let Some(group_inspection) = &mut self.inspecting_groups {
             group_inspection.selected_group = self
                 .state
@@ -578,8 +627,27 @@ impl EventHandler<GameError> for GameClient {
                 .cloned();
         } else {
             match &self.state.turn_phase {
-                TurnPhase::TilePlacement { .. } => {
-                    self.selected_square = Some(focused_pos);
+                TurnPhase::TilePlacement {
+                    placeable_positions,
+                    ..
+                } => {
+                    // determine tile placement location
+                    if self.args.snap_placement {
+                        self.selected_square = placeable_positions
+                            .iter()
+                            .cloned()
+                            .map(|pos| {
+                                (
+                                    pos,
+                                    Vec2::from(pos)
+                                        .distance_squared(gameboard_pos - vec2(0.5, 0.5)),
+                                )
+                            })
+                            .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                            .map(|(pos, _)| pos);
+                    } else {
+                        self.selected_square = Some(focused_pos);
+                    }
 
                     // update selected square validity
                     if self.selected_square != self.last_selected_square {
@@ -591,22 +659,22 @@ impl EventHandler<GameError> for GameClient {
                     if ctx.mouse.button_just_pressed(event::MouseButton::Left)
                         && self.placement_is_valid
                     {
-                        self.place_tile(ctx, focused_pos)?;
+                        if let Some(selected_square) = self.selected_square {
+                            self.place_tile(ctx, selected_square)?;
+                        }
                     }
 
                     // rotate tile
                     if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
-                        self.get_held_tile_mut().unwrap().rotate();
+                        self.get_held_tile_mut().unwrap().rotate_clockwise();
                         self.reevaluate_selected_square();
                     }
 
                     // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
                     if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
                         let tile = self.get_held_tile_mut().unwrap();
-                        tile.rotate();
-                        tile.rotate();
-                        tile.rotate();
-                        self.reevaluate_selected_square();
+                        tile.rotate_counterclockwise();
+                        self.reevaluate_selected_square_counterclockwise();
                     }
 
                     on_clickable = self.placement_is_valid;
@@ -864,7 +932,7 @@ impl EventHandler<GameError> for GameClient {
             .draw(&mut canvas);
         } else {
             match &self.state.turn_phase {
-                TurnPhase::TilePlacement { tile } => {
+                TurnPhase::TilePlacement { tile, .. } => {
                     // draw tile placement ui
                     if let Some(pos) = self.selected_square {
                         let rect = self.grid_pos_rect(&pos, ctx);

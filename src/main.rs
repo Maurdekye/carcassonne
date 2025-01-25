@@ -2,7 +2,7 @@
 #![feature(try_blocks)]
 #![feature(duration_millis_float)]
 
-use clap::{Parser, ValueEnum};
+use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
     conf::{WindowMode, WindowSetup},
     event, ContextBuilder, GameResult,
@@ -47,6 +47,10 @@ struct Args {
     /// Immediately start a debug game configuration
     #[arg(short, long)]
     debug_config: Option<DebugGameConfiguration>,
+
+    /// Enable experimental snapping tile placement
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    snap_placement: bool,
 }
 
 fn main() -> GameResult {
