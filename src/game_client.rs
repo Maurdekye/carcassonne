@@ -15,7 +15,7 @@ use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
 use crate::util::{point_in_polygon, refit_to_rect, AnchorPoint, DrawableWihParamsExt, TextExt};
 
-use ggez::input::keyboard::KeyCode;
+use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
 use ggez::{
     event::{self, EventHandler},
@@ -29,6 +29,9 @@ use rand::{seq::SliceRandom, thread_rng};
 mod pause_screen_subclient;
 
 const ZOOM_SPEED: f32 = 1.1;
+const MOVE_SPEED: f32 = 45.0;
+const MOVE_ACCEL: f32 = 0.1;
+const SPRINT_MOD: f32 = 2.0;
 
 const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
@@ -120,6 +123,7 @@ pub struct GameClient {
     state: GameState,
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent>,
+    camera_movement: Vec2,
 }
 
 impl GameClient {
@@ -183,6 +187,7 @@ impl GameClient {
             skip_meeples_button,
             return_to_main_menu_button,
             ui,
+            camera_movement: Vec2::ZERO,
         };
         this.reset_camera(ctx);
         this
@@ -201,6 +206,7 @@ impl GameClient {
     fn reset_camera(&mut self, ctx: &Context) {
         self.scale = 0.1;
         self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
+        self.camera_movement = Vec2::ZERO;
     }
 
     fn reevaluate_selected_square(&mut self) {
@@ -502,7 +508,40 @@ impl EventHandler<GameError> for GameClient {
             self.offset -= Vec2::from(ctx.mouse.delta());
         }
 
-        // open pause menu
+        // keyboard based movement
+        {
+            let mut movement_vector: Vec2 = [
+                (KeyCode::W, vec2(0.0, -1.0)),
+                (KeyCode::Up, vec2(0.0, -1.0)),
+                (KeyCode::D, vec2(1.0, 0.0)),
+                (KeyCode::Right, vec2(1.0, 0.0)),
+                (KeyCode::S, vec2(0.0, 1.0)),
+                (KeyCode::Down, vec2(0.0, 1.0)),
+                (KeyCode::A, vec2(-1.0, 0.0)),
+                (KeyCode::Left, vec2(-1.0, 0.0)),
+            ]
+            .into_iter()
+            .map(|(code, dir)| {
+                if ctx.keyboard.is_key_pressed(code) {
+                    dir
+                } else {
+                    Vec2::ZERO
+                }
+            })
+            .sum();
+            if movement_vector != Vec2::ZERO {
+                movement_vector = movement_vector.normalize();
+            }
+            movement_vector = movement_vector * self.scale * MOVE_SPEED;
+            if ctx.keyboard.is_mod_active(KeyMods::SHIFT) {
+                movement_vector *= SPRINT_MOD;
+            }
+            self.camera_movement =
+                self.camera_movement * (1.0 - MOVE_ACCEL) + movement_vector * MOVE_ACCEL;
+            self.offset += self.camera_movement;
+        }
+
+        // open pause menu / close group inspection ui
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
             if self.inspecting_groups.is_some() {
                 self.inspecting_groups = None;
@@ -548,14 +587,25 @@ impl EventHandler<GameError> for GameClient {
                         self.last_selected_square = self.selected_square;
                     }
 
+                    // place tile
                     if ctx.mouse.button_just_pressed(event::MouseButton::Left)
                         && self.placement_is_valid
                     {
                         self.place_tile(ctx, focused_pos)?;
                     }
 
+                    // rotate tile
                     if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
                         self.get_held_tile_mut().unwrap().rotate();
+                        self.reevaluate_selected_square();
+                    }
+
+                    // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
+                    if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
+                        let tile = self.get_held_tile_mut().unwrap();
+                        tile.rotate();
+                        tile.rotate();
+                        tile.rotate();
                         self.reevaluate_selected_square();
                     }
 
@@ -775,10 +825,11 @@ impl EventHandler<GameError> for GameClient {
                     Text::new(format!(
                         "\
 {}
-{} Points
+{} Point{}
 {}",
                         group.gtype.name(),
                         score_details.score,
+                        if score_details.score == 1 { "" } else { "s" },
                         if score_details.owners.is_empty() {
                             "Unclaimed"
                         } else {
@@ -798,7 +849,8 @@ impl EventHandler<GameError> for GameClient {
                             meeple_point + vec2(20.0, 0.0) * i as f32,
                             *color,
                             0.075,
-                        ).ok()?;
+                        )
+                        .ok()?;
                     }
                 };
 

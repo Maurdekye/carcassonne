@@ -9,14 +9,19 @@ use player::Player;
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
-    game_client::PLAYER_COLORS, line::Line, pos::GridPos, tile::{
+    game_client::PLAYER_COLORS,
+    line::Line,
+    pos::GridPos,
+    tile::{
         tile_definitions::{
             ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
-            FORTIFIED_CORNER_CITY, OPPOSING_EDGE_CITIES, STARTING_TILE, THREE_QUARTER_CITY,
+            FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY, FOUR_WAY_CROSSROADS,
+            OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE, THREE_QUARTER_CITY,
         },
         GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
         SegmentType, Tile,
-    }, util::{Bag, HashMapBag}
+    },
+    util::{Bag, HashMapBag},
 };
 
 pub mod player {
@@ -87,6 +92,7 @@ pub struct SegmentGroup {
     pub shape_details: Option<ShapeDetails>,
 }
 
+#[allow(clippy::type_complexity)]
 impl SegmentGroup {
     fn compute_owners(
         &self,
@@ -236,10 +242,7 @@ impl Game {
                 CORNER_CITY.clone().rotated().rotated().rotated(),
                 origin + GridPos(1, -1),
             )?;
-            game.place_tile(
-                THREE_QUARTER_CITY.clone().rotated(),
-                origin + GridPos(0, 0),
-            )?;
+            game.place_tile(THREE_QUARTER_CITY.clone().rotated(), origin + GridPos(0, 0))?;
             game.place_tile(
                 THREE_QUARTER_CITY.clone().rotated().rotated().rotated(),
                 origin + GridPos(1, 0),
@@ -275,6 +278,40 @@ impl Game {
         this.place_meeple((GridPos(13, 0), 0), players[2])?;
         this.place_meeple((GridPos(13, 1), 0), players[3])?;
         this.place_meeple((GridPos(13, -1), 0), players[4])?;
+
+        Ok(this)
+    }
+
+    pub fn rotation_test_debug_game() -> GameResult<Game> {
+        let mut this = Game::new_with_library(vec![STARTING_TILE.clone()]);
+        this.players.insert(Player::new(Color::BLUE));
+
+        fn spin(mut tile: Tile, rotations: usize) -> Tile {
+            for _ in 0..rotations {
+                tile.rotate();
+            }
+            tile
+        }
+
+        for x in 0..=4 {
+            let num_rotations = 10usize.pow(x as u32);
+            this.place_tile(
+                spin(STARTING_TILE.clone(), num_rotations),
+                GridPos(x * 2, 0),
+            )?;
+            this.place_tile(
+                spin(FOUR_WAY_CROSSROADS.clone(), num_rotations),
+                GridPos(x * 2, 2),
+            )?;
+            this.place_tile(
+                spin(FORITIFED_THREE_QUARTER_CITY_ENTRANCE.clone(), num_rotations),
+                GridPos(x * 2, 4),
+            )?;
+            this.place_tile(
+                spin(ROAD_MONASTARY.clone(), num_rotations),
+                GridPos(x * 2, 6),
+            )?;
+        }
 
         Ok(this)
     }

@@ -26,7 +26,8 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Controls screen~~
 * ~~Choose player colors~~
 * ~~Inspect segment groups~~
-* Counterclockwise rotation
+* ~~Counterclockwise rotation~~
+* Snap tile directly to nearest valid square
 * More animations in general
 * River tiles
 * Multiplayer

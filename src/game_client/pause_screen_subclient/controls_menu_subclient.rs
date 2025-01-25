@@ -51,9 +51,7 @@ impl ControlsMenuSubclient {
         event: ControlsMenuEvent,
     ) -> Result<(), GameError> {
         match event {
-            ControlsMenuEvent::PauseScreenEvent(event) => {
-                self.parent_channel.send(event).unwrap()
-            }
+            ControlsMenuEvent::PauseScreenEvent(event) => self.parent_channel.send(event).unwrap(),
         }
         Ok(())
     }
@@ -98,9 +96,10 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
         Text::new(
             "\
 Left Mouse - Place tile or meeple
-Right Mouse - Move camera
+Right Mouse / WASD / Arrow keys - Move camera
 Scroll - Zoom in and out
 R - Rotate tile 90° clockwise
+E - Rotate tile 90° counterclockwise
 Tab - Detailed game stats
 Esc - Pause",
         )

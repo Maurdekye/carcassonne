@@ -35,6 +35,7 @@ enum DebugGameConfiguration {
     MeeplePlacement,
     MultipleSegmentsPerTileScoring,
     MultiplePlayerOwnership,
+    RotationTest
 }
 
 #[derive(Parser, Clone)]

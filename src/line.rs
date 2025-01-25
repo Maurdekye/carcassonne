@@ -76,6 +76,7 @@ fn _subsections(
 }
 
 pub trait LineExt {
+    #[allow(unused)]
     fn subsections(&self, off_length: f32, on_length: f32) -> LineSectionsIter<'_>;
     fn offset_subsections(
         &self,
