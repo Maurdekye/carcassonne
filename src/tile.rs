@@ -88,7 +88,7 @@ pub struct MountingPair {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SegmentType {
-    Field,
+    Farm,
     City,
     Road,
     Monastary,
@@ -99,7 +99,7 @@ impl SegmentType {
     pub fn color(&self) -> Color {
         use SegmentType::*;
         match self {
-            Field => Color::from_rgb(171, 219, 59),
+            Farm => Color::from_rgb(171, 219, 59),
             City => Color::from_rgb(222, 133, 38),
             Road => Color::from_rgb(207, 194, 149),
             Monastary => Color::from_rgb(183, 222, 235),
@@ -110,7 +110,7 @@ impl SegmentType {
     pub fn name(&self) -> &'static str {
         use SegmentType::*;
         match self {
-            Field => "Field",
+            Farm => "Farm",
             City => "City",
             Road => "Road",
             Monastary => "Monastary",

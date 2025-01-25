@@ -27,12 +27,12 @@ lazy_static! {
                 edges: vec![Edge((Middle, West)), Edge((Middle, East)),]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, West)), Vert(0), Vert(1), Edge((Beginning, East))],
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.85, 0.315))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Beginning, West)),
                     Edge((End, East)),
@@ -45,7 +45,7 @@ lazy_static! {
         vec![],
         vec![
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, West)),
                     Edge((Full, North)),
@@ -57,7 +57,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, West)), Edge((Middle, East))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Beginning, West)),
                     Edge((End, East)),
@@ -70,7 +70,7 @@ lazy_static! {
         vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
         vec![
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, West)), Edge((Beginning, North)), Vert(0)]
             },
             SpecialSegment {
@@ -84,7 +84,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Beginning, West)),
                     Vert(1),
@@ -111,7 +111,7 @@ lazy_static! {
                 edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4), Vert(5)]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, West)),
                     Edge((Full, North)),
@@ -126,7 +126,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, East)), Vert(2), Vert(1)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
@@ -139,7 +139,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(4), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Beginning, West)),
@@ -179,7 +179,7 @@ lazy_static! {
                 ]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, West)),
                     Edge((Beginning, North)),
@@ -192,7 +192,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, North)), Vert(2), Vert(1)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, North)),
                     Edge((Beginning, East)),
@@ -205,7 +205,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, East)), Vert(4), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
@@ -218,7 +218,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(6), Vert(5)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Beginning, West)),
@@ -240,7 +240,7 @@ lazy_static! {
                 edges: vec![Edge((Full, North)), Vert(1), Vert(0),]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Full, East)),
                     Edge((Full, South)),
@@ -275,7 +275,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, West)),
                     Vert(0),
@@ -287,7 +287,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.75, 0.5))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, South)), Edge((Beginning, West)), Vert(2)]
             }
         ]
@@ -315,7 +315,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.5))]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Full, West)),
                     Vert(0),
@@ -327,7 +327,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.25, 0.5))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, East)), Edge((Beginning, South)), Vert(3)]
             }
         ]
@@ -353,7 +353,7 @@ lazy_static! {
                 edges: vec![Edge((Full, North)), Vert(7), Vert(6)]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, West)),
                     Vert(6),
@@ -369,7 +369,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, East)), Vert(2), Vert(1)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
@@ -382,7 +382,7 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(4), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Beginning, West)),
@@ -414,7 +414,7 @@ lazy_static! {
                 edges: vec![Edge((Full, East)), Vert(4), Vert(3),]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Full, South)),
                     Edge((Full, West)),
@@ -445,7 +445,7 @@ lazy_static! {
                 edges: vec![Edge((Full, South)), Vert(2), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Full, West)),
                     Vert(0),
@@ -466,11 +466,11 @@ lazy_static! {
         ],
         vec![
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, North)), Vert(1), Vert(0)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, South)), Vert(2), Vert(3)]
             },
             Segment {
@@ -495,11 +495,11 @@ lazy_static! {
         ],
         vec![
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, North)), Vert(1), Vert(0)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, South)), Vert(2), Vert(3)]
             },
             SpecialSegment {
@@ -533,7 +533,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.5, 0.35))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, South)), Vert(0), Vert(1)]
             }
         ]
@@ -558,7 +558,7 @@ lazy_static! {
                 ]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, South)), Vert(0), Vert(1)]
             }
         ]
@@ -587,11 +587,11 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(1), Vert(2)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Beginning, South)), Vert(2), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, South)), Vert(0), Vert(1)]
             }
         ]
@@ -625,11 +625,11 @@ lazy_static! {
                 edges: vec![Edge((Middle, South)), Vert(1), Vert(2)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Beginning, South)), Vert(2), Vert(3)]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, South)), Vert(0), Vert(1)]
             }
         ]
@@ -642,7 +642,7 @@ lazy_static! {
                 edges: vec![Edge((Full, West)), Edge((Full, North))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, East)), Edge((Full, South))]
             }
         ]
@@ -658,7 +658,7 @@ lazy_static! {
                 }]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((Full, East)), Edge((Full, South))]
             }
         ]
@@ -688,7 +688,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.618, 0.618))]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Beginning, East)),
@@ -698,7 +698,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.86, 0.32))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
@@ -736,7 +736,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.618, 0.618))]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Beginning, East)),
@@ -746,7 +746,7 @@ lazy_static! {
                 attributes: vec![SegmentAttribute::CustomMeepleSpot(vec2(0.86, 0.32))]
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, East)),
                     Edge((Beginning, South)),
@@ -785,7 +785,7 @@ lazy_static! {
                 edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4),]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Full, West)),
                     Edge((Full, North)),
@@ -820,7 +820,7 @@ lazy_static! {
                 edges: vec![Vert(0), Vert(1), Vert(2), Vert(3), Vert(4),]
             },
             SpecialSegment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((End, South)),
                     Edge((Full, West)),
@@ -846,7 +846,7 @@ lazy_static! {
     pub static ref _DEBUG_EMPTY_FIELD: Tile = Tile::new(
         vec![],
         vec![Segment {
-            stype: Field,
+            stype: Farm,
             edges: vec![
                 Edge((Full, West)),
                 Edge((Full, North)),

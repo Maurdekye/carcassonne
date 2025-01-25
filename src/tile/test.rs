@@ -85,7 +85,7 @@ fn test_tile_definition() {
         vec![vec2(0.45, 0.45), vec2(0.55, 0.55)],
         vec![
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![Edge((End, West)), Edge((Beginning, North)), Vert(0)],
             },
             Segment {
@@ -98,7 +98,7 @@ fn test_tile_definition() {
                 ],
             },
             Segment {
-                stype: Field,
+                stype: Farm,
                 edges: vec![
                     Edge((Beginning, West)),
                     Vert(1),

@@ -430,7 +430,7 @@ impl Game {
                 };
                 base_score * tile_span
             }
-            SegmentType::Field => {
+            SegmentType::Farm => {
                 let mut cities = HashSet::new();
                 for (pos, seg_index) in group.segments.clone() {
                     let tile = self.placed_tiles.get(&pos).unwrap();
@@ -897,7 +897,7 @@ mod test {
         let group = game
             .groups
             .values()
-            .find(|group| group.gtype == SegmentType::Field)
+            .find(|group| group.gtype == SegmentType::Farm)
             .unwrap();
         let outline = game.compute_group_outline(group);
         dbg!(outline);

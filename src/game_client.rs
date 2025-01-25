@@ -871,7 +871,7 @@ impl EventHandler<GameError> for GameClient {
                     let anchor_point = refit_to_rect(shape_details.popup_location, origin_rect)
                         - vec2(90.0, 120.0);
                     let group = self.state.game.groups.get(group_ident)?;
-                    let infobox_rect = Rect::new(anchor_point.x, anchor_point.y, 180.0, 60.0);
+                    let infobox_rect = Rect::new(anchor_point.x, anchor_point.y, 180.0, 62.0);
                     Mesh::new_rounded_rectangle(
                         ctx,
                         DrawMode::fill(),
