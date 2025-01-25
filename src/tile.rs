@@ -18,6 +18,7 @@ use tile_definitions::{
 
 use crate::{
     game::SegmentIndex,
+    line::Line,
     pos::GridPos,
     util::{refit_to_rect, RotateExt},
 };
@@ -95,7 +96,7 @@ pub enum SegmentType {
 }
 
 impl SegmentType {
-    fn color(&self) -> Color {
+    pub fn color(&self) -> Color {
         use SegmentType::*;
         match self {
             Field => Color::from_rgb(171, 219, 59),
@@ -103,6 +104,17 @@ impl SegmentType {
             Road => Color::from_rgb(207, 194, 149),
             Monastary => Color::from_rgb(183, 222, 235),
             Village => Color::from_rgb(227, 204, 166),
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        use SegmentType::*;
+        match self {
+            Field => "Field",
+            City => "City",
+            Road => "Road",
+            Monastary => "Monastary",
+            Village => "Village",
         }
     }
 
@@ -436,7 +448,7 @@ pub enum SegmentDefinition {
 
 #[derive(Clone, Debug)]
 pub struct Tile {
-    pub verts: Vec<Vec2>,
+    pub verts: Line,
     pub segments: Vec<Segment>,
     pub mounts: Mounts,
     segment_adjacency: Vec<bool>,
@@ -483,7 +495,7 @@ impl Tile {
     }
 
     pub fn new_with_attributes(
-        mut verts: Vec<Vec2>,
+        mut verts: Line,
         segment_definitions: Vec<SegmentDefinition>,
         attributes: Vec<TileAttribute>,
     ) -> Self {
@@ -635,7 +647,7 @@ impl Tile {
         }
     }
 
-    pub fn new(verts: Vec<Vec2>, segment_definitions: Vec<SegmentDefinition>) -> Self {
+    pub fn new(verts: Line, segment_definitions: Vec<SegmentDefinition>) -> Self {
         Tile::new_with_attributes(verts, segment_definitions, Vec::new())
     }
 
@@ -676,7 +688,7 @@ impl Tile {
         color: Option<Color>,
     ) -> Result<(), GameError> {
         let segment = &self.segments[seg_index];
-        let verts: Vec<Vec2> = self.refit_segment_polygon(seg_index, bounds).collect();
+        let verts: Line = self.refit_segment_polygon(seg_index, bounds).collect();
         canvas.draw(
             &Mesh::new_polygon(
                 ctx,

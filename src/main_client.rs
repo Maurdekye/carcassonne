@@ -15,6 +15,7 @@ impl DebugGameConfiguration {
         match self {
             MeeplePlacement => Game::meeple_locations_debug_game(),
             MultipleSegmentsPerTileScoring => Game::multiple_segments_per_tile_scoring_debug_game(),
+            MultiplePlayerOwnership => Game::multiple_player_ownership_debug_game(),
         }
     }
 }

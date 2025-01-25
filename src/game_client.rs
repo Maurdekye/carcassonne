@@ -3,9 +3,11 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use crate::game::ShapeDetails;
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
 };
+use crate::line::LineExt;
 use crate::main_client::MainEvent;
 use crate::pos::GridPos;
 use crate::sub_event_handler::SubEventHandler;
@@ -527,8 +529,10 @@ impl EventHandler<GameError> for GameClient {
                 .get(&focused_pos)
                 .and_then(|tile| {
                     (0..tile.segments.len()).find(|seg_index| {
-                        let segment_poly: Vec<_> = tile.segment_polygon(*seg_index).collect();
-                        point_in_polygon(subgrid_pos, &segment_poly)
+                        tile.segments[*seg_index].stype.placeable() && {
+                            let segment_poly: Vec<_> = tile.segment_polygon(*seg_index).collect();
+                            point_in_polygon(subgrid_pos, &segment_poly)
+                        }
                     })
                 })
                 .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
@@ -678,6 +682,7 @@ impl EventHandler<GameError> for GameClient {
         }
 
         if let Some(group_inspection) = &self.inspecting_groups {
+            // draw group inspection ui
             Text::new("Press Esc to return")
                 .size(32.0)
                 .anchored_by(
@@ -688,30 +693,116 @@ impl EventHandler<GameError> for GameClient {
                 .color(Color::BLACK)
                 .draw(&mut canvas);
 
-            let _: Option<()> = try {
-                let group_ident = group_inspection.selected_group?;
-                let outline = self.state.game.get_group_outline(group_ident)?;
-                for polyline in outline.iter().map(|polyline| {
-                    polyline
-                        .iter()
-                        .map(|vert| refit_to_rect(*vert, origin_rect))
-                        .collect::<Vec<_>>()
-                }) {
-                    Mesh::new_line(
+            let _: Option<()> =
+                try {
+                    let group_ident = group_inspection.selected_group?;
+                    let score_details = self
+                        .state
+                        .game
+                        .get_group_scoring_details(group_ident)?
+                        .clone();
+                    let shape_details = self.state.game.get_group_shape_details(group_ident)?;
+
+                    // draw colored outline
+                    let refit_line = |line: &Vec<Vec2>| -> Vec<Vec2> {
+                        line.iter()
+                            .map(|vert| refit_to_rect(*vert, origin_rect))
+                            .collect()
+                    };
+                    for line in shape_details.outline.iter().map(refit_line) {
+                        Mesh::new_line(ctx, &line, 4.0, Color::BLACK)
+                            .ok()?
+                            .draw(&mut canvas);
+                    }
+                    if score_details.owners.len() < 2 {
+                        let color = score_details
+                            .owners
+                            .first()
+                            .map(|(_, c)| c)
+                            .cloned()
+                            .unwrap_or(Color::from_rgb(100, 100, 100));
+                        for line in shape_details.outline.iter().map(refit_line) {
+                            Mesh::new_line(ctx, &line, 3.0, color)
+                                .ok()?
+                                .draw(&mut canvas);
+                        }
+                    } else {
+                        const DOTTED_LINE_LENGTH: f32 = 25.0;
+                        for line in shape_details.outline.iter().map(refit_line) {
+                            for (line_seg, color) in
+                                score_details.owners.iter().enumerate().flat_map(
+                                    |(i, (_, color))| {
+                                        line.offset_subsections(
+                                            DOTTED_LINE_LENGTH
+                                                * (score_details.owners.len() - 1) as f32,
+                                            DOTTED_LINE_LENGTH,
+                                            DOTTED_LINE_LENGTH * i as f32,
+                                        )
+                                        .map(move |line_seg| (line_seg, color))
+                                    },
+                                )
+                            {
+                                Mesh::new_line(ctx, &line_seg, 3.0, *color)
+                                    .ok()?
+                                    .draw(&mut canvas);
+                            }
+                        }
+                    }
+
+                    // draw info box
+                    let anchor_point = refit_to_rect(shape_details.popup_location, origin_rect)
+                        - vec2(90.0, 120.0);
+                    let group = self.state.game.groups.get(group_ident)?;
+                    let infobox_rect = Rect::new(anchor_point.x, anchor_point.y, 180.0, 60.0);
+                    Mesh::new_rounded_rectangle(
                         ctx,
-                        &polyline,
-                        2.0,
-                        Color::from_rgb(
-                            (200.0 * sin_time) as u8,
-                            (20.0 * sin_time) as u8,
-                            (70.0 * sin_time) as u8,
-                        ),
+                        DrawMode::fill(),
+                        infobox_rect,
+                        5.0,
+                        group.gtype.color(),
                     )
                     .ok()?
                     .draw(&mut canvas);
-                }
-            };
+                    Mesh::new_rounded_rectangle(
+                        ctx,
+                        DrawMode::stroke(5.0),
+                        infobox_rect,
+                        5.0,
+                        Color::from_rgb(100, 100, 100),
+                    )
+                    .ok()?
+                    .draw(&mut canvas);
+                    Text::new(format!(
+                        "\
+{}
+{} Points
+{}",
+                        group.gtype.name(),
+                        score_details.score,
+                        if score_details.owners.is_empty() {
+                            "Unclaimed"
+                        } else {
+                            "Owners:"
+                        }
+                    ))
+                    .anchored_by(ctx, anchor_point + vec2(8.0, 8.0), AnchorPoint::NorthWest)
+                    .ok()?
+                    .color(Color::BLACK)
+                    .draw(&mut canvas);
 
+                    let meeple_point = anchor_point + vec2(77.0, 47.0);
+                    for (i, (_, color)) in score_details.owners.iter().enumerate() {
+                        GameClient::draw_meeple(
+                            ctx,
+                            &mut canvas,
+                            meeple_point + vec2(20.0, 0.0) * i as f32,
+                            *color,
+                            0.075,
+                        ).ok()?;
+                    }
+                };
+
+            // finish ui
             Mesh::new_rectangle(
                 ctx,
                 DrawMode::stroke(6.0),
@@ -722,6 +813,7 @@ impl EventHandler<GameError> for GameClient {
         } else {
             match &self.state.turn_phase {
                 TurnPhase::TilePlacement { tile } => {
+                    // draw tile placement ui
                     if let Some(pos) = self.selected_square {
                         let rect = self.grid_pos_rect(&pos, ctx);
                         let cursor_color = if !self.placement_is_valid {
@@ -739,6 +831,7 @@ impl EventHandler<GameError> for GameClient {
                 TurnPhase::MeeplePlacement {
                     placed_position, ..
                 } => {
+                    // draw meeple placement ui
                     let rect = self.grid_pos_rect(placed_position, ctx);
                     Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?
                         .draw(&mut canvas);
@@ -746,19 +839,19 @@ impl EventHandler<GameError> for GameClient {
                     if !self.ui.on_ui {
                         'draw_outline: {
                             if let Some((_, group_ident)) = self.selected_segment_and_group {
-                                let Some(outline) = self.state.game.get_group_outline(group_ident)
+                                let Some(ShapeDetails { outline, .. }) =
+                                    self.state.game.get_group_shape_details(group_ident)
                                 else {
                                     break 'draw_outline;
                                 };
-                                for polyline in outline.iter().map(|polyline| {
-                                    polyline
-                                        .iter()
+                                for line in outline.iter().map(|line| {
+                                    line.iter()
                                         .map(|vert| refit_to_rect(*vert, origin_rect))
                                         .collect::<Vec<_>>()
                                 }) {
                                     Mesh::new_line(
                                         ctx,
-                                        &polyline,
+                                        &line,
                                         2.0,
                                         Color::from_rgb(
                                             (200.0 * sin_time) as u8,

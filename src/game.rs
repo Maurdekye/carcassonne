@@ -1,20 +1,22 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use ggez::{glam::Vec2, graphics::Color, GameError};
+use ggez::{
+    glam::{vec2, Vec2},
+    graphics::Color,
+    GameError, GameResult,
+};
 use player::Player;
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
-    pos::GridPos,
-    tile::{
+    game_client::PLAYER_COLORS, line::Line, pos::GridPos, tile::{
         tile_definitions::{
             ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
-            FORTIFIED_CORNER_CITY, OPPOSING_EDGE_CITIES, STARTING_TILE,
+            FORTIFIED_CORNER_CITY, OPPOSING_EDGE_CITIES, STARTING_TILE, THREE_QUARTER_CITY,
         },
         GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
         SegmentType, Tile,
-    },
-    util::{Bag, HashMapBag},
+    }, util::{Bag, HashMapBag}
 };
 
 pub mod player {
@@ -45,13 +47,66 @@ pub type EdgeIdentifier = (GridPos, Orientation);
 pub type PlayerIdentifier = DefaultKey;
 pub type PlacedMeeple = (SegmentIdentifier, PlayerIdentifier);
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
+pub struct ScoringDetails {
+    pub score: usize,
+    pub owners: Vec<(PlayerIdentifier, Color)>,
+}
+
+#[derive(Clone)]
+pub struct ShapeDetails {
+    pub outline: Vec<Line>,
+    pub popup_location: Vec2,
+}
+
+impl From<Vec<Line>> for ShapeDetails {
+    fn from(outline: Vec<Line>) -> Self {
+        let all_verts: Vec<_> = outline.iter().flatten().collect();
+        let top_edge = all_verts
+            .iter()
+            .min_by(|a, b| a.y.total_cmp(&b.y))
+            .unwrap()
+            .y;
+        let middle: f32 = all_verts.iter().map(|v| v.x).sum();
+        let middle = middle / all_verts.len() as f32;
+        let popup_location = vec2(middle, top_edge);
+        ShapeDetails {
+            outline,
+            popup_location,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct SegmentGroup {
     pub gtype: SegmentType,
     pub segments: Vec<SegmentIdentifier>,
     pub free_edges: HashSet<EdgeIdentifier>,
     pub meeples: Vec<PlacedMeeple>,
-    pub outline: Option<Vec<Vec<Vec2>>>,
+    pub scoring_details: Option<ScoringDetails>,
+    pub shape_details: Option<ShapeDetails>,
+}
+
+impl SegmentGroup {
+    fn compute_owners(
+        &self,
+    ) -> Option<(
+        HashMap<PlayerIdentifier, Vec<(GridPos, usize)>>,
+        Vec<PlayerIdentifier>,
+    )> {
+        let Bag(meeples_by_player) = self.meeples.iter().map(|&(k, v)| (v, k)).collect();
+        let Some(highest_count) = meeples_by_player.values().map(Vec::len).max() else {
+            // nobody placed any meeples on the group
+            return None;
+        };
+        let scoring_players: Vec<_> = meeples_by_player
+            .iter()
+            .filter_map(|(player_ident, meeples)| {
+                (meeples.len() == highest_count).then_some(*player_ident)
+            })
+            .collect();
+        Some((meeples_by_player, scoring_players))
+    }
 }
 
 pub struct ScoringResult {
@@ -148,10 +203,7 @@ impl Game {
         this.place_tile(ADJACENT_EDGE_CITIES.clone(), GridPos(0, 0))?;
         this.place_meeple((GridPos(0, 0), 0), player_ident)?;
         this.place_tile(CORNER_CITY.clone(), GridPos(1, 0))?;
-        this.place_tile(
-            CORNER_CITY.clone().rotated().rotated(),
-            GridPos(0, -1),
-        )?;
+        this.place_tile(CORNER_CITY.clone().rotated().rotated(), GridPos(0, -1))?;
 
         this.place_tile(ADJACENT_EDGE_CITIES.clone(), GridPos(0, -3))?;
         this.place_meeple((GridPos(0, -3), 0), player_ident)?;
@@ -166,6 +218,63 @@ impl Game {
         this.place_tile(CURVE_ROAD.clone().rotated().rotated(), GridPos(3, -1))?;
 
         this.players.get_mut(player_ident).unwrap().meeples = 0;
+
+        Ok(this)
+    }
+
+    pub fn multiple_player_ownership_debug_game() -> Result<Game, GameError> {
+        let mut this = Game::new_with_library(vec![STARTING_TILE.clone()]);
+
+        let players = PLAYER_COLORS.map(|color| this.players.insert(Player::new(color)));
+
+        fn put_city(game: &mut Game, origin: GridPos) -> GameResult<()> {
+            game.place_tile(
+                CORNER_CITY.clone().rotated().rotated(),
+                origin + GridPos(0, -1),
+            )?;
+            game.place_tile(
+                CORNER_CITY.clone().rotated().rotated().rotated(),
+                origin + GridPos(1, -1),
+            )?;
+            game.place_tile(
+                THREE_QUARTER_CITY.clone().rotated(),
+                origin + GridPos(0, 0),
+            )?;
+            game.place_tile(
+                THREE_QUARTER_CITY.clone().rotated().rotated().rotated(),
+                origin + GridPos(1, 0),
+            )?;
+            game.place_tile(CORNER_CITY.clone().rotated(), origin + GridPos(0, 1))?;
+            game.place_tile(CORNER_CITY.clone(), origin + GridPos(1, 1))?;
+            Ok(())
+        }
+
+        put_city(&mut this, GridPos(-3, 0))?;
+
+        put_city(&mut this, GridPos(0, 0))?;
+        this.place_meeple((GridPos(0, 0), 0), players[0])?;
+
+        put_city(&mut this, GridPos(3, 0))?;
+        this.place_meeple((GridPos(3, 0), 0), players[0])?;
+        this.place_meeple((GridPos(3, 1), 0), players[1])?;
+
+        put_city(&mut this, GridPos(6, 0))?;
+        this.place_meeple((GridPos(6, 0), 0), players[0])?;
+        this.place_meeple((GridPos(6, 1), 0), players[1])?;
+        this.place_meeple((GridPos(7, 0), 0), players[2])?;
+
+        put_city(&mut this, GridPos(9, 0))?;
+        this.place_meeple((GridPos(9, 0), 0), players[0])?;
+        this.place_meeple((GridPos(9, 1), 0), players[1])?;
+        this.place_meeple((GridPos(10, 0), 0), players[2])?;
+        this.place_meeple((GridPos(10, 1), 0), players[3])?;
+
+        put_city(&mut this, GridPos(12, 0))?;
+        this.place_meeple((GridPos(12, 0), 0), players[0])?;
+        this.place_meeple((GridPos(12, 1), 0), players[1])?;
+        this.place_meeple((GridPos(13, 0), 0), players[2])?;
+        this.place_meeple((GridPos(13, 1), 0), players[3])?;
+        this.place_meeple((GridPos(13, -1), 0), players[4])?;
 
         Ok(this)
     }
@@ -223,7 +332,8 @@ impl Game {
             let group_key = additions.into_iter().next().unwrap();
             let group = self.groups.get_mut(group_key).unwrap();
             group.segments.push(seg_ident);
-            group.outline = None;
+            group.shape_details = None;
+            group.scoring_details = None;
             self.group_associations.insert(seg_ident, group_key);
         }
 
@@ -253,7 +363,8 @@ impl Game {
                 segments,
                 free_edges,
                 meeples,
-                outline: None,
+                scoring_details: None,
+                shape_details: None,
             };
             let key = self.groups.insert(new_segment_group);
             self.group_associations.extend(
@@ -280,7 +391,8 @@ impl Game {
                 segments: vec![seg_ident],
                 free_edges: HashSet::new(),
                 meeples: Vec::new(),
-                outline: None,
+                scoring_details: None,
+                shape_details: None,
             });
             self.group_associations.insert(seg_ident, key);
         }
@@ -374,19 +486,48 @@ impl Game {
         let group = self.groups.get(group_ident).unwrap();
 
         // determine which players are earning score for the group
-        let Bag(meeples_by_player) = group.meeples.iter().map(|&(k, v)| (v, k)).collect();
-        let Some(highest_count) = meeples_by_player.values().map(Vec::len).max() else {
-            // nobody placed any meeples on the group
-            return Vec::new();
-        };
-        let scoring_players: Vec<_> = meeples_by_player
-            .iter()
-            .filter_map(|(player_ident, meeples)| {
-                (meeples.len() == highest_count).then_some(*player_ident)
-            })
-            .collect();
+        let (meeples_by_player, scoring_players) = group.compute_owners().unwrap_or_default();
 
-        let group_score = match group.gtype {
+        let group_score = self.compute_group_score(group);
+
+        for player_ident in &scoring_players {
+            let player = self.players.get_mut(*player_ident).unwrap();
+            player.score += group_score;
+        }
+
+        // return and remove meeples
+        for (player_ident, meeples) in meeples_by_player {
+            let first_meeple = meeples.first().unwrap();
+            let player = self.players.get_mut(player_ident).unwrap();
+            player.meeples += meeples.len();
+            let color = player.color;
+            scoring_result.push(ScoringResult {
+                meeple_location: self.segment_by_ident(*first_meeple).unwrap().meeple_spot
+                    + Vec2::from(first_meeple.0),
+                meeple_color: color,
+                score: if scoring_players.contains(&player_ident) {
+                    group_score
+                } else {
+                    0
+                },
+            });
+        }
+
+        let group = self.groups.get_mut(group_ident).unwrap();
+        group.meeples.clear();
+        group.scoring_details = Some(ScoringDetails {
+            score: group_score,
+            owners: scoring_players
+                .into_iter()
+                .map(|id| (id, self.players.get(id).unwrap().color))
+                .collect(),
+        });
+
+        scoring_result
+    }
+
+    fn compute_group_score(&self, group: &SegmentGroup) -> usize {
+        match group.gtype {
             SegmentType::City | SegmentType::Road => {
                 let Bag(tile_scores) = group
                     .segments
@@ -449,34 +590,7 @@ impl Game {
                     + 1
             }
             SegmentType::Village => 0,
-        };
-
-        for player_ident in &scoring_players {
-            let player = self.players.get_mut(*player_ident).unwrap();
-            player.score += group_score;
         }
-
-        // return and remove meeples
-        for (player_ident, meeples) in meeples_by_player {
-            let first_meeple = meeples.first().unwrap();
-            let player = self.players.get_mut(player_ident).unwrap();
-            player.meeples += meeples.len();
-            let color = player.color;
-            scoring_result.push(ScoringResult {
-                meeple_location: self.segment_by_ident(*first_meeple).unwrap().meeple_spot
-                    + Vec2::from(first_meeple.0),
-                meeple_color: color,
-                score: if scoring_players.contains(&player_ident) {
-                    group_score
-                } else {
-                    0
-                },
-            });
-        }
-
-        self.groups.get_mut(group_ident).unwrap().meeples.clear();
-
-        scoring_result
     }
 
     pub fn place_meeple(
@@ -498,17 +612,49 @@ impl Game {
         Ok(())
     }
 
-    pub fn get_group_outline(&mut self, group_ident: GroupIdentifier) -> Option<&Vec<Vec<Vec2>>> {
+    pub fn get_group_scoring_details(
+        &mut self,
+        group_ident: GroupIdentifier,
+    ) -> Option<&ScoringDetails> {
         let group = self.groups.get(group_ident)?;
-        if group.outline.is_none() {
-            let outline = self.compute_group_outline(group);
+        if group.scoring_details.is_none() {
+            let scoring_details = self.compute_group_scoring_details(group);
             let group = self.groups.get_mut(group_ident)?;
-            group.outline = Some(outline);
+            group.scoring_details = Some(scoring_details);
         }
-        self.groups.get(group_ident).unwrap().outline.as_ref()
+        self.groups
+            .get(group_ident)
+            .unwrap()
+            .scoring_details
+            .as_ref()
     }
 
-    fn compute_group_outline(&self, group: &SegmentGroup) -> Vec<Vec<Vec2>> {
+    fn compute_group_scoring_details(&self, group: &SegmentGroup) -> ScoringDetails {
+        let group_score = self.compute_group_score(group);
+        let (_, scoring_players) = group.compute_owners().unwrap_or_default();
+        ScoringDetails {
+            score: group_score,
+            owners: scoring_players
+                .into_iter()
+                .map(|id| (id, self.players.get(id).unwrap().color))
+                .collect(),
+        }
+    }
+
+    pub fn get_group_shape_details(
+        &mut self,
+        group_ident: GroupIdentifier,
+    ) -> Option<&ShapeDetails> {
+        let group = self.groups.get(group_ident)?;
+        if group.shape_details.is_none() {
+            let outline = self.compute_group_outline(group);
+            let group = self.groups.get_mut(group_ident)?;
+            group.shape_details = Some(outline.into());
+        }
+        self.groups.get(group_ident).unwrap().shape_details.as_ref()
+    }
+
+    fn compute_group_outline(&self, group: &SegmentGroup) -> Vec<Line> {
         // collect all edges by their grid position
         let Bag(edges_by_gridpos) = group
             .segments
