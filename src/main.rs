@@ -2,6 +2,8 @@
 #![feature(try_blocks)]
 #![feature(duration_millis_float)]
 
+use std::net::IpAddr;
+
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
     conf::{WindowMode, WindowSetup},
@@ -13,12 +15,14 @@ mod game;
 mod game_client;
 mod main_client;
 mod main_menu_client;
+mod multiplayer;
+
+mod line;
 mod pos;
 mod sub_event_handler;
 mod tile;
 mod ui_manager;
 mod util;
-mod line;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -35,7 +39,7 @@ enum DebugGameConfiguration {
     MeeplePlacement,
     MultipleSegmentsPerTileScoring,
     MultiplePlayerOwnership,
-    RotationTest
+    RotationTest,
 }
 
 #[derive(Parser, Clone)]
@@ -51,6 +55,14 @@ struct Args {
     /// Enable experimental snapping tile placement
     #[arg(short, long, action = ArgAction::SetTrue)]
     snap_placement: bool,
+
+    /// Ip address to attempt to connect to a multiplayer game
+    #[arg(short, long)]
+    ip: Option<IpAddr>,
+
+    /// Port to host a multiplayer game on / connect to
+    #[arg(short, long, default_value_t = 11069)]
+    port: u16,
 }
 
 fn main() -> GameResult {

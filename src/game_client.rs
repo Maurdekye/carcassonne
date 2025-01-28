@@ -19,7 +19,7 @@ use crate::Args;
 use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
 use ggez::{
-    event::{self, EventHandler},
+    event,
     glam::{vec2, Vec2, Vec2Swizzles},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     Context, GameError, GameResult,
@@ -124,7 +124,7 @@ pub struct GameClient {
     return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
     state: GameState,
     inspecting_groups: Option<GroupInspection>,
-    ui: UIManager<GameEvent>,
+    ui: UIManager<GameEvent, GameEvent>,
     camera_movement: Vec2,
     args: Args,
 }
@@ -506,7 +506,7 @@ impl GameClient {
     }
 }
 
-impl EventHandler<GameError> for GameClient {
+impl SubEventHandler<GameError> for GameClient {
     fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
         if self.pause_menu.is_some() {
             return Ok(());
@@ -753,10 +753,8 @@ impl EventHandler<GameError> for GameClient {
         Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut Context) -> GameResult {
+    fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-
-        let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         let time = ctx.time.time_since_start().as_secs_f32();
         let sin_time = time.sin() * 0.1 + 1.0;
@@ -764,7 +762,7 @@ impl EventHandler<GameError> for GameClient {
 
         // draw tiles
         for (pos, tile) in &self.state.game.placed_tiles {
-            tile.render(ctx, &mut canvas, self.grid_pos_rect(pos, ctx))?;
+            tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
         }
 
         // draw meeples
@@ -780,7 +778,7 @@ impl EventHandler<GameError> for GameClient {
             let tile = self.state.game.placed_tiles.get(&pos).unwrap();
             let rect = self.grid_pos_rect(&pos, ctx);
             let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
-            GameClient::draw_meeple(ctx, &mut canvas, segment_meeple_spot, color, self.scale)?;
+            GameClient::draw_meeple(ctx, canvas, segment_meeple_spot, color, self.scale)?;
         }
 
         // draw score effects
@@ -796,7 +794,7 @@ impl EventHandler<GameError> for GameClient {
                 .size(20.0)
                 .centered_on(ctx, pos)?
                 .color(color)
-                .draw(&mut canvas);
+                .draw(canvas);
         }
 
         if let Some(group_inspection) = &self.inspecting_groups {
@@ -809,7 +807,7 @@ impl EventHandler<GameError> for GameClient {
                     AnchorPoint::NorthEast,
                 )?
                 .color(Color::BLACK)
-                .draw(&mut canvas);
+                .draw(canvas);
 
             let _: Option<()> =
                 try {
@@ -830,7 +828,7 @@ impl EventHandler<GameError> for GameClient {
                     for line in shape_details.outline.iter().map(refit_line) {
                         Mesh::new_line(ctx, &line, 4.0, Color::BLACK)
                             .ok()?
-                            .draw(&mut canvas);
+                            .draw(canvas);
                     }
                     if score_details.owners.len() < 2 {
                         let color = score_details
@@ -840,9 +838,7 @@ impl EventHandler<GameError> for GameClient {
                             .cloned()
                             .unwrap_or(Color::from_rgb(100, 100, 100));
                         for line in shape_details.outline.iter().map(refit_line) {
-                            Mesh::new_line(ctx, &line, 3.0, color)
-                                .ok()?
-                                .draw(&mut canvas);
+                            Mesh::new_line(ctx, &line, 3.0, color).ok()?.draw(canvas);
                         }
                     } else {
                         const DOTTED_LINE_LENGTH: f32 = 25.0;
@@ -862,7 +858,7 @@ impl EventHandler<GameError> for GameClient {
                             {
                                 Mesh::new_line(ctx, &line_seg, 3.0, *color)
                                     .ok()?
-                                    .draw(&mut canvas);
+                                    .draw(canvas);
                             }
                         }
                     }
@@ -880,7 +876,7 @@ impl EventHandler<GameError> for GameClient {
                         group.gtype.color(),
                     )
                     .ok()?
-                    .draw(&mut canvas);
+                    .draw(canvas);
                     Mesh::new_rounded_rectangle(
                         ctx,
                         DrawMode::stroke(5.0),
@@ -889,7 +885,7 @@ impl EventHandler<GameError> for GameClient {
                         Color::from_rgb(100, 100, 100),
                     )
                     .ok()?
-                    .draw(&mut canvas);
+                    .draw(canvas);
                     Text::new(format!(
                         "\
 {}
@@ -907,13 +903,13 @@ impl EventHandler<GameError> for GameClient {
                     .anchored_by(ctx, anchor_point + vec2(8.0, 8.0), AnchorPoint::NorthWest)
                     .ok()?
                     .color(Color::BLACK)
-                    .draw(&mut canvas);
+                    .draw(canvas);
 
                     let meeple_point = anchor_point + vec2(77.0, 47.0);
                     for (i, (_, color)) in score_details.owners.iter().enumerate() {
                         GameClient::draw_meeple(
                             ctx,
-                            &mut canvas,
+                            canvas,
                             meeple_point + vec2(20.0, 0.0) * i as f32,
                             *color,
                             0.075,
@@ -929,7 +925,7 @@ impl EventHandler<GameError> for GameClient {
                 Rect::new(0.0, 0.0, res.x, res.y),
                 Color::CYAN,
             )?
-            .draw(&mut canvas);
+            .draw(canvas);
         } else {
             match &self.state.turn_phase {
                 TurnPhase::TilePlacement { tile, .. } => {
@@ -942,10 +938,10 @@ impl EventHandler<GameError> for GameClient {
                             Color::GREEN
                         };
                         if !self.state.game.placed_tiles.contains_key(&pos) {
-                            tile.render(ctx, &mut canvas, rect)?;
+                            tile.render(ctx, canvas, rect)?;
                         }
                         Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
-                            .draw(&mut canvas);
+                            .draw(canvas);
                     }
                 }
                 TurnPhase::MeeplePlacement {
@@ -954,7 +950,7 @@ impl EventHandler<GameError> for GameClient {
                     // draw meeple placement ui
                     let rect = self.grid_pos_rect(placed_position, ctx);
                     Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?
-                        .draw(&mut canvas);
+                        .draw(canvas);
 
                     if !self.ui.on_ui {
                         'draw_outline: {
@@ -979,7 +975,7 @@ impl EventHandler<GameError> for GameClient {
                                             (70.0 * sin_time) as u8,
                                         ),
                                     )?
-                                    .draw(&mut canvas);
+                                    .draw(canvas);
                                 }
                             }
                         }
@@ -990,7 +986,7 @@ impl EventHandler<GameError> for GameClient {
         }
 
         // draw ui
-        self.ui.draw(ctx, &mut canvas)?;
+        self.ui.draw(ctx, canvas)?;
 
         let current_player_ident = *self.state.turn_order.front().unwrap();
         let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
@@ -999,7 +995,7 @@ impl EventHandler<GameError> for GameClient {
             for (i, &player_ident) in self.state.turn_order.iter().enumerate() {
                 self.render_player_card(
                     ctx,
-                    &mut canvas,
+                    canvas,
                     player_ident,
                     vec2(20.0, 20.0) + vec2(0.0, 80.0) * i as f32,
                     player_ident == current_player_ident && !is_endgame,
@@ -1016,21 +1012,15 @@ impl EventHandler<GameError> for GameClient {
                     5.0,
                     Color::from_rgb(192, 173, 138),
                 )?
-                .draw(&mut canvas);
+                .draw(canvas);
                 Text::new(format!("{}", self.state.game.library.len()))
                     .size(24.0)
                     .centered_on(ctx, tile_count_rect.center().into())?
-                    .draw(&mut canvas);
+                    .draw(canvas);
             }
         } else {
             // draw card of current player
-            self.render_player_card(
-                ctx,
-                &mut canvas,
-                current_player_ident,
-                vec2(20.0, 20.0),
-                false,
-            )?;
+            self.render_player_card(ctx, canvas, current_player_ident, vec2(20.0, 20.0), false)?;
         }
 
         // draw player color outline
@@ -1046,14 +1036,14 @@ impl EventHandler<GameError> for GameClient {
                     .unwrap()
                     .color,
             )?
-            .draw(&mut canvas);
+            .draw(canvas);
         }
 
         // draw pause menu
         if let Some(pause_menu) = &mut self.pause_menu {
-            pause_menu.draw(ctx, &mut canvas)?;
+            pause_menu.draw(ctx, canvas)?;
         }
 
-        canvas.finish(ctx)
+        Ok(())
     }
 }

@@ -29,7 +29,7 @@ pub struct PauseScreenSubclient {
     parent_channel: Sender<GameEvent>,
     event_sender: Sender<PauseScreenEvent>,
     event_receiver: Receiver<PauseScreenEvent>,
-    ui: UIManager<PauseScreenEvent>,
+    ui: UIManager<PauseScreenEvent, PauseScreenEvent>,
     is_endgame: bool,
     has_history: bool,
 }

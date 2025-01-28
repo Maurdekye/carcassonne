@@ -111,19 +111,22 @@ impl<E> Button<E> {
     }
 }
 
-pub struct UIManager<E> {
+pub struct UIManager<E, T> {
     buttons: Vec<Rc<RefCell<Button<E>>>>,
     pub on_ui: bool,
-    event_sender: Sender<E>,
+    event_sender: Sender<T>,
     mouse_position: Vec2,
 }
 
-impl<E> UIManager<E> {
+impl<E, T> UIManager<E, T>
+where
+    T: From<E>,
+{
     #[allow(clippy::type_complexity)]
     pub fn new_and_rc_buttons<const N: usize>(
-        event_sender: Sender<E>,
+        event_sender: Sender<T>,
         buttons: [Button<E>; N],
-    ) -> (UIManager<E>, [Rc<RefCell<Button<E>>>; N]) {
+    ) -> (UIManager<E, T>, [Rc<RefCell<Button<E>>>; N]) {
         let return_buttons = buttons.map(RefCell::new).map(Rc::new);
         let buttons = return_buttons.clone().into();
         (
@@ -137,7 +140,10 @@ impl<E> UIManager<E> {
         )
     }
 
-    pub fn new<const N: usize>(event_sender: Sender<E>, buttons: [Button<E>; N]) -> UIManager<E> {
+    pub fn new<const N: usize>(
+        event_sender: Sender<T>,
+        buttons: [Button<E>; N],
+    ) -> UIManager<E, T> {
         Self::new_and_rc_buttons(event_sender, buttons).0
     }
 
@@ -157,8 +163,8 @@ impl<E> UIManager<E> {
                 ctx.mouse.button_pressed(MouseButton::Left),
             ) {
                 (ButtonState::Disabled, _, _) => <[f32; 4]>::from(button.color)
-                .map(|x| (x - 0.5) * 0.25 + 0.5)
-                .into(),
+                    .map(|x| (x - 0.5) * 0.25 + 0.5)
+                    .into(),
                 (_, true, true) => color_mul(button.color, 0.8),
                 (_, true, _) => color_mul(button.color, 1.2),
                 _ => button.color,
@@ -190,7 +196,7 @@ impl<E> UIManager<E> {
             if bounds.contains(self.mouse_position) {
                 self.on_ui = true;
                 if ctx.mouse.button_just_released(MouseButton::Left) {
-                    self.event_sender.send(button.event.clone()).unwrap();
+                    self.event_sender.send(button.event.clone().into()).unwrap();
                 }
             }
         }

@@ -1,8 +1,11 @@
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{
+    net::SocketAddr,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 use ggez::{
     event::EventHandler,
-    graphics::Color,
+    graphics::{Canvas, Color},
     input::{
         keyboard::KeyCode,
         mouse::{set_cursor_type, CursorIcon},
@@ -11,36 +14,28 @@ use ggez::{
 };
 
 use crate::{
-    game::{debug_game_configs, Game},
     game_client::GameClient,
     main_menu_client::MainMenuClient,
+    multiplayer::{
+        multiplayer_host_menu_client::MultiplayerHostMenuClient,
+        multiplayer_join_screen::MultiplayerJoinMenuClient,
+    },
+    sub_event_handler::SubEventHandler,
     Args, DebugGameConfiguration,
 };
-
-impl DebugGameConfiguration {
-    pub fn get_game(&self) -> Result<Game, GameError> {
-        use DebugGameConfiguration::*;
-        match self {
-            MeeplePlacement => debug_game_configs::meeple_locations(),
-            MultipleSegmentsPerTileScoring => {
-                debug_game_configs::multiple_segments_per_tile_scoring()
-            }
-            MultiplePlayerOwnership => debug_game_configs::multiple_player_ownership(),
-            RotationTest => debug_game_configs::rotation_test(),
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
     StartGame(Vec<Color>),
     StartDebugGame(DebugGameConfiguration),
     ReturnToMainMenu,
+    HostMultiplayerMenu,
+    JoinMultiplayerMenu(SocketAddr),
     Close,
 }
 
 pub struct MainClient {
-    scene: Box<dyn EventHandler<GameError>>,
+    scene: Box<dyn SubEventHandler<GameError>>,
     event_sender: Sender<MainEvent>,
     event_receiver: Receiver<MainEvent>,
     quitting: bool,
@@ -53,6 +48,12 @@ impl MainClient {
         if let Some(debug_config) = &args.debug_config {
             event_sender
                 .send(MainEvent::StartDebugGame(debug_config.clone()))
+                .unwrap();
+        } else if let Some(ip) = args.ip {
+            event_sender
+                .send(MainEvent::JoinMultiplayerMenu(SocketAddr::new(
+                    ip, args.port,
+                )))
                 .unwrap();
         }
         MainClient {
@@ -92,6 +93,19 @@ impl MainClient {
                     self.event_sender.clone(),
                 ))
             }
+            MainEvent::HostMultiplayerMenu => {
+                self.scene = Box::new(MultiplayerHostMenuClient::new(
+                    self.event_sender.clone(),
+                    self.args.clone(),
+                ))
+            }
+            MainEvent::JoinMultiplayerMenu(socket) => {
+                self.scene = Box::new(MultiplayerJoinMenuClient::new(
+                    self.event_sender.clone(),
+                    self.args.clone(),
+                    socket,
+                ))
+            }
         }
         Ok(())
     }
@@ -115,7 +129,11 @@ impl EventHandler<GameError> for MainClient {
         ctx.gfx
             .set_window_title(&format!("Carcassone: {:.2} fps", ctx.time.fps()));
 
-        self.scene.draw(ctx)
+        let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
+
+        self.scene.draw(ctx, &mut canvas)?;
+
+        canvas.finish(ctx)
     }
 
     fn quit_event(&mut self, ctx: &mut Context) -> Result<bool, GameError> {
