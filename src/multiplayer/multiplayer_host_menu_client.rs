@@ -7,7 +7,7 @@ use std::{
 
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::{Canvas, Text},
+    graphics::{Canvas, Color, Rect, Text},
     Context, GameError, GameResult,
 };
 
@@ -15,7 +15,7 @@ use crate::{
     main_client::MainEvent,
     multiplayer::transport::{Message, MessageTransporter},
     sub_event_handler::SubEventHandler,
-    ui_manager::UIManager,
+    ui_manager::{Button, ButtonBounds, UIManager},
     util::{AnchorPoint, TextExt},
     Args,
 };
@@ -23,10 +23,11 @@ use crate::{
 use super::transport::{MessageServer, NetworkEvent};
 
 #[derive(Clone)]
-enum UIEvent {}
+enum UIEvent {
+    MainEvent(MainEvent),
+}
 
 enum MultiplayerHostMenuEvent {
-    MainEvent(MainEvent),
     UIEvent(UIEvent),
     NetworkEvent {
         src_addr: IpAddr,
@@ -60,7 +61,14 @@ impl MultiplayerHostMenuClient {
     pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MultiplayerHostMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [..]) = UIManager::new_and_rc_buttons(ui_sender, []);
+        let (ui, [..]) = UIManager::new_and_rc_buttons(
+            ui_sender,
+            [Button::new(
+                ButtonBounds::absolute(Rect::new(30.0, 30.0, 120.0, 40.0)),
+                Text::new("Back"),
+                UIEvent::MainEvent(MainEvent::ReturnToMainMenu),
+            )],
+        );
         let message_server = MessageServer::start(event_sender.clone(), args.port);
         MultiplayerHostMenuClient {
             args,
@@ -79,9 +87,6 @@ impl MultiplayerHostMenuClient {
         event: MultiplayerHostMenuEvent,
     ) -> GameResult<()> {
         match event {
-            MultiplayerHostMenuEvent::MainEvent(main_event) => {
-                self.parent_channel.send(main_event).unwrap()
-            }
             MultiplayerHostMenuEvent::NetworkEvent { src_addr, event } => match event {
                 NetworkEvent::Connect(transport) => {
                     self.clients.insert(src_addr, transport);
@@ -100,7 +105,9 @@ impl MultiplayerHostMenuClient {
                     self.clients.remove(&src_addr);
                 }
             },
-            MultiplayerHostMenuEvent::UIEvent(uievent) => match uievent {},
+            MultiplayerHostMenuEvent::UIEvent(uievent) => match uievent {
+                UIEvent::MainEvent(main_event) => self.parent_channel.send(main_event).unwrap(),
+            },
         }
         Ok(())
     }
@@ -122,8 +129,13 @@ impl SubEventHandler<GameError> for MultiplayerHostMenuClient {
             "Waiting for player connections on port {}...",
             self.args.port
         ))
-        .size(64.0)
-        .anchored_by(ctx, res * vec2(0.5, 0.1), AnchorPoint::NorthCenter)?
+        .size(36.0)
+        .anchored_by(
+            ctx,
+            res * vec2(0.5, 0.0) + vec2(0.0, 30.0),
+            AnchorPoint::NorthCenter,
+        )?
+        .color(Color::BLACK)
         .draw(canvas);
 
         Text::new(if self.clients.is_empty() {
@@ -141,6 +153,7 @@ impl SubEventHandler<GameError> for MultiplayerHostMenuClient {
         })
         .size(32.0)
         .anchored_by(ctx, vec2(50.0, 100.0), AnchorPoint::NorthWest)?
+        .color(Color::BLACK)
         .draw(canvas);
 
         self.ui.draw(ctx, canvas)

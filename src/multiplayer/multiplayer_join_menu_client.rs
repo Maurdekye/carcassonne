@@ -1,7 +1,5 @@
 use std::{
-    net::SocketAddr,
-    sync::mpsc::{channel, Receiver, Sender},
-    time::{Duration, Instant},
+    cell::LazyCell, net::SocketAddr, sync::mpsc::{channel, Receiver, Sender}, time::{Duration, Instant}
 };
 
 use ggez::{
@@ -85,17 +83,14 @@ impl MultiplayerJoinMenuClient {
                 }
                 NetworkEvent::Message(server_message) => {
                     dbg!(&server_message);
+                    let mut server = LazyCell::new(|| self.connection.as_mut().unwrap());
                     match server_message {
                         Message::Pong => {
                             let now = Instant::now();
                             self.latency = Some(now - self.last_ping);
                         }
                         Message::Ping => {
-                            self.connection
-                                .as_mut()
-                                .unwrap()
-                                .send(&Message::Pong)
-                                .unwrap();
+                            LazyCell::force_mut(&mut server).send(&Message::Pong).unwrap();
                         }
                         _ => {}
                     }

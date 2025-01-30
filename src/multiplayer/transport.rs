@@ -80,9 +80,10 @@ impl MessageServer {
     where
         T: From<(IpAddr, NetworkEvent)> + Send + 'static,
     {
+        println!("Message server awaiting connections");
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
-        while !deathswitch.try_recv().is_ok() {
+        while deathswitch.try_recv().is_err() {
             match listener.accept() {
                 Err(e) if e.kind() == ErrorKind::WouldBlock => {
                     thread::sleep(Duration::from_millis(100));
@@ -110,6 +111,7 @@ impl MessageServer {
     ) where
         T: From<(IpAddr, NetworkEvent)> + Send + 'static,
     {
+        println!("New connection received from {}", socket);
         let src_addr = socket.ip();
         let send_event = |event: NetworkEvent| event_sender.send(T::from((src_addr, event)));
         let result: Result<(), io::Error> = try {
@@ -124,6 +126,7 @@ impl MessageServer {
 
 impl Drop for MessageServer {
     fn drop(&mut self) {
+        println!("Message server stopping");
         self.thread_kill.send(()).unwrap();
         self.listener_thread.take().unwrap().join().unwrap();
     }
@@ -153,9 +156,11 @@ impl MessageClient {
     where
         T: From<NetworkEvent> + Send + 'static,
     {
-        if !deathswitch.try_recv().is_ok() {
+        println!("Starting message client");
+        while deathswitch.try_recv().is_err() {
             let _: Result<_, io::Error> = try {
                 let stream = TcpStream::connect(socket)?;
+                println!("Connected to server");
                 let _: Result<_, io::Error> = try {
                     let mut transport = MessageTransporter::new(stream);
                     {

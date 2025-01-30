@@ -268,17 +268,11 @@ where
     T: Drawable,
 {
     fn default_params(&self) -> DrawableWihParams<'_, Self> {
-        DrawableWihParams {
-            drawable: self,
-            draw_param: DrawParam::default(),
-        }
+        self.with_params(DrawParam::default())
     }
 
     fn with_dest(&self, dest: Vec2) -> DrawableWihParams<'_, Self> {
-        DrawableWihParams {
-            drawable: self,
-            draw_param: DrawParam::default().dest(dest),
-        }
+        self.with_params(DrawParam::default().dest(dest))
     }
 
     fn draw(self, canvas: &mut Canvas) {
