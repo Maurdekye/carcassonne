@@ -165,7 +165,7 @@ impl MessageClient {
             let _: Result<_, io::Error> = try {
                 let stream = TcpStream::connect(socket)?;
                 println!("Connected to server");
-                let _: Result<_, io::Error> = try {
+                let Err(err): Result<_, io::Error> = (try {
                     let mut transport = MessageTransporter::new(stream);
                     {
                         let transport = transport.try_clone().unwrap();
@@ -176,10 +176,15 @@ impl MessageClient {
                     loop {
                         event_sender
                             .send(NetworkEvent::Message(transport.recv()?).into())
-                            .unwrap();
+                            .map_err(|_| {
+                                io::Error::new(ErrorKind::ConnectionAborted, "Channel Closed")
+                            })?;
                     }
+                }) else {
+                    return;
                 };
-                event_sender.send(NetworkEvent::Disconnect.into()).unwrap();
+                println!("{err}");
+                let _ = event_sender.send(NetworkEvent::Disconnect.into());
             };
         }
     }

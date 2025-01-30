@@ -90,6 +90,7 @@ impl MultiplayerJoinMenuClient {
                         Message::Pong => {
                             let now = Instant::now();
                             self.latency = Some(now - self.last_ping);
+                            dbg!(&self.latency);
                         }
                         Message::Ping => {
                             LazyCell::force_mut(&mut server).send(&Message::Pong).unwrap();
@@ -117,7 +118,7 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
 
         if let Some(connection) = &mut self.connection {
             let now = Instant::now();
-            if now < self.last_ping + Duration::from_secs(2) {
+            if now > self.last_ping + Duration::from_secs(2) {
                 connection.send(&Message::Ping).unwrap();
                 self.last_ping = now;
             }
