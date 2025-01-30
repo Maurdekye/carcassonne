@@ -33,7 +33,7 @@ pub struct MainPauseMenuSubclient {
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<MainPauseMenuEvent>,
     event_receiver: Receiver<MainPauseMenuEvent>,
-    ui: UIManager<MainPauseMenuEvent>,
+    ui: UIManager<MainPauseMenuEvent, MainPauseMenuEvent>,
 }
 
 impl MainPauseMenuSubclient {
@@ -123,7 +123,7 @@ impl MainPauseMenuSubclient {
 
 impl SubEventHandler<GameError> for MainPauseMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.ui.update(ctx);
+        self.ui.update(ctx)?;
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
             self.event_sender

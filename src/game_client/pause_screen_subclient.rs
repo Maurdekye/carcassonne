@@ -90,7 +90,7 @@ impl PauseScreenSubclient {
 impl SubEventHandler<GameError> for PauseScreenSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
-        self.ui.update(ctx);
+        self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }

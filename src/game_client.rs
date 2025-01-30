@@ -524,7 +524,7 @@ impl SubEventHandler<GameError> for GameClient {
     }
 
     fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.ui.update(ctx);
+        self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }

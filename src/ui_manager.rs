@@ -5,10 +5,13 @@ use ggez::{
     glam::Vec2,
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     input::mouse::{set_cursor_type, CursorIcon},
-    Context, GameError,
+    Context, GameError, GameResult,
 };
 
-use crate::util::{color_mul, DrawableWihParamsExt};
+use crate::{
+    sub_event_handler::SubEventHandler,
+    util::{color_mul, DrawableWihParamsExt},
+};
 
 pub const BUTTON_COLOR: Color = Color {
     r: 0.5,
@@ -146,8 +149,14 @@ where
     ) -> UIManager<E, T> {
         Self::new_and_rc_buttons(event_sender, buttons).0
     }
+}
 
-    pub fn draw(&self, ctx: &Context, canvas: &mut Canvas) -> Result<(), GameError> {
+impl<E, T> SubEventHandler<GameError> for UIManager<E, T>
+where
+    E: Clone,
+    T: From<E>,
+{
+    fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         for button in self
             .buttons
@@ -179,10 +188,7 @@ where
         Ok(())
     }
 
-    pub fn update(&mut self, ctx: &mut Context)
-    where
-        E: Clone,
-    {
+    fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
         self.mouse_position = ctx.mouse.position().into();
         self.on_ui = false;
@@ -203,5 +209,6 @@ where
         if self.on_ui {
             set_cursor_type(ctx, CursorIcon::Hand);
         }
+        Ok(())
     }
 }

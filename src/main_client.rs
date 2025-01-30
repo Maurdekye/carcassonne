@@ -18,7 +18,7 @@ use crate::{
     main_menu_client::MainMenuClient,
     multiplayer::{
         multiplayer_host_menu_client::MultiplayerHostMenuClient,
-        multiplayer_join_screen::MultiplayerJoinMenuClient,
+        multiplayer_join_menu_client::MultiplayerJoinMenuClient,
     },
     sub_event_handler::SubEventHandler,
     Args, DebugGameConfiguration,

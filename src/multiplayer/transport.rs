@@ -33,11 +33,11 @@ impl MessageTransporter {
     }
 
     pub fn send(&mut self, message: &Message) -> Result<(), io::Error> {
-        let mut encoded_message: Vec<u8> = bincode::serialize(message)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
-        let mut len = u64::to_le_bytes(encoded_message.len() as u64);
-        self.0.write_all(&mut len)?;
-        self.0.write_all(&mut encoded_message)?;
+        let encoded_message: Vec<u8> =
+            bincode::serialize(message).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+        let len = u64::to_le_bytes(encoded_message.len() as u64);
+        self.0.write_all(&len)?;
+        self.0.write_all(&encoded_message)?;
         Ok(())
     }
 
@@ -47,39 +47,39 @@ impl MessageTransporter {
         let len = u64::from_le_bytes(len_buf) as usize;
         let mut buf = vec![0; len];
         self.0.read_exact(&mut buf)?;
-        let message: Message = bincode::deserialize(&buf)
-            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+        let message: Message =
+            bincode::deserialize(&buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         Ok(message)
     }
 }
 
-pub struct MessageServer<T> {
-    event_sender: Sender<T>,
+pub struct MessageServer {
     listener_thread: Option<JoinHandle<()>>,
     thread_kill: Sender<()>,
 }
 
-impl<T> MessageServer<T>
-where
-    T: From<(IpAddr, NetworkEvent)> + Send + 'static,
-{
-    pub fn start(event_sender: Sender<T>, port: u16) -> Self {
+impl MessageServer {
+    pub fn start<T>(event_sender: Sender<T>, port: u16) -> Self
+    where
+        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+    {
         let (thread_kill, deathswitch) = channel();
         let listener_thread = {
-            let event_sender = event_sender.clone();
             let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port));
             Some(thread::spawn(move || {
                 Self::listener_thread(event_sender, deathswitch, addr)
             }))
         };
         MessageServer {
-            event_sender,
             listener_thread,
             thread_kill,
         }
     }
 
-    fn listener_thread(event_sender: Sender<T>, deathswitch: Receiver<()>, addr: SocketAddr) {
+    fn listener_thread<T>(event_sender: Sender<T>, deathswitch: Receiver<()>, addr: SocketAddr)
+    where
+        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+    {
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
         while !deathswitch.try_recv().is_ok() {
@@ -96,20 +96,20 @@ where
                             .send(T::from((socket.ip(), NetworkEvent::Connect(transport))))
                             .unwrap();
                     }
-                    thread::spawn(move || {
-                        Self::connection_thread(event_sender, transport, socket)
-                    });
+                    thread::spawn(move || Self::connection_thread(event_sender, transport, socket));
                 }
                 Err(e) => panic!("{e}"),
             }
         }
     }
 
-    fn connection_thread(
+    fn connection_thread<T>(
         event_sender: Sender<T>,
         mut transport: MessageTransporter,
         socket: SocketAddr,
-    ) {
+    ) where
+        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+    {
         let src_addr = socket.ip();
         let send_event = |event: NetworkEvent| event_sender.send(T::from((src_addr, event)));
         let result: Result<(), io::Error> = try {
@@ -122,43 +122,37 @@ where
     }
 }
 
-impl<T> Drop for MessageServer<T> {
+impl Drop for MessageServer {
     fn drop(&mut self) {
         self.thread_kill.send(()).unwrap();
         self.listener_thread.take().unwrap().join().unwrap();
     }
 }
 
-pub struct MessageClient<T> {
-    event_sender: Sender<T>,
+pub struct MessageClient {
     connection_thread: Option<JoinHandle<()>>,
     thread_kill: Sender<()>,
 }
 
-impl<T> MessageClient<T>
-where
-    T: From<NetworkEvent> + Send + 'static,
-{
-    pub fn start(event_sender: Sender<T>, socket: SocketAddr) -> Self {
+impl MessageClient {
+    pub fn start<T>(event_sender: Sender<T>, socket: SocketAddr) -> Self
+    where
+        T: From<NetworkEvent> + Send + 'static,
+    {
         let (thread_kill, deathswitch) = channel();
-        let connection_thread = {
-            let event_sender = event_sender.clone();
-            Some(thread::spawn(move || {
-                Self::connection_thread(event_sender, socket, deathswitch)
-            }))
-        };
+        let connection_thread = Some(thread::spawn(move || {
+            Self::connection_thread(event_sender, socket, deathswitch)
+        }));
         MessageClient {
-            event_sender,
             connection_thread,
             thread_kill,
         }
     }
 
-    fn connection_thread(
-        event_sender: Sender<T>,
-        socket: SocketAddr,
-        deathswitch: Receiver<()>,
-    ) {
+    fn connection_thread<T>(event_sender: Sender<T>, socket: SocketAddr, deathswitch: Receiver<()>)
+    where
+        T: From<NetworkEvent> + Send + 'static,
+    {
         if !deathswitch.try_recv().is_ok() {
             let _: Result<_, io::Error> = try {
                 let stream = TcpStream::connect(socket)?;
@@ -182,7 +176,7 @@ where
     }
 }
 
-impl<T> Drop for MessageClient<T> {
+impl Drop for MessageClient {
     fn drop(&mut self) {
         self.thread_kill.send(()).unwrap();
         self.connection_thread.take().unwrap().join().unwrap();

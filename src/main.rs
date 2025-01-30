@@ -1,6 +1,7 @@
 #![feature(iter_map_windows)]
 #![feature(try_blocks)]
 #![feature(duration_millis_float)]
+#![feature(lazy_get)]
 
 use std::net::IpAddr;
 

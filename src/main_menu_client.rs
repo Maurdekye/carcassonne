@@ -60,17 +60,9 @@ impl MainMenuClient {
     pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MainMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [_, start_game_button]) = UIManager::new_and_rc_buttons(
+        let (ui, [start_game_button, ..]) = UIManager::new_and_rc_buttons(
             ui_sender,
             [
-                Button::new(
-                    ButtonBounds {
-                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
-                        absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
-                    },
-                    Text::new("Quit"),
-                    MainMenuEvent::MainEvent(MainEvent::Close),
-                ),
                 Button::new(
                     ButtonBounds {
                         relative: Self::BUTTONS_CENTER,
@@ -81,8 +73,29 @@ impl MainMenuClient {
                             40.0,
                         ),
                     },
-                    Text::new("Start 0 Player Game"),
+                    Text::new("Start Local 0 Player Game"),
                     MainMenuEvent::StartGame,
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Self::BUTTONS_CENTER,
+                        absolute: Rect::new(
+                            -120.0,
+                            Self::BUTTON_SIZE * 2.0 + Self::BUTTON_SPACING + 60.0,
+                            240.0,
+                            40.0,
+                        ),
+                    },
+                    Text::new("Multiplayer"),
+                    MainMenuEvent::MainEvent(MainEvent::HostMultiplayerMenu),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                        absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
+                    },
+                    Text::new("Quit"),
+                    MainMenuEvent::MainEvent(MainEvent::Close),
                 ),
             ],
         );
@@ -148,7 +161,7 @@ impl MainMenuClient {
                 let mut start_game_button = self.start_game_button.borrow_mut();
                 start_game_button.state = ButtonState::disabled_if(self.selected_colors.len() < 2);
                 start_game_button.text =
-                    Text::new(format!("Start {} Player Game", self.selected_colors.len()));
+                    Text::new(format!("Start Local {} Player Game", self.selected_colors.len()));
             }
             MainMenuEvent::StartGame => {
                 if self.selected_colors.len() < 2 {
@@ -166,8 +179,8 @@ impl MainMenuClient {
 
 impl SubEventHandler<GameError> for MainMenuClient {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
-        self.ui.update(ctx);
-        self.color_selection_ui.update(ctx);
+        self.ui.update(ctx)?;
+        self.color_selection_ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(event)?;
         }

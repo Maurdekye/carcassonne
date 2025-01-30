@@ -138,6 +138,7 @@ pub fn color_mul(color: Color, factor: f32) -> Color {
 #[derive(Clone, Copy)]
 pub enum AnchorPoint {
     NorthWest,
+    NorthCenter,
     NorthEast,
     SouthWest,
     SouthEast,
@@ -179,6 +180,7 @@ impl TextExt for Text {
         use AnchorPoint::*;
         let anchor_offset = match anchor {
             NorthWest => vec2(0.0, 0.0),
+            NorthCenter => vec2(0.5, 0.0),
             NorthEast => vec2(1.0, 0.0),
             SouthWest => vec2(0.0, 1.0),
             SouthEast => vec2(1.0, 1.0),
