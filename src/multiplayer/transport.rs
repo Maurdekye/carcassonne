@@ -65,9 +65,8 @@ impl MessageServer {
     {
         let (thread_kill, deathswitch) = channel();
         let listener_thread = {
-            let addr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), port));
             Some(thread::spawn(move || {
-                Self::listener_thread(event_sender, deathswitch, addr)
+                Self::listener_thread(event_sender, deathswitch, port)
             }))
         };
         MessageServer {
@@ -76,11 +75,12 @@ impl MessageServer {
         }
     }
 
-    fn listener_thread<T>(event_sender: Sender<T>, deathswitch: Receiver<()>, addr: SocketAddr)
+    fn listener_thread<T>(event_sender: Sender<T>, deathswitch: Receiver<()>, port: u16)
     where
         T: From<(IpAddr, NetworkEvent)> + Send + 'static,
     {
         println!("Message server awaiting connections");
+        let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
         while deathswitch.try_recv().is_err() {
@@ -90,6 +90,7 @@ impl MessageServer {
                 }
                 Ok((stream, socket)) => {
                     let event_sender = event_sender.clone();
+                    stream.set_nonblocking(false).unwrap();
                     let transport = MessageTransporter::new(stream);
                     {
                         let transport = transport.try_clone().unwrap();
@@ -114,13 +115,16 @@ impl MessageServer {
         println!("New connection received from {}", socket);
         let src_addr = socket.ip();
         let send_event = |event: NetworkEvent| event_sender.send(T::from((src_addr, event)));
-        let result: Result<(), io::Error> = try {
+        let Err(err): Result<(), io::Error> = (try {
             loop {
-                (send_event)(NetworkEvent::Message(transport.recv()?)).unwrap();
+                (send_event)(NetworkEvent::Message(transport.recv()?))
+                    .map_err(|_| io::Error::new(ErrorKind::ConnectionAborted, "Channel closed"))?;
             }
+        }) else {
+            return;
         };
-        (send_event)(NetworkEvent::Disconnect).unwrap();
-        result.unwrap()
+        println!("{err}");
+        let _ = (send_event)(NetworkEvent::Disconnect);
     }
 }
 
