@@ -126,7 +126,7 @@ impl SubEventHandler<GameError> for MultiplayerHostMenuClient {
         .anchored_by(ctx, res * vec2(0.5, 0.1), AnchorPoint::NorthCenter)?
         .draw(canvas);
 
-        let text = if self.clients.is_empty() {
+        Text::new(if self.clients.is_empty() {
             "No clients connected".to_string()
         } else {
             format!(
@@ -138,12 +138,10 @@ impl SubEventHandler<GameError> for MultiplayerHostMenuClient {
                     .collect::<Vec<_>>()
                     .join("\n")
             )
-        };
-
-        Text::new(text)
-            .size(32.0)
-            .anchored_by(ctx, vec2(50.0, 100.0), AnchorPoint::NorthWest)?
-            .draw(canvas);
+        })
+        .size(32.0)
+        .anchored_by(ctx, vec2(50.0, 100.0), AnchorPoint::NorthWest)?
+        .draw(canvas);
 
         self.ui.draw(ctx, canvas)
     }
