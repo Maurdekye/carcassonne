@@ -44,6 +44,7 @@ pub struct MultiplayerJoinMenuClient {
     parent_channel: Sender<MainEvent>,
     event_sender: Sender<MultiplayerJoinMenuEvent>,
     event_receiver: Receiver<MultiplayerJoinMenuEvent>,
+    args: Args,
     ui: UIManager<UIEvent, MultiplayerJoinMenuEvent>,
     message_client: MessageClient,
     connection: Option<MessageTransporter>,
@@ -52,7 +53,7 @@ pub struct MultiplayerJoinMenuClient {
 }
 
 impl MultiplayerJoinMenuClient {
-    pub fn new(parent_channel: Sender<MainEvent>, _args: Args, socket: SocketAddr) -> Self {
+    pub fn new(parent_channel: Sender<MainEvent>, args: Args, socket: SocketAddr) -> Self {
         let (event_sender, event_receiver) = channel();
         let ui = UIManager::new(event_sender.clone(), []);
         let message_client = MessageClient::start(event_sender.clone(), socket);
@@ -61,6 +62,7 @@ impl MultiplayerJoinMenuClient {
             event_sender,
             event_receiver,
             ui,
+            args,
             message_client,
             connection: None,
             last_ping: Instant::now(),
@@ -132,11 +134,11 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
         let res: Vec2 = ctx.gfx.drawable_size().into();
 
         Text::new(if self.connection.is_none() {
-            "Connecting..."
+            format!("Connecting to {}:{}...", self.args.ip.unwrap(), self.args.port)
         } else {
-            "Connected!"
+            "Connected!".to_string()
         })
-        .size(144.0)
+        .size(86.0)
         .centered_on(ctx, res * vec2(0.5, 0.2))?
         .color(Color::BLACK)
         .draw(canvas);
