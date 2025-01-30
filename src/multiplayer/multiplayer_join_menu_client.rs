@@ -1,5 +1,8 @@
 use std::{
-    cell::LazyCell, net::SocketAddr, sync::mpsc::{channel, Receiver, Sender}, time::{Duration, Instant}
+    cell::LazyCell,
+    net::SocketAddr,
+    sync::mpsc::{channel, Receiver, Sender},
+    time::{Duration, Instant},
 };
 
 use ggez::{
@@ -93,7 +96,9 @@ impl MultiplayerJoinMenuClient {
                             dbg!(&self.latency);
                         }
                         Message::Ping => {
-                            LazyCell::force_mut(&mut server).send(&Message::Pong).unwrap();
+                            LazyCell::force_mut(&mut server)
+                                .send(&Message::Pong)
+                                .unwrap();
                         }
                         _ => {}
                     }
@@ -135,7 +140,11 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
         let res: Vec2 = ctx.gfx.drawable_size().into();
 
         Text::new(if self.connection.is_none() {
-            format!("Connecting to {}:{}...", self.args.ip.unwrap(), self.args.port)
+            format!(
+                "Connecting to {}:{}...",
+                self.args.ip.unwrap(),
+                self.args.port
+            )
         } else {
             "Connected!".to_string()
         })
@@ -153,5 +162,13 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
         }
 
         self.ui.draw(ctx, canvas)
+    }
+}
+
+impl Drop for MultiplayerJoinMenuClient {
+    fn drop(&mut self) {
+        if let Some(mut connection) = self.connection.take() {
+            let _ = connection.shutdown();
+        }
     }
 }

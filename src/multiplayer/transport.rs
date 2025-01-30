@@ -51,6 +51,10 @@ impl MessageTransporter {
             bincode::deserialize(&buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         Ok(message)
     }
+
+    pub fn shutdown(&mut self) -> Result<(), std::io::Error> {
+        self.0.shutdown(std::net::Shutdown::Both)
+    }
 }
 
 pub struct MessageServer {
