@@ -6,14 +6,9 @@ use std::{
     time::Duration,
 };
 
-use serde::{Deserialize, Serialize};
+use message::Message;
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Message {
-    Ping,
-    Pong,
-    ChooseColor(usize),
-}
+pub mod message;
 
 pub enum NetworkEvent {
     Connect(MessageTransporter),
@@ -32,7 +27,7 @@ impl MessageTransporter {
         Ok(MessageTransporter(self.0.try_clone()?))
     }
 
-    pub fn send(&mut self, message: &Message) -> Result<(), io::Error> {
+    pub fn send(&mut self, message: &message::Message) -> Result<(), io::Error> {
         let encoded_message: Vec<u8> =
             bincode::serialize(message).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         let len = u64::to_le_bytes(encoded_message.len() as u64);
@@ -41,13 +36,17 @@ impl MessageTransporter {
         Ok(())
     }
 
-    pub fn recv(&mut self) -> Result<Message, io::Error> {
+    pub fn blind_send(&mut self, message: &message::Message) {
+        let _ = self.send(message);
+    }
+
+    pub fn recv(&mut self) -> Result<message::Message, io::Error> {
         let mut len_buf = [0u8; 8];
         self.0.read_exact(&mut len_buf)?;
         let len = u64::from_le_bytes(len_buf) as usize;
         let mut buf = vec![0; len];
         self.0.read_exact(&mut buf)?;
-        let message: Message =
+        let message: message::Message =
             bincode::deserialize(&buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         Ok(message)
     }

@@ -287,6 +287,16 @@ where
     }
 }
 
+pub trait ContextExt {
+    fn res(&self) -> Vec2;
+}
+
+impl ContextExt for Context {
+    fn res(&self) -> Vec2 {
+        self.gfx.drawable_size().into()
+    }
+}
+
 #[macro_export]
 macro_rules! sdbg {
     ($e:expr) => {

@@ -12,10 +12,20 @@ use ggez::{
 };
 
 use crate::{
-    main_client::MainEvent, multiplayer::transport::message::Message, sub_event_handler::SubEventHandler, ui_manager::UIManager, util::{AnchorPoint, TextExt}, Args
+    game_client::GameClient,
+    main_client::MainEvent,
+    multiplayer::transport::message::{LobbyMessage, Message},
+    sub_event_handler::SubEventHandler,
+    ui_manager::UIManager,
+    util::{AnchorPoint, ContextExt, TextExt},
+    Args,
 };
 
-use super::{transport::{MessageClient, MessageTransporter, NetworkEvent}, PING_FREQUENCY};
+use super::{
+    lobby_client::LobbyClient,
+    transport::{MessageClient, MessageTransporter, NetworkEvent},
+    MultiplayerPhase, PING_FREQUENCY,
+};
 
 #[derive(Clone)]
 enum UIEvent {}
@@ -40,14 +50,15 @@ impl From<NetworkEvent> for MultiplayerJoinMenuEvent {
 
 pub struct MultiplayerJoinMenuClient {
     parent_channel: Sender<MainEvent>,
-    event_sender: Sender<MultiplayerJoinMenuEvent>,
+    _event_sender: Sender<MultiplayerJoinMenuEvent>,
     event_receiver: Receiver<MultiplayerJoinMenuEvent>,
     args: Args,
     ui: UIManager<UIEvent, MultiplayerJoinMenuEvent>,
-    message_client: MessageClient,
+    _message_client: MessageClient,
     connection: Option<MessageTransporter>,
     last_ping: Instant,
     latency: Option<Duration>,
+    phase: Option<MultiplayerPhase>,
 }
 
 impl MultiplayerJoinMenuClient {
@@ -57,14 +68,15 @@ impl MultiplayerJoinMenuClient {
         let message_client = MessageClient::start(event_sender.clone(), socket);
         MultiplayerJoinMenuClient {
             parent_channel,
-            event_sender,
+            _event_sender: event_sender,
             event_receiver,
             ui,
             args,
-            message_client,
+            _message_client: message_client,
             connection: None,
             last_ping: Instant::now(),
             latency: None,
+            phase: None,
         }
     }
     fn handle_event(
@@ -80,6 +92,7 @@ impl MultiplayerJoinMenuClient {
                 NetworkEvent::Connect(transport) => {
                     println!("Connected!");
                     self.connection = Some(transport);
+                    self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(Vec::new())));
                 }
                 NetworkEvent::Message(server_message) => {
                     dbg!(&server_message);
@@ -88,22 +101,25 @@ impl MultiplayerJoinMenuClient {
                         Message::Pong => {
                             let now = Instant::now();
                             self.latency = Some(now - self.last_ping);
-                            dbg!(&self.latency);
                         }
                         Message::Ping => {
-                            LazyCell::force_mut(&mut server)
-                                .send(&Message::Pong)
-                                .unwrap();
+                            LazyCell::force_mut(&mut server).blind_send(&Message::Pong)
+                        }
+                        Message::Lobby(lobby_message) => {
+                            if let Some(MultiplayerPhase::Lobby(lobby)) = &mut self.phase {
+                                lobby.handle_message(lobby_message)?;
+                            }
                         }
                         _ => {}
                     }
                 }
                 NetworkEvent::Disconnect => {
                     println!("Disconnected.");
-                    self.connection = None
+                    self.connection = None;
+                    self.phase = None;
                 }
             },
-            MultiplayerJoinMenuEvent::UIEvent(uievent) => {}
+            MultiplayerJoinMenuEvent::UIEvent(_uievent) => {}
         }
         Ok(())
     }
@@ -116,10 +132,14 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
             self.handle_event(ctx, event)?;
         }
 
+        if let Some(phase) = &mut self.phase {
+            phase.update(ctx)?;
+        }
+
         if let Some(connection) = &mut self.connection {
             let now = Instant::now();
-            if now - self.last_ping < PING_FREQUENCY {
-                connection.send(&Message::Ping).unwrap();
+            if now - self.last_ping > PING_FREQUENCY {
+                connection.blind_send(&Message::Ping);
                 self.last_ping = now;
             }
         }
@@ -132,27 +152,45 @@ impl SubEventHandler<GameError> for MultiplayerJoinMenuClient {
         ctx: &mut ggez::Context,
         canvas: &mut ggez::graphics::Canvas,
     ) -> Result<(), GameError> {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
+        match &mut self.phase {
+            None => {
+                Text::new(format!(
+                    "Connecting to {}:{}...",
+                    self.args.ip.unwrap(),
+                    self.args.port
+                ))
+                .size(36.0)
+                .anchored_by(
+                    ctx,
+                    ctx.res() * vec2(0.5, 0.0) + vec2(0.0, 30.0),
+                    AnchorPoint::NorthCenter,
+                )?
+                .color(Color::BLACK)
+                .draw(canvas);
+            }
+            Some(MultiplayerPhase::Lobby(lobby)) => {
+                Text::new("Connected")
+                    .size(36.0)
+                    .anchored_by(
+                        ctx,
+                        ctx.res() * vec2(0.5, 0.0) + vec2(0.0, 30.0),
+                        AnchorPoint::NorthCenter,
+                    )?
+                    .color(Color::BLACK)
+                    .draw(canvas);
 
-        Text::new(if self.connection.is_none() {
-            format!(
-                "Connecting to {}:{}...",
-                self.args.ip.unwrap(),
-                self.args.port
-            )
-        } else {
-            "Connected!".to_string()
-        })
-        .size(86.0)
-        .centered_on(ctx, res * vec2(0.5, 0.2))?
-        .color(Color::BLACK)
-        .draw(canvas);
+                lobby.draw(ctx, canvas)?;
+            }
+            Some(MultiplayerPhase::Game(game)) => {
+                game.draw(ctx, canvas)?;
+            }
+        }
 
         if let Some(latency) = self.latency {
             Text::new(format!("{} ms", latency.as_millis()))
-                .size(32.0)
-                .anchored_by(ctx, vec2(50.0, 50.0), AnchorPoint::NorthWest)?
-                .color(Color::BLACK)
+                .size(16.0)
+                .anchored_by(ctx, vec2(10.0, 10.0), AnchorPoint::NorthWest)?
+                .color(Color::from_rgb(160, 160, 160))
                 .draw(canvas);
         }
 
