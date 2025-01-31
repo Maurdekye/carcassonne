@@ -1,33 +1,38 @@
 use std::{
     io::{self, ErrorKind, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream},
+    ops::{Deref, DerefMut},
     sync::mpsc::{channel, Receiver, Sender},
     thread::{self, JoinHandle},
     time::Duration,
 };
 
-use message::Message;
+use message::{client::ClientMessage, server::ServerMessage, Message};
 
 pub mod message;
 
-pub enum NetworkEvent {
-    Connect(MessageTransporter),
-    Message(Message),
+pub enum NetworkEvent<T, M> {
+    Connect(T),
+    Message(M),
     Disconnect,
 }
+
+pub type ServerNetworkEvent = NetworkEvent<ServersideTransport, ClientMessage>;
+pub type ClientNetworkEvent = NetworkEvent<ClientsideTransport, ServerMessage>;
 
 pub struct MessageTransporter(TcpStream);
 
 impl MessageTransporter {
-    pub fn new(stream: TcpStream) -> Self {
+    fn new(stream: TcpStream) -> Self {
         Self(stream)
     }
 
-    pub fn try_clone(&self) -> Result<Self, io::Error> {
+    fn try_clone(&self) -> Result<Self, io::Error> {
         Ok(MessageTransporter(self.0.try_clone()?))
     }
 
-    pub fn send(&mut self, message: &message::Message) -> Result<(), io::Error> {
+    fn send(&mut self, message: &Message) -> Result<(), io::Error> {
+        println!(">{:?}", message);
         let encoded_message: Vec<u8> =
             bincode::serialize(message).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         let len = u64::to_le_bytes(encoded_message.len() as u64);
@@ -36,23 +41,117 @@ impl MessageTransporter {
         Ok(())
     }
 
-    pub fn blind_send(&mut self, message: &message::Message) {
-        let _ = self.send(message);
-    }
-
-    pub fn recv(&mut self) -> Result<message::Message, io::Error> {
+    fn recv(&mut self) -> Result<Message, io::Error> {
         let mut len_buf = [0u8; 8];
         self.0.read_exact(&mut len_buf)?;
         let len = u64::from_le_bytes(len_buf) as usize;
         let mut buf = vec![0; len];
         self.0.read_exact(&mut buf)?;
-        let message: message::Message =
-            bincode::deserialize(&buf).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
+        let message: Message = bincode::deserialize(&buf[..])
+            .map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         Ok(message)
     }
 
     pub fn shutdown(&mut self) -> Result<(), std::io::Error> {
         self.0.shutdown(std::net::Shutdown::Both)
+    }
+}
+
+impl Deref for MessageTransporter {
+    type Target = TcpStream;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+pub struct ClientsideTransport(MessageTransporter);
+
+impl ClientsideTransport {
+    pub fn new(stream: TcpStream) -> Self {
+        Self(MessageTransporter::new(stream))
+    }
+
+    pub fn try_clone(&self) -> Result<Self, io::Error> {
+        Ok(Self(self.0.try_clone()?))
+    }
+
+    pub fn send(&mut self, message: ClientMessage) -> Result<(), io::Error> {
+        self.0.send(&Message::Client(message))
+    }
+
+    pub fn blind_send(&mut self, message: ClientMessage) {
+        let _ = self.send(message);
+    }
+
+    pub fn recv(&mut self) -> Result<ServerMessage, io::Error> {
+        let Message::Server(message) = self.0.recv()? else {
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                "Received a clientside message from the server",
+            ));
+        };
+        println!("<{:?}", message);
+        Ok(message)
+    }
+}
+
+impl Deref for ClientsideTransport {
+    type Target = MessageTransporter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ClientsideTransport {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub struct ServersideTransport(MessageTransporter);
+
+impl ServersideTransport {
+    pub fn new(stream: TcpStream) -> Self {
+        Self(MessageTransporter::new(stream))
+    }
+
+    pub fn try_clone(&self) -> Result<Self, io::Error> {
+        Ok(Self(self.0.try_clone()?))
+    }
+
+    pub fn send(&mut self, message: ServerMessage) -> Result<(), io::Error> {
+        self.0.send(&Message::Server(message))
+    }
+
+    pub fn blind_send(&mut self, message: ServerMessage) {
+        let _ = self.send(message);
+    }
+
+    pub fn recv(&mut self) -> Result<ClientMessage, io::Error> {
+        let Message::Client(message) = self.0.recv()? else {
+            return Err(io::Error::new(
+                ErrorKind::InvalidData,
+                "Received a serverside message from a client",
+            ));
+        };
+        println!("<{:?}", message);
+        Ok(message)
+    }
+}
+
+impl Deref for ServersideTransport {
+    type Target = MessageTransporter;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for ServersideTransport {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
     }
 }
 
@@ -64,7 +163,7 @@ pub struct MessageServer {
 impl MessageServer {
     pub fn start<T>(event_sender: Sender<T>, port: u16) -> Self
     where
-        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+        T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
         let (thread_kill, deathswitch) = channel();
         let listener_thread = {
@@ -80,7 +179,7 @@ impl MessageServer {
 
     fn listener_thread<T>(event_sender: Sender<T>, deathswitch: Receiver<()>, port: u16)
     where
-        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+        T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
         println!("Message server awaiting connections");
         let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
@@ -94,7 +193,7 @@ impl MessageServer {
                 Ok((stream, socket)) => {
                     let event_sender = event_sender.clone();
                     stream.set_nonblocking(false).unwrap();
-                    let transport = MessageTransporter::new(stream);
+                    let transport = ServersideTransport::new(stream);
                     {
                         let transport = transport.try_clone().unwrap();
                         event_sender
@@ -110,14 +209,14 @@ impl MessageServer {
 
     fn connection_thread<T>(
         event_sender: Sender<T>,
-        mut transport: MessageTransporter,
+        mut transport: ServersideTransport,
         socket: SocketAddr,
     ) where
-        T: From<(IpAddr, NetworkEvent)> + Send + 'static,
+        T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
         println!("New connection received from {}", socket);
         let src_addr = socket.ip();
-        let send_event = |event: NetworkEvent| event_sender.send(T::from((src_addr, event)));
+        let send_event = |event: ServerNetworkEvent| event_sender.send(T::from((src_addr, event)));
         let Err(err): Result<(), io::Error> = (try {
             loop {
                 (send_event)(NetworkEvent::Message(transport.recv()?))
@@ -147,7 +246,7 @@ pub struct MessageClient {
 impl MessageClient {
     pub fn start<T>(event_sender: Sender<T>, socket: SocketAddr) -> Self
     where
-        T: From<NetworkEvent> + Send + 'static,
+        T: From<ClientNetworkEvent> + Send + 'static,
     {
         let (thread_kill, deathswitch) = channel();
         let connection_thread = Some(thread::spawn(move || {
@@ -161,7 +260,7 @@ impl MessageClient {
 
     fn connection_thread<T>(event_sender: Sender<T>, socket: SocketAddr, deathswitch: Receiver<()>)
     where
-        T: From<NetworkEvent> + Send + 'static,
+        T: From<ClientNetworkEvent> + Send + 'static,
     {
         println!("Starting message client");
         while deathswitch.try_recv().is_err() {
@@ -169,7 +268,7 @@ impl MessageClient {
                 let stream = TcpStream::connect(socket)?;
                 println!("Connected to server");
                 let Err(err): Result<_, io::Error> = (try {
-                    let mut transport = MessageTransporter::new(stream);
+                    let mut transport = ClientsideTransport::new(stream);
                     {
                         let transport = transport.try_clone().unwrap();
                         event_sender

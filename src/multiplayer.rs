@@ -1,23 +1,26 @@
 use std::time::Duration;
 
 use ggez::{graphics::Canvas, Context, GameError};
-use lobby_client::LobbyClient;
+use lobby_client::{LobbyClient, LobbyEvent};
 
 use crate::{game_client::GameClient, sub_event_handler::SubEventHandler};
 
-mod lobby_client;
 pub mod host_client;
 pub mod join_client;
+mod lobby_client;
 pub mod transport;
 
 const PING_FREQUENCY: Duration = Duration::from_secs(2);
 
-enum MultiplayerPhase {
-    Lobby(LobbyClient),
+enum MultiplayerPhase<T> {
+    Lobby(LobbyClient<T>),
     Game(GameClient),
 }
 
-impl SubEventHandler<GameError> for MultiplayerPhase {
+impl<T> SubEventHandler<GameError> for MultiplayerPhase<T>
+where
+    T: From<LobbyEvent>,
+{
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         use MultiplayerPhase::*;
         match self {

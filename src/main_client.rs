@@ -18,7 +18,7 @@ use crate::{
     main_menu_client::MainMenuClient,
     multiplayer::{
         host_client::HostClient,
-        join_client::MultiplayerJoinMenuClient,
+        join_client::JoinClient,
     },
     sub_event_handler::SubEventHandler,
     Args, DebugGameConfiguration,
@@ -100,7 +100,7 @@ impl MainClient {
                 ))
             }
             MainEvent::JoinMultiplayerMenu(socket) => {
-                self.scene = Box::new(MultiplayerJoinMenuClient::new(
+                self.scene = Box::new(JoinClient::new(
                     self.event_sender.clone(),
                     self.args.clone(),
                     socket,

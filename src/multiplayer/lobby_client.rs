@@ -1,40 +1,113 @@
+use std::{cell::RefCell, net::IpAddr, rc::Rc, sync::mpsc::Sender};
+
 use ggez::{
     glam::vec2,
-    graphics::{Color, Text},
+    graphics::{Color, Rect, Text},
     GameError, GameResult,
 };
 
 use crate::{
-    game_client::GameClient,
+    game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     sub_event_handler::SubEventHandler,
-    util::{AnchorPoint, TextExt},
+    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    util::{AnchorPoint, ContextExt, TextExt},
 };
 
-use super::transport::message::{LobbyMessage, User};
+use super::transport::message::server::{LobbyMessage, User};
 
-pub struct LobbyClient {
-    pub users: Vec<User>,
+#[derive(Clone)]
+pub enum LobbyEvent {
+    ChooseColor(Option<Color>),
 }
 
-impl LobbyClient {
-    pub fn new(users: Vec<User>) -> LobbyClient {
-        LobbyClient { users }
+pub struct LobbyClient<T> {
+    pub users: Vec<User>,
+    me: Option<IpAddr>,
+    parent_channel: Sender<T>,
+    color_choice_ui: UIManager<LobbyEvent, T>,
+    color_choice_buttons: [Rc<RefCell<Button<LobbyEvent>>>; NUM_PLAYERS],
+    ui: UIManager<LobbyEvent, T>,
+    deselect_color_button: Rc<RefCell<Button<LobbyEvent>>>,
+}
+
+impl<T> LobbyClient<T>
+where
+    T: From<LobbyEvent>,
+{
+    pub fn new(users: Vec<User>, me: Option<IpAddr>, parent_channel: Sender<T>) -> LobbyClient<T> {
+        let button_pos = Rect::new(0.6, 0.3, 0.0, 0.0);
+        let mut i = 0;
+        let (color_choice_ui, color_choice_buttons) = UIManager::new_and_rc_buttons(
+            parent_channel.clone(),
+            PLAYER_COLORS.map(|color| {
+                i += 1;
+                Button::new(
+                    ButtonBounds {
+                        relative: button_pos,
+                        absolute: Rect::new((i - 1) as f32 * 40.0, 0.0, 30.0, 30.0),
+                    },
+                    Text::new(""),
+                    LobbyEvent::ChooseColor(Some(color)),
+                )
+            }),
+        );
+        let (ui, [deselect_color_button]) = UIManager::new_and_rc_buttons(
+            parent_channel.clone(),
+            [Button::new(
+                ButtonBounds {
+                    relative: button_pos,
+                    absolute: Rect::new(0.0, 40.0, 120.0, 40.0),
+                },
+                Text::new("Deselect"),
+                LobbyEvent::ChooseColor(None),
+            )],
+        );
+        deselect_color_button.borrow_mut().state = ButtonState::Disabled;
+        LobbyClient {
+            me,
+            users,
+            parent_channel,
+            color_choice_ui,
+            color_choice_buttons,
+            ui,
+            deselect_color_button,
+        }
     }
 
     pub fn handle_message(&mut self, message: LobbyMessage) -> Result<(), GameError> {
         match message {
             LobbyMessage::LobbyState(state) => {
                 self.users = state.users;
+                let selected_colors: Vec<_> =
+                    self.users.iter().filter_map(|user| user.color).collect();
+                for (color, button) in PLAYER_COLORS.iter().zip(self.color_choice_buttons.iter()) {
+                    button.borrow_mut().state =
+                        ButtonState::disabled_if(selected_colors.contains(color));
+                }
+
+                let me = self
+                    .users
+                    .iter()
+                    .find(|user| user.ip() == self.me.as_ref())
+                    .unwrap();
+                dbg!(&me);
+                self.deselect_color_button.borrow_mut().state =
+                    ButtonState::disabled_if(me.color.is_none());
             }
-            _ => {}
+            LobbyMessage::StartGame => {}
         }
 
         Ok(())
     }
 }
 
-impl SubEventHandler<GameError> for LobbyClient {
+impl<T> SubEventHandler<GameError> for LobbyClient<T>
+where
+    T: From<LobbyEvent>,
+{
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
+        self.color_choice_ui.update(ctx)?;
+        self.ui.update(ctx)?;
         Ok(())
     }
 
@@ -70,12 +143,19 @@ impl SubEventHandler<GameError> for LobbyClient {
                 GameClient::draw_meeple(
                     ctx,
                     canvas,
-                    client_row_position + vec2(16.0, -32.0),
+                    client_row_position + vec2(-32.0, 16.0),
                     color,
                     0.1,
                 )?;
             }
         }
+
+        self.color_choice_ui.draw(ctx, canvas)?;
+        for (color, button) in PLAYER_COLORS.iter().zip(self.color_choice_buttons.iter()) {
+            let meeple_pos = button.borrow().corrected_bounds(ctx.res()).center().into();
+            GameClient::draw_meeple(ctx, canvas, meeple_pos, *color, 0.1)?;
+        }
+        self.ui.draw(ctx, canvas)?;
 
         Ok(())
     }
