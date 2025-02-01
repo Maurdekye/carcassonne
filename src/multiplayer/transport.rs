@@ -196,7 +196,8 @@ impl MessageServer {
                     let mut transport = ServersideTransport::new(stream);
                     let _ = transport.0.send(&Message::YourSocket(socket));
                     let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
-                        panic!("Expected socket response from client");
+                        eprintln!("Expected socket response from client");
+                        continue;
                     };
                     {
                         let transport = transport.try_clone().unwrap();
