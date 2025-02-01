@@ -1,6 +1,7 @@
 use std::ops::Add;
 
 use ggez::glam::{vec2, Vec2};
+use serde::{Deserialize, Serialize};
 
 const ADJACENT_OFFSETS: [GridPos; 4] =
     [GridPos(-1, 0), GridPos(0, -1), GridPos(1, 0), GridPos(0, 1)];
@@ -16,7 +17,7 @@ const SURROUNDING_OFFSETS: [GridPos; 8] = [
     GridPos(0, -1),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct GridPos(pub i32, pub i32);
 
 impl GridPos {

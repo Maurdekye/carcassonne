@@ -5,7 +5,11 @@ use ggez::{
     Context, GameError,
 };
 use main_pause_menu_subclient::MainPauseMenuSubclient;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{
+    cell::Cell,
+    rc::Rc,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 use crate::{
     game_client::GameEvent,
@@ -14,8 +18,8 @@ use crate::{
     util::{AnchorPoint, DrawableWihParamsExt, TextExt},
 };
 
-mod main_pause_menu_subclient;
 mod controls_menu_subclient;
+mod main_pause_menu_subclient;
 
 #[derive(Debug, Clone)]
 pub enum PauseScreenEvent {
@@ -29,30 +33,32 @@ pub struct PauseScreenSubclient {
     parent_channel: Sender<GameEvent>,
     event_sender: Sender<PauseScreenEvent>,
     event_receiver: Receiver<PauseScreenEvent>,
-    ui: UIManager<PauseScreenEvent>,
-    is_endgame: bool,
-    has_history: bool,
+    ui: UIManager<PauseScreenEvent, PauseScreenEvent>,
+    pub can_end_game: Rc<Cell<bool>>,
+    pub can_undo: Rc<Cell<bool>>,
 }
 
 impl PauseScreenSubclient {
     pub fn new(
         parent_channel: Sender<GameEvent>,
-        is_endgame: bool,
-        has_history: bool,
+        can_end_game: bool,
+        can_undo: bool,
     ) -> PauseScreenSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
+        let can_end_game = Rc::new(Cell::new(can_end_game));
+        let can_undo = Rc::new(Cell::new(can_undo));
         PauseScreenSubclient {
             parent_channel,
             scene: Box::new(MainPauseMenuSubclient::new(
                 event_sender.clone(),
-                is_endgame,
-                has_history,
+                can_end_game.clone(),
+                can_undo.clone(),
             )),
             event_sender,
             event_receiver,
-            is_endgame,
-            has_history,
+            can_end_game,
+            can_undo,
             ui: UIManager::new(
                 ui_sender,
                 [Button::new(
@@ -75,8 +81,8 @@ impl PauseScreenSubclient {
             MainMenu => {
                 self.scene = Box::new(MainPauseMenuSubclient::new(
                     self.event_sender.clone(),
-                    self.is_endgame,
-                    self.has_history,
+                    self.can_end_game.clone(),
+                    self.can_undo.clone(),
                 ))
             }
             Controls => {
@@ -90,7 +96,7 @@ impl PauseScreenSubclient {
 impl SubEventHandler<GameError> for PauseScreenSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
-        self.ui.update(ctx);
+        self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }

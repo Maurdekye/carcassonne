@@ -12,7 +12,21 @@ use crate::{
         },
         Tile,
     },
+    DebugGameConfiguration,
 };
+
+impl DebugGameConfiguration {
+    pub fn get_game(&self) -> Result<Game, GameError> {
+        use DebugGameConfiguration::*;
+        match self {
+            MeeplePlacement => meeple_locations(),
+            MultipleSegmentsPerTileScoring => multiple_segments_per_tile_scoring(),
+            MultiplePlayerOwnership => multiple_player_ownership(),
+            RotationTest => rotation_test(),
+        }
+    }
+}
+
 pub fn meeple_locations() -> Result<Game, GameError> {
     let library: Vec<Tile> = Tile::default_library_tallies()
         .into_iter()

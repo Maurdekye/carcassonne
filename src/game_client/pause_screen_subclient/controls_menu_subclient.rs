@@ -23,7 +23,7 @@ pub struct ControlsMenuSubclient {
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<ControlsMenuEvent>,
     event_receiver: Receiver<ControlsMenuEvent>,
-    ui: UIManager<ControlsMenuEvent>,
+    ui: UIManager<ControlsMenuEvent, ControlsMenuEvent>,
 }
 
 impl ControlsMenuSubclient {
@@ -59,7 +59,7 @@ impl ControlsMenuSubclient {
 
 impl SubEventHandler<GameError> for ControlsMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.ui.update(ctx);
+        self.ui.update(ctx)?;
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
             self.event_sender
@@ -76,7 +76,6 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
     }
 
     fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
-        self.ui.draw(ctx, canvas)?;
         let res: Vec2 = ctx.gfx.drawable_size().into();
 
         let panel_origin = vec2(100.0, 100.0);
@@ -106,6 +105,8 @@ Esc - Pause",
         .size(32.0)
         .anchored_by(ctx, panel_origin + vec2(10.0, 80.0), AnchorPoint::NorthWest)?
         .draw(canvas);
+    
+        self.ui.draw(ctx, canvas)?;
 
         Ok(())
     }

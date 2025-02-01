@@ -5,7 +5,7 @@ use ggez::{
     graphics::Color,
     GameError,
 };
-use player::Player;
+use player::{Player, PlayerType};
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
@@ -19,21 +19,68 @@ use crate::{
 };
 
 pub mod player {
+    use std::{net::IpAddr, time::Duration};
+
     use ggez::graphics::Color;
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+    pub enum PlayerType {
+        Local,
+        MultiplayerHost,
+        MultiplayerClient {
+            address: IpAddr,
+            latency: Option<Duration>,
+        },
+    }
+
+    impl From<Option<IpAddr>> for PlayerType {
+        fn from(value: Option<IpAddr>) -> Self {
+            match value {
+                Some(ip) => PlayerType::MultiplayerClient {
+                    address: ip,
+                    latency: None,
+                },
+                None => PlayerType::MultiplayerHost,
+            }
+        }
+    }
+
+    impl PartialEq for PlayerType {
+        fn eq(&self, other: &Self) -> bool {
+            match (self, other) {
+                (
+                    Self::MultiplayerClient {
+                        address: l_address, ..
+                    },
+                    Self::MultiplayerClient {
+                        address: r_address, ..
+                    },
+                ) => l_address == r_address,
+                _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+            }
+        }
+    }
 
     #[derive(Clone)]
     pub struct Player {
         pub meeples: usize,
-        pub color: Color,
         pub score: usize,
+        pub color: Color,
+        pub ptype: PlayerType,
     }
 
     impl Player {
         pub fn new(color: Color) -> Player {
+            Player::new_inner(color, PlayerType::Local)
+        }
+
+        pub fn new_inner(color: Color, ptype: PlayerType) -> Player {
             Player {
                 meeples: 7,
-                color,
                 score: 0,
+                color,
+                ptype,
             }
         }
     }
@@ -119,6 +166,7 @@ pub struct ScoringResult {
 
 #[derive(Clone)]
 pub struct Game {
+    pub local_player: PlayerType,
     pub library: Vec<Tile>,
     pub placed_tiles: HashMap<GridPos, Tile>,
     pub groups: SlotMap<GroupIdentifier, SegmentGroup>,
@@ -133,7 +181,12 @@ impl Game {
     }
 
     pub fn new_with_library(library: Vec<Tile>) -> Game {
+        Game::new_inner(library, PlayerType::Local)
+    }
+
+    pub fn new_inner(library: Vec<Tile>, local_player: PlayerType) -> Game {
         Game {
+            local_player,
             library,
             placed_tiles: HashMap::new(),
             groups: SlotMap::new(),

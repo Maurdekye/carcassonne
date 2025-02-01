@@ -1,6 +1,9 @@
 #![feature(iter_map_windows)]
 #![feature(try_blocks)]
 #![feature(duration_millis_float)]
+#![feature(lazy_get)]
+
+use std::{net::IpAddr, time::Duration};
 
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
@@ -13,12 +16,14 @@ mod game;
 mod game_client;
 mod main_client;
 mod main_menu_client;
+mod multiplayer;
+
+mod line;
 mod pos;
 mod sub_event_handler;
 mod tile;
 mod ui_manager;
 mod util;
-mod line;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -30,12 +35,22 @@ fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     Ok((width, height))
 }
 
+fn duration_value_parser(x: &str) -> Result<Duration, &'static str> {
+    if let Ok(seconds) = x.parse::<u64>() {
+        Ok(Duration::from_secs(seconds))
+    } else if let Ok(seconds) = x.parse::<f64>() {
+        Ok(Duration::from_secs_f64(seconds))
+    } else {
+        Err("Invalid duration format")
+    }
+}
+
 #[derive(ValueEnum, Clone, Debug)]
 enum DebugGameConfiguration {
     MeeplePlacement,
     MultipleSegmentsPerTileScoring,
     MultiplePlayerOwnership,
-    RotationTest
+    RotationTest,
 }
 
 #[derive(Parser, Clone)]
@@ -51,6 +66,18 @@ struct Args {
     /// Enable experimental snapping tile placement
     #[arg(short, long, action = ArgAction::SetTrue)]
     snap_placement: bool,
+
+    /// Ip address to attempt to connect to a multiplayer game
+    #[arg(short, long)]
+    ip: Option<IpAddr>,
+
+    /// Port to host a multiplayer game on / connect to
+    #[arg(short, long, default_value_t = 11069)]
+    port: u16,
+
+    /// Ping interval in seconds for multiplayer games.
+    #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
+    ping_interval: Duration,
 }
 
 fn main() -> GameResult {

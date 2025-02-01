@@ -5,7 +5,6 @@ use std::{
 };
 
 use ggez::{
-    event::EventHandler,
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     GameError,
@@ -14,6 +13,7 @@ use ggez::{
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     main_client::MainEvent,
+    sub_event_handler::SubEventHandler,
     ui_manager::{Button, ButtonBounds, ButtonState, UIManager, BUTTON_COLOR},
     util::{DrawableWihParamsExt, TextExt},
     Args,
@@ -26,14 +26,20 @@ enum MainMenuEvent {
     StartGame,
 }
 
+impl From<Color> for MainMenuEvent {
+    fn from(value: Color) -> Self {
+        MainMenuEvent::SelectColor(value)
+    }
+}
+
 pub struct MainMenuClient {
     parent_channel: Sender<MainEvent>,
     _event_sender: Sender<MainMenuEvent>,
     event_receiver: Receiver<MainMenuEvent>,
     _args: Args,
-    ui: UIManager<MainMenuEvent>,
-    color_selection_ui: UIManager<MainMenuEvent>,
-    color_selection_buttons: [Rc<RefCell<Button<MainMenuEvent>>>; NUM_PLAYERS],
+    ui: UIManager<MainMenuEvent, MainMenuEvent>,
+    color_selection_ui: UIManager<Color, MainMenuEvent>,
+    color_selection_buttons: [Rc<RefCell<Button<Color>>>; NUM_PLAYERS],
     selected_colors: Vec<Color>,
     start_game_button: Rc<RefCell<Button<MainMenuEvent>>>,
 }
@@ -54,17 +60,9 @@ impl MainMenuClient {
     pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MainMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [_, start_game_button]) = UIManager::new_and_rc_buttons(
+        let (ui, [start_game_button, ..]) = UIManager::new_and_rc_buttons(
             ui_sender,
             [
-                Button::new(
-                    ButtonBounds {
-                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
-                        absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
-                    },
-                    Text::new("Quit"),
-                    MainMenuEvent::MainEvent(MainEvent::Close),
-                ),
                 Button::new(
                     ButtonBounds {
                         relative: Self::BUTTONS_CENTER,
@@ -75,13 +73,34 @@ impl MainMenuClient {
                             40.0,
                         ),
                     },
-                    Text::new("Start 0 Player Game"),
+                    Text::new("Start Local 0 Player Game"),
                     MainMenuEvent::StartGame,
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Self::BUTTONS_CENTER,
+                        absolute: Rect::new(
+                            -120.0,
+                            Self::BUTTON_SIZE * 2.0 + Self::BUTTON_SPACING + 60.0,
+                            240.0,
+                            40.0,
+                        ),
+                    },
+                    Text::new("Multiplayer"),
+                    MainMenuEvent::MainEvent(MainEvent::HostMultiplayerMenu),
+                ),
+                Button::new(
+                    ButtonBounds {
+                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                        absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
+                    },
+                    Text::new("Quit"),
+                    MainMenuEvent::MainEvent(MainEvent::Close),
                 ),
             ],
         );
         start_game_button.borrow_mut().state = ButtonState::Disabled;
-        let (player_choice_ui, player_choice_buttons) = {
+        let (color_selection_ui, color_selection_buttons) = {
             let full_width = (Self::BUTTON_SIZE * NUM_PLAYERS as f32)
                 + (Self::BUTTON_SPACING * (NUM_PLAYERS - 1) as f32);
             let ui_sender = event_sender.clone();
@@ -103,7 +122,7 @@ impl MainMenuClient {
                             ),
                         },
                         Text::new(""),
-                        MainMenuEvent::SelectColor(color),
+                        color,
                     )
                 }),
             )
@@ -113,8 +132,8 @@ impl MainMenuClient {
             _event_sender: event_sender,
             event_receiver,
             _args: args,
-            color_selection_ui: player_choice_ui,
-            color_selection_buttons: player_choice_buttons,
+            color_selection_ui,
+            color_selection_buttons,
             selected_colors: Vec::new(),
             start_game_button,
             ui,
@@ -130,10 +149,7 @@ impl MainMenuClient {
                     .color_selection_buttons
                     .iter()
                     .map(|button| button.borrow_mut())
-                    .find(|button| match button.event {
-                        MainMenuEvent::SelectColor(button_color) if button_color == color => true,
-                        _ => false,
-                    })
+                    .find(|button| button.event == color)
                     .unwrap();
                 if self.selected_colors.contains(&color) {
                     self.selected_colors.retain(|c| *c != color);
@@ -145,7 +161,7 @@ impl MainMenuClient {
                 let mut start_game_button = self.start_game_button.borrow_mut();
                 start_game_button.state = ButtonState::disabled_if(self.selected_colors.len() < 2);
                 start_game_button.text =
-                    Text::new(format!("Start {} Player Game", self.selected_colors.len()));
+                    Text::new(format!("Start Local {} Player Game", self.selected_colors.len()));
             }
             MainMenuEvent::StartGame => {
                 if self.selected_colors.len() < 2 {
@@ -161,10 +177,10 @@ impl MainMenuClient {
     }
 }
 
-impl EventHandler<GameError> for MainMenuClient {
+impl SubEventHandler<GameError> for MainMenuClient {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
-        self.ui.update(ctx);
-        self.color_selection_ui.update(ctx);
+        self.ui.update(ctx)?;
+        self.color_selection_ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(event)?;
         }
@@ -172,27 +188,26 @@ impl EventHandler<GameError> for MainMenuClient {
         Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
+    fn draw(&mut self, ctx: &mut ggez::Context, canvas: &mut Canvas) -> Result<(), GameError> {
         let res: Vec2 = ctx.gfx.drawable_size().into();
-        let mut canvas = Canvas::from_frame(ctx, Color::WHITE);
 
         // render title
         Text::new("Carcassonne")
             .size(144.0)
             .centered_on(ctx, res * vec2(0.5, 0.2))?
             .color(Color::BLACK)
-            .draw(&mut canvas);
+            .draw(canvas);
 
         // render ui
-        self.ui.draw(ctx, &mut canvas)?;
+        self.ui.draw(ctx, canvas)?;
 
         // render player choice buttons
-        self.color_selection_ui.draw(ctx, &mut canvas)?;
+        self.color_selection_ui.draw(ctx, canvas)?;
 
         for (button, color) in self.color_selection_buttons.iter().zip(PLAYER_COLORS) {
             let button = button.borrow();
             let center = button.corrected_bounds(res).center().into();
-            GameClient::draw_meeple(ctx, &mut canvas, center, color, 0.1)?;
+            GameClient::draw_meeple(ctx, canvas, center, color, 0.1)?;
         }
 
         // render selected meeple colors
@@ -207,12 +222,12 @@ impl EventHandler<GameError> for MainMenuClient {
             6.0,
             Color::from_rgb(160, 160, 160),
         )?
-        .draw(&mut canvas);
+        .draw(canvas);
         for (i, color) in self.selected_colors.iter().enumerate() {
             let center = top_left + vec2(20.0 + 40.0 * i as f32, 20.0);
-            GameClient::draw_meeple(ctx, &mut canvas, center, *color, 0.1)?;
+            GameClient::draw_meeple(ctx, canvas, center, *color, 0.1)?;
         }
 
-        canvas.finish(ctx)
+        Ok(())
     }
 }

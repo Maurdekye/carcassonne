@@ -138,6 +138,7 @@ pub fn color_mul(color: Color, factor: f32) -> Color {
 #[derive(Clone, Copy)]
 pub enum AnchorPoint {
     NorthWest,
+    NorthCenter,
     NorthEast,
     SouthWest,
     SouthEast,
@@ -179,6 +180,7 @@ impl TextExt for Text {
         use AnchorPoint::*;
         let anchor_offset = match anchor {
             NorthWest => vec2(0.0, 0.0),
+            NorthCenter => vec2(0.5, 0.0),
             NorthEast => vec2(1.0, 0.0),
             SouthWest => vec2(0.0, 1.0),
             SouthEast => vec2(1.0, 1.0),
@@ -266,17 +268,11 @@ where
     T: Drawable,
 {
     fn default_params(&self) -> DrawableWihParams<'_, Self> {
-        DrawableWihParams {
-            drawable: self,
-            draw_param: DrawParam::default(),
-        }
+        self.with_params(DrawParam::default())
     }
 
     fn with_dest(&self, dest: Vec2) -> DrawableWihParams<'_, Self> {
-        DrawableWihParams {
-            drawable: self,
-            draw_param: DrawParam::default().dest(dest),
-        }
+        self.with_params(DrawParam::default().dest(dest))
     }
 
     fn draw(self, canvas: &mut Canvas) {
@@ -288,6 +284,16 @@ where
             drawable: self,
             draw_param,
         }
+    }
+}
+
+pub trait ContextExt {
+    fn res(&self) -> Vec2;
+}
+
+impl ContextExt for Context {
+    fn res(&self) -> Vec2 {
+        self.gfx.drawable_size().into()
     }
 }
 
