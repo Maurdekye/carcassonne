@@ -5,17 +5,22 @@ use std::time::Duration;
 
 use std::net::IpAddr;
 
+use crate::game::player::PlayerType;
+
+use super::GameMessage;
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ServerMessage {
     Ping,
     Pong,
     Lobby(LobbyMessage),
+    Game { message: GameMessage, user: PlayerType },
+    StartGame { game_seed: u64 },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum LobbyMessage {
     LobbyState(LobbyState),
-    StartGame
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

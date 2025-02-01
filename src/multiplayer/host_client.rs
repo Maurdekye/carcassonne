@@ -14,6 +14,7 @@ use ggez::{
 };
 
 use crate::{
+    game::player::PlayerType,
     main_client::MainEvent,
     multiplayer::transport::message::client::{self, ClientMessage},
     sub_event_handler::SubEventHandler,
@@ -28,7 +29,7 @@ use super::{
         message::server::{self, ClientInfo, LobbyState, ServerMessage, User},
         MessageServer, NetworkEvent, ServerNetworkEvent, ServersideTransport,
     },
-    MultiplayerPhase, PING_FREQUENCY,
+    MultiplayerPhase,
 };
 
 #[derive(Clone)]
@@ -37,6 +38,7 @@ enum UIEvent {
     StartGame,
 }
 
+#[allow(clippy::enum_variant_names)]
 enum HostEvent {
     UIEvent(UIEvent),
     NetworkEvent {
@@ -145,19 +147,25 @@ impl HostClient {
     }
 
     fn update_lobby_clients(&mut self) {
-        if let MultiplayerPhase::Lobby(lobby) = &mut self.phase {
-            let users = self.users.values().map(|user| user.user.clone()).collect();
-            self.start_game_button.borrow_mut().state =
-                ButtonState::disabled_if(lobby.users.iter().any(|user| user.color.is_none()));
-            let message = server::LobbyMessage::LobbyState(LobbyState { users });
-            for client in self.users.values_mut() {
-                if let Some(host_client_info) = &mut client.client_info {
-                    host_client_info
-                        .transport
-                        .blind_send(ServerMessage::Lobby(message.clone()));
+        let users: Vec<_> = self.users.values().map(|user| user.user.clone()).collect();
+        match &mut self.phase {
+            MultiplayerPhase::Lobby(lobby) => {
+                self.start_game_button.borrow_mut().state = ButtonState::disabled_if(
+                    users.len() < 2 || users.iter().any(|user| user.color.is_none()),
+                );
+                let message = server::LobbyMessage::LobbyState(LobbyState { users });
+                for client in self.users.values_mut() {
+                    if let Some(host_client_info) = &mut client.client_info {
+                        host_client_info
+                            .transport
+                            .blind_send(ServerMessage::Lobby(message.clone()));
+                    }
                 }
+                let _ = lobby.handle_message(message);
             }
-            let _ = lobby.handle_message(message);
+            MultiplayerPhase::Game { game, .. } => {
+                let _ = game.update_pings(users);
+            }
         }
     }
 
@@ -178,10 +186,11 @@ impl HostClient {
         self.update_lobby_clients();
     }
 
-    fn handle_event(&mut self, _ctx: &mut Context, event: HostEvent) -> GameResult<()> {
+    fn handle_event(&mut self, ctx: &mut Context, event: HostEvent) -> GameResult<()> {
         match event {
             HostEvent::NetworkEvent { src_addr, event } => match event {
                 NetworkEvent::Connect(transport) => {
+                    println!("[{src_addr:?}] connected");
                     self.add_client(
                         transport,
                         ClientInfo {
@@ -191,7 +200,7 @@ impl HostClient {
                     );
                 }
                 NetworkEvent::Message(client_message) => {
-                    dbg!(&client_message);
+                    println!("[{src_addr:?}] {client_message:?}");
                     let host_client = self.users.get_mut(&IpOrHost::Ip(src_addr)).unwrap();
                     let host_client_info = host_client.client_info.as_mut().unwrap();
                     match client_message {
@@ -202,6 +211,7 @@ impl HostClient {
                             let last_ping = host_client_info.last_ping;
                             let client_info = host_client.user.client_info.as_mut().unwrap();
                             client_info.latency = Some(Instant::now() - last_ping);
+                            self.update_lobby_clients();
                         }
                         ClientMessage::Lobby(client::LobbyMessage::ChooseColor(color)) => {
                             if let MultiplayerPhase::Lobby(_) = self.phase {
@@ -209,9 +219,32 @@ impl HostClient {
                                 self.update_lobby_clients();
                             }
                         }
+                        ClientMessage::Game(message) => {
+                            if let MultiplayerPhase::Game { game, .. } = &mut self.phase {
+                                let source_player = PlayerType::from(Some(src_addr));
+                                if game.get_current_player() == source_player {
+                                    for client_info in self
+                                        .users
+                                        .values_mut()
+                                        .filter(|user| {
+                                            Some(src_addr)
+                                                != user.user.client_info.as_ref().map(|i| i.ip)
+                                        })
+                                        .filter_map(|user| user.client_info.as_mut())
+                                    {
+                                        client_info.transport.blind_send(ServerMessage::Game {
+                                            message: message.clone(),
+                                            user: source_player,
+                                        })
+                                    }
+                                    game.handle_message(ctx, message)?;
+                                }
+                            }
+                        }
                     }
                 }
                 NetworkEvent::Disconnect => {
+                    println!("[{src_addr:?}] disconnected");
                     self.users.remove(&IpOrHost::Ip(src_addr));
                     self.update_lobby_clients();
                 }
@@ -220,16 +253,7 @@ impl HostClient {
                 UIEvent::MainEvent(main_event) => self.parent_channel.send(main_event).unwrap(),
                 UIEvent::StartGame => {
                     if self.users.values().all(|user| user.user.color.is_some()) {
-                        println!("Game Start!");
-                        for client in self
-                            .users
-                            .values_mut()
-                            .filter_map(|user| user.client_info.as_mut())
-                        {
-                            client
-                                .transport
-                                .blind_send(ServerMessage::Lobby(server::LobbyMessage::StartGame));
-                        }
+                        self.start_game(ctx);
                     }
                 }
             },
@@ -245,16 +269,59 @@ impl HostClient {
         }
         Ok(())
     }
+
+    fn start_game(&mut self, ctx: &Context) {
+        println!("Game Start!");
+        let game_seed = rand::random();
+        for client in self
+            .users
+            .values_mut()
+            .filter_map(|user| user.client_info.as_mut())
+        {
+            client
+                .transport
+                .blind_send(ServerMessage::StartGame { game_seed });
+        }
+        self.phase = MultiplayerPhase::new_game(
+            ctx,
+            self.args.clone(),
+            self.parent_channel.clone(),
+            self.users.values().map(|user| user.user.clone()).collect(),
+            game_seed,
+            None,
+        );
+    }
 }
 
 impl SubEventHandler<GameError> for HostClient {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, x: f32, y: f32) -> Result<(), GameError> {
+        self.phase.mouse_wheel_event(ctx, x, y)
+    }
+
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.ui.update(ctx)?;
+        if let MultiplayerPhase::Lobby(_) = &self.phase {
+            self.ui.update(ctx)?;
+        }
+
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }
 
         self.phase.update(ctx)?;
+        if let MultiplayerPhase::Game { action_channel, .. } = &mut self.phase {
+            for message in action_channel.try_iter() {
+                for client_info in self
+                    .users
+                    .values_mut()
+                    .filter_map(|user| user.client_info.as_mut())
+                {
+                    client_info.transport.blind_send(ServerMessage::Game {
+                        message: message.clone(),
+                        user: PlayerType::MultiplayerHost,
+                    });
+                }
+            }
+        }
 
         let now = Instant::now();
         let mut updated_ping = false;
@@ -263,7 +330,7 @@ impl SubEventHandler<GameError> for HostClient {
             .values_mut()
             .filter_map(|user| user.client_info.as_mut())
         {
-            if now - client.last_ping > PING_FREQUENCY {
+            if now - client.last_ping > self.args.ping_interval {
                 client.last_ping = now;
                 client.transport.blind_send(ServerMessage::Ping);
                 updated_ping = true;
@@ -291,6 +358,10 @@ impl SubEventHandler<GameError> for HostClient {
 
         self.phase.draw(ctx, canvas)?;
 
-        self.ui.draw(ctx, canvas)
+        if let MultiplayerPhase::Lobby(_) = &self.phase {
+            self.ui.draw(ctx, canvas)?;
+        }
+
+        Ok(())
     }
 }

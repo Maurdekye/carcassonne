@@ -455,6 +455,7 @@ pub struct Tile {
     #[allow(unused)]
     pub attributes: Vec<TileAttribute>,
     pub edge_verts_map: HashMap<TileEdge, [usize; 2]>,
+    pub rotation: usize,
 }
 
 impl Tile {
@@ -644,6 +645,7 @@ impl Tile {
             segment_adjacency,
             attributes,
             edge_verts_map,
+            rotation: 0
         }
     }
 
@@ -752,6 +754,7 @@ impl Tile {
             .collect();
 
         self.mounts = self.mounts.clone().rotate();
+        self.rotation = (self.rotation + 1) % 4;
     }
 
     #[allow(unused)]

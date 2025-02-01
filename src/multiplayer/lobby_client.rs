@@ -3,7 +3,7 @@ use std::{cell::RefCell, net::IpAddr, rc::Rc, sync::mpsc::Sender};
 use ggez::{
     glam::vec2,
     graphics::{Color, Rect, Text},
-    GameError, GameResult,
+    GameError,
 };
 
 use crate::{
@@ -23,7 +23,7 @@ pub enum LobbyEvent {
 pub struct LobbyClient<T> {
     pub users: Vec<User>,
     me: Option<IpAddr>,
-    parent_channel: Sender<T>,
+    _parent_channel: Sender<T>,
     color_choice_ui: UIManager<LobbyEvent, T>,
     color_choice_buttons: [Rc<RefCell<Button<LobbyEvent>>>; NUM_PLAYERS],
     ui: UIManager<LobbyEvent, T>,
@@ -66,7 +66,7 @@ where
         LobbyClient {
             me,
             users,
-            parent_channel,
+            _parent_channel: parent_channel,
             color_choice_ui,
             color_choice_buttons,
             ui,
@@ -75,6 +75,7 @@ where
     }
 
     pub fn handle_message(&mut self, message: LobbyMessage) -> Result<(), GameError> {
+        #[allow(clippy::single_match)]
         match message {
             LobbyMessage::LobbyState(state) => {
                 self.users = state.users;
@@ -90,11 +91,9 @@ where
                     .iter()
                     .find(|user| user.ip() == self.me.as_ref())
                     .unwrap();
-                dbg!(&me);
                 self.deselect_color_button.borrow_mut().state =
                     ButtonState::disabled_if(me.color.is_none());
             }
-            LobbyMessage::StartGame => {}
         }
 
         Ok(())
@@ -143,7 +142,7 @@ where
                 GameClient::draw_meeple(
                     ctx,
                     canvas,
-                    client_row_position + vec2(-32.0, 16.0),
+                    client_row_position + vec2(-16.0, 16.0),
                     color,
                     0.1,
                 )?;

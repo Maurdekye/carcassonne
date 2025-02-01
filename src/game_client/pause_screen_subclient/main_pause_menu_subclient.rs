@@ -3,7 +3,11 @@ use ggez::{
     input::keyboard::KeyCode,
     Context, GameError,
 };
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::{
+    cell::{Cell, RefCell},
+    rc::Rc,
+    sync::mpsc::{channel, Receiver, Sender},
+};
 
 use crate::{
     game_client::GameEvent,
@@ -34,13 +38,17 @@ pub struct MainPauseMenuSubclient {
     event_sender: Sender<MainPauseMenuEvent>,
     event_receiver: Receiver<MainPauseMenuEvent>,
     ui: UIManager<MainPauseMenuEvent, MainPauseMenuEvent>,
+    can_end_game: Rc<Cell<bool>>,
+    can_undo: Rc<Cell<bool>>,
+    end_game_button: Rc<RefCell<Button<MainPauseMenuEvent>>>,
+    undo_button: Rc<RefCell<Button<MainPauseMenuEvent>>>,
 }
 
 impl MainPauseMenuSubclient {
     pub fn new(
         parent_channel: Sender<PauseScreenEvent>,
-        is_endgame: bool,
-        has_history: bool,
+        can_end_game: Rc<Cell<bool>>,
+        can_undo: Rc<Cell<bool>>,
     ) -> MainPauseMenuSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
@@ -98,13 +106,17 @@ impl MainPauseMenuSubclient {
                 ),
             ],
         );
-        end_game_button.borrow_mut().state = ButtonState::disabled_if(is_endgame);
-        undo_button.borrow_mut().state = ButtonState::disabled_if(!has_history);
+        end_game_button.borrow_mut().state = ButtonState::disabled_if(can_end_game.get());
+        undo_button.borrow_mut().state = ButtonState::disabled_if(!can_undo.get());
         MainPauseMenuSubclient {
             parent_channel,
             event_sender,
             event_receiver,
             ui,
+            can_undo,
+            can_end_game,
+            end_game_button,
+            undo_button,
         }
     }
 
@@ -123,6 +135,8 @@ impl MainPauseMenuSubclient {
 
 impl SubEventHandler<GameError> for MainPauseMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
+        self.end_game_button.borrow_mut().state = ButtonState::disabled_if(self.can_end_game.get());
+        self.undo_button.borrow_mut().state = ButtonState::disabled_if(!self.can_undo.get());
         self.ui.update(ctx)?;
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {

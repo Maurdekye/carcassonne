@@ -6,15 +6,17 @@ use std::{
 };
 
 use ggez::{
-    glam::{vec2, Vec2},
+    glam::vec2,
     graphics::{Color, Text},
     Context, GameError, GameResult,
 };
 
 use crate::{
-    game_client::GameClient,
     main_client::MainEvent,
-    multiplayer::transport::message::{client::ClientMessage, server::ServerMessage, Message},
+    multiplayer::transport::message::{
+        client::ClientMessage,
+        server::{self, LobbyState, ServerMessage},
+    },
     sub_event_handler::SubEventHandler,
     ui_manager::UIManager,
     util::{AnchorPoint, ContextExt, TextExt},
@@ -24,16 +26,20 @@ use crate::{
 use super::{
     lobby_client::{LobbyClient, LobbyEvent},
     transport::{
-        message::client::{self, LobbyMessage}, ClientNetworkEvent, ClientsideTransport, MessageClient, MessageTransporter, NetworkEvent
+        message::{
+            client::{self},
+            server::User,
+        },
+        ClientNetworkEvent, ClientsideTransport, MessageClient, NetworkEvent,
     },
-    MultiplayerPhase, PING_FREQUENCY,
+    MultiplayerPhase,
 };
 
 #[derive(Clone)]
 enum UIEvent {}
 
+#[allow(clippy::enum_variant_names)]
 enum JoinEvent {
-    MainEvent(MainEvent),
     NetworkEvent(ClientNetworkEvent),
     UIEvent(UIEvent),
     LobbyEvent(LobbyEvent),
@@ -88,12 +94,23 @@ impl JoinClient {
             phase: None,
         }
     }
-    fn handle_event(&mut self, _ctx: &mut Context, event: JoinEvent) -> GameResult<()> {
+
+    fn start_game(&mut self, ctx: &Context, users: Vec<User>, seed: u64) {
+        self.phase = Some(MultiplayerPhase::new_game(
+            ctx,
+            self.args.clone(),
+            self.parent_channel.clone(),
+            users,
+            seed,
+            Some(self.connection.as_ref().unwrap().local_addr().unwrap().ip()),
+        ));
+    }
+
+    fn handle_event(&mut self, ctx: &mut Context, event: JoinEvent) -> GameResult<()> {
         match event {
-            JoinEvent::MainEvent(main_event) => self.parent_channel.send(main_event).unwrap(),
             JoinEvent::NetworkEvent(network_event) => match network_event {
                 NetworkEvent::Connect(transport) => {
-                    println!("Connected!");
+                    println!("connected");
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         Some(dbg!(transport.local_addr().unwrap().ip())),
@@ -102,7 +119,7 @@ impl JoinClient {
                     self.connection = Some(transport);
                 }
                 NetworkEvent::Message(server_message) => {
-                    dbg!(&server_message);
+                    println!("{server_message:?}");
                     let mut server = LazyCell::new(|| self.connection.as_mut().unwrap());
                     match server_message {
                         ServerMessage::Pong => {
@@ -113,14 +130,35 @@ impl JoinClient {
                             LazyCell::force_mut(&mut server).blind_send(ClientMessage::Pong)
                         }
                         ServerMessage::Lobby(lobby_message) => {
-                            if let Some(MultiplayerPhase::Lobby(lobby)) = &mut self.phase {
-                                lobby.handle_message(lobby_message)?;
+                            match (&mut self.phase, lobby_message) {
+                                (Some(MultiplayerPhase::Lobby(lobby)), lobby_message) => {
+                                    lobby.handle_message(lobby_message)?;
+                                }
+                                (
+                                    Some(MultiplayerPhase::Game { game, .. }),
+                                    server::LobbyMessage::LobbyState(LobbyState { users }),
+                                ) => {
+                                    game.update_pings(users)?;
+                                }
+                                _ => {}
+                            }
+                        }
+                        ServerMessage::StartGame { game_seed } => {
+                            if let Some(MultiplayerPhase::Lobby(lobby)) = &self.phase {
+                                self.start_game(ctx, lobby.users.clone(), game_seed);
+                            }
+                        }
+                        ServerMessage::Game { message, user } => {
+                            if let Some(MultiplayerPhase::Game { game, .. }) = &mut self.phase {
+                                if game.get_current_player() == user {
+                                    game.handle_message(ctx, message)?;
+                                }
                             }
                         }
                     }
                 }
                 NetworkEvent::Disconnect => {
-                    println!("Disconnected.");
+                    println!("disconnected");
                     self.connection = None;
                     self.latency = None;
                     self.phase = None;
@@ -129,8 +167,9 @@ impl JoinClient {
             JoinEvent::UIEvent(_uievent) => {}
             JoinEvent::LobbyEvent(LobbyEvent::ChooseColor(color)) => {
                 if let Some(connection) = &mut self.connection {
-                    connection
-                        .blind_send(ClientMessage::Lobby(client::LobbyMessage::ChooseColor(color)));
+                    connection.blind_send(ClientMessage::Lobby(client::LobbyMessage::ChooseColor(
+                        color,
+                    )));
                 }
             }
         }
@@ -139,6 +178,13 @@ impl JoinClient {
 }
 
 impl SubEventHandler<GameError> for JoinClient {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, x: f32, y: f32) -> Result<(), GameError> {
+        if let Some(phase) = &mut self.phase {
+            phase.mouse_wheel_event(ctx, x, y)?;
+        }
+        Ok(())
+    }
+
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
@@ -147,11 +193,18 @@ impl SubEventHandler<GameError> for JoinClient {
 
         if let Some(phase) = &mut self.phase {
             phase.update(ctx)?;
+            if let (MultiplayerPhase::Game { action_channel, .. }, Some(connection)) =
+                (phase, &mut self.connection)
+            {
+                while let Ok(message) = action_channel.try_recv() {
+                    connection.blind_send(ClientMessage::Game(message));
+                }
+            }
         }
 
         if let Some(connection) = &mut self.connection {
             let now = Instant::now();
-            if now - self.last_ping > PING_FREQUENCY {
+            if now - self.last_ping > self.args.ping_interval {
                 connection.blind_send(ClientMessage::Ping);
                 self.last_ping = now;
             }
@@ -194,7 +247,7 @@ impl SubEventHandler<GameError> for JoinClient {
 
                 lobby.draw(ctx, canvas)?;
             }
-            Some(MultiplayerPhase::Game(game)) => {
+            Some(MultiplayerPhase::Game { game, .. }) => {
                 game.draw(ctx, canvas)?;
             }
         }
@@ -202,7 +255,7 @@ impl SubEventHandler<GameError> for JoinClient {
         if let Some(latency) = self.latency {
             Text::new(format!("{} ms", latency.as_millis()))
                 .size(16.0)
-                .anchored_by(ctx, vec2(10.0, 10.0), AnchorPoint::NorthWest)?
+                .anchored_by(ctx, vec2(2.0, 2.0), AnchorPoint::NorthWest)?
                 .color(Color::from_rgb(160, 160, 160))
                 .draw(canvas);
         }

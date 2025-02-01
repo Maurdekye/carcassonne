@@ -32,7 +32,6 @@ impl MessageTransporter {
     }
 
     fn send(&mut self, message: &Message) -> Result<(), io::Error> {
-        println!(">{:?}", message);
         let encoded_message: Vec<u8> =
             bincode::serialize(message).map_err(|e| io::Error::new(ErrorKind::InvalidData, e))?;
         let len = u64::to_le_bytes(encoded_message.len() as u64);
@@ -91,7 +90,6 @@ impl ClientsideTransport {
                 "Received a clientside message from the server",
             ));
         };
-        println!("<{:?}", message);
         Ok(message)
     }
 }
@@ -136,7 +134,6 @@ impl ServersideTransport {
                 "Received a serverside message from a client",
             ));
         };
-        println!("<{:?}", message);
         Ok(message)
     }
 }
@@ -181,7 +178,6 @@ impl MessageServer {
     where
         T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
-        println!("Message server awaiting connections");
         let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -214,7 +210,6 @@ impl MessageServer {
     ) where
         T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
-        println!("New connection received from {}", socket);
         let src_addr = socket.ip();
         let send_event = |event: ServerNetworkEvent| event_sender.send(T::from((src_addr, event)));
         let Err(err): Result<(), io::Error> = (try {
@@ -232,7 +227,6 @@ impl MessageServer {
 
 impl Drop for MessageServer {
     fn drop(&mut self) {
-        println!("Message server stopping");
         self.thread_kill.send(()).unwrap();
         self.listener_thread.take().unwrap().join().unwrap();
     }
@@ -262,11 +256,9 @@ impl MessageClient {
     where
         T: From<ClientNetworkEvent> + Send + 'static,
     {
-        println!("Starting message client");
         while deathswitch.try_recv().is_err() {
             let _: Result<_, io::Error> = try {
                 let stream = TcpStream::connect(socket)?;
-                println!("Connected to server");
                 let Err(err): Result<_, io::Error> = (try {
                     let mut transport = ClientsideTransport::new(stream);
                     {

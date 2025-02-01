@@ -1,15 +1,29 @@
-use ggez::graphics::Color;
+use client::ClientMessage;
 use serde::{Deserialize, Serialize};
+use server::ServerMessage;
 
-use std::time::Duration;
-
-use std::net::IpAddr;
+use crate::game::SegmentIdentifier;
+use crate::pos::GridPos;
 
 pub mod client;
 pub mod server;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Message {
-    Client(client::ClientMessage),
-    Server(server::ServerMessage),
+    Client(ClientMessage),
+    Server(ServerMessage),
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GameMessage {
+    PlaceTile {
+        selected_square: GridPos,
+        rotation: usize,
+    },
+    PlaceMeeple {
+        seg_ident: SegmentIdentifier,
+    },
+    SkipMeeples,
+    EndGame,
+    Undo,
 }

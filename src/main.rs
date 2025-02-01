@@ -3,7 +3,7 @@
 #![feature(duration_millis_float)]
 #![feature(lazy_get)]
 
-use std::net::IpAddr;
+use std::{net::IpAddr, time::Duration};
 
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
@@ -35,6 +35,16 @@ fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     Ok((width, height))
 }
 
+fn duration_value_parser(x: &str) -> Result<Duration, &'static str> {
+    if let Ok(seconds) = x.parse::<u64>() {
+        Ok(Duration::from_secs(seconds))
+    } else if let Ok(seconds) = x.parse::<f64>() {
+        Ok(Duration::from_secs_f64(seconds))
+    } else {
+        Err("Invalid duration format")
+    }
+}
+
 #[derive(ValueEnum, Clone, Debug)]
 enum DebugGameConfiguration {
     MeeplePlacement,
@@ -64,6 +74,10 @@ struct Args {
     /// Port to host a multiplayer game on / connect to
     #[arg(short, long, default_value_t = 11069)]
     port: u16,
+
+    /// Ping interval in seconds for multiplayer games.
+    #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
+    ping_interval: Duration,
 }
 
 fn main() -> GameResult {
