@@ -189,7 +189,7 @@ impl HostClient {
     fn handle_event(&mut self, ctx: &mut Context, event: HostEvent) -> GameResult<()> {
         match event {
             HostEvent::NetworkEvent { src_addr, event } => match event {
-                NetworkEvent::Connect(transport) => {
+                NetworkEvent::Connect { transport, .. } => {
                     println!("[{src_addr:?}] connected");
                     self.add_client(
                         transport,

@@ -8,7 +8,7 @@ pub enum ClientMessage {
     Ping,
     Pong,
     Lobby(LobbyMessage),
-    Game(GameMessage)
+    Game(GameMessage),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

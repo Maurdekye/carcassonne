@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     io::{self, ErrorKind, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream},
@@ -12,7 +13,10 @@ use message::{client::ClientMessage, server::ServerMessage, Message};
 pub mod message;
 
 pub enum NetworkEvent<T, M> {
-    Connect(T),
+    Connect {
+        transport: T,
+        my_socket_addr: SocketAddr,
+    },
     Message(M),
     Disconnect,
 }
@@ -189,11 +193,21 @@ impl MessageServer {
                 Ok((stream, socket)) => {
                     let event_sender = event_sender.clone();
                     stream.set_nonblocking(false).unwrap();
-                    let transport = ServersideTransport::new(stream);
+                    let mut transport = ServersideTransport::new(stream);
+                    let _ = transport.0.send(&Message::YourSocket(socket));
+                    let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
+                        panic!("Expected socket response from client");
+                    };
                     {
                         let transport = transport.try_clone().unwrap();
                         event_sender
-                            .send(T::from((socket.ip(), NetworkEvent::Connect(transport))))
+                            .send(T::from((
+                                socket.ip(),
+                                NetworkEvent::Connect {
+                                    transport,
+                                    my_socket_addr,
+                                },
+                            )))
                             .unwrap();
                     }
                     thread::spawn(move || Self::connection_thread(event_sender, transport, socket));
@@ -262,9 +276,19 @@ impl MessageClient {
                 let Err(err): Result<_, io::Error> = (try {
                     let mut transport = ClientsideTransport::new(stream);
                     {
-                        let transport = transport.try_clone().unwrap();
+                        let mut transport = transport.try_clone().unwrap();
+                        let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
+                            panic!("Expected socket message from server");
+                        };
+                        let _ = transport.0.send(&Message::YourSocket(socket));
                         event_sender
-                            .send(NetworkEvent::Connect(transport).into())
+                            .send(
+                                NetworkEvent::Connect {
+                                    transport,
+                                    my_socket_addr,
+                                }
+                                .into(),
+                            )
                             .unwrap();
                     }
                     loop {

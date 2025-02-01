@@ -1,6 +1,6 @@
 use std::{
     cell::LazyCell,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     sync::mpsc::{channel, Receiver, Sender},
     time::{Duration, Instant},
 };
@@ -70,7 +70,7 @@ pub struct JoinClient {
     args: Args,
     ui: UIManager<UIEvent, JoinEvent>,
     _message_client: MessageClient,
-    connection: Option<ClientsideTransport>,
+    connection: Option<(ClientsideTransport, IpAddr)>,
     last_ping: Instant,
     latency: Option<Duration>,
     phase: Option<MultiplayerPhase<JoinEvent>>,
@@ -102,25 +102,28 @@ impl JoinClient {
             self.parent_channel.clone(),
             users,
             seed,
-            Some(self.connection.as_ref().unwrap().local_addr().unwrap().ip()),
+            Some(self.connection.as_ref().unwrap().1),
         ));
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: JoinEvent) -> GameResult<()> {
         match event {
             JoinEvent::NetworkEvent(network_event) => match network_event {
-                NetworkEvent::Connect(transport) => {
+                NetworkEvent::Connect {
+                    transport,
+                    my_socket_addr,
+                } => {
                     println!("connected");
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
-                        Some(dbg!(transport.local_addr().unwrap().ip())),
+                        Some(my_socket_addr.ip()),
                         self.event_sender.clone(),
                     )));
-                    self.connection = Some(transport);
+                    self.connection = Some((transport, my_socket_addr.ip()));
                 }
                 NetworkEvent::Message(server_message) => {
                     println!("{server_message:?}");
-                    let mut server = LazyCell::new(|| self.connection.as_mut().unwrap());
+                    let mut server = LazyCell::new(|| &mut self.connection.as_mut().unwrap().0);
                     match server_message {
                         ServerMessage::Pong => {
                             let now = Instant::now();
@@ -166,7 +169,7 @@ impl JoinClient {
             },
             JoinEvent::UIEvent(_uievent) => {}
             JoinEvent::LobbyEvent(LobbyEvent::ChooseColor(color)) => {
-                if let Some(connection) = &mut self.connection {
+                if let Some((connection, _)) = &mut self.connection {
                     connection.blind_send(ClientMessage::Lobby(client::LobbyMessage::ChooseColor(
                         color,
                     )));
@@ -193,7 +196,7 @@ impl SubEventHandler<GameError> for JoinClient {
 
         if let Some(phase) = &mut self.phase {
             phase.update(ctx)?;
-            if let (MultiplayerPhase::Game { action_channel, .. }, Some(connection)) =
+            if let (MultiplayerPhase::Game { action_channel, .. }, Some((connection, _))) =
                 (phase, &mut self.connection)
             {
                 while let Ok(message) = action_channel.try_recv() {
@@ -202,7 +205,7 @@ impl SubEventHandler<GameError> for JoinClient {
             }
         }
 
-        if let Some(connection) = &mut self.connection {
+        if let Some((connection, _)) = &mut self.connection {
             let now = Instant::now();
             if now - self.last_ping > self.args.ping_interval {
                 connection.blind_send(ClientMessage::Ping);
@@ -266,7 +269,7 @@ impl SubEventHandler<GameError> for JoinClient {
 
 impl Drop for JoinClient {
     fn drop(&mut self) {
-        if let Some(mut connection) = self.connection.take() {
+        if let Some((mut connection, _)) = self.connection.take() {
             let _ = connection.shutdown();
         }
     }

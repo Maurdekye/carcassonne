@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use client::ClientMessage;
 use serde::{Deserialize, Serialize};
 use server::ServerMessage;
@@ -12,6 +14,7 @@ pub mod server;
 pub enum Message {
     Client(ClientMessage),
     Server(ServerMessage),
+    YourSocket(SocketAddr)
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

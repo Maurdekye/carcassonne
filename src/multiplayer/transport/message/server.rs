@@ -14,8 +14,13 @@ pub enum ServerMessage {
     Ping,
     Pong,
     Lobby(LobbyMessage),
-    Game { message: GameMessage, user: PlayerType },
-    StartGame { game_seed: u64 },
+    Game {
+        message: GameMessage,
+        user: PlayerType,
+    },
+    StartGame {
+        game_seed: u64,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
