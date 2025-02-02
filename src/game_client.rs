@@ -72,6 +72,7 @@ enum TurnPhase {
     TilePlacement {
         tile: Tile,
         placeable_positions: Vec<GridPos>,
+        preview_location: Option<GridPos>,
     },
     MeeplePlacement {
         placed_position: GridPos,
@@ -110,6 +111,13 @@ pub struct GameState {
     game: Game,
     turn_phase: TurnPhase,
     turn_order: VecDeque<PlayerIdentifier>,
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum PlacementValidity {
+    Invalid,
+    ValidWithDifferentRotation,
+    Valid,
 }
 
 pub struct GameClient {
@@ -212,6 +220,7 @@ impl GameClient {
                 turn_phase: TurnPhase::TilePlacement {
                     tile: first_tile,
                     placeable_positions,
+                    preview_location: None,
                 },
                 turn_order: game.players.keys().collect(),
                 game,
@@ -251,41 +260,49 @@ impl GameClient {
         self.reevaluate_selected_square_inner(false);
     }
 
+    fn is_placement_valid(&self, pos: GridPos) -> PlacementValidity {
+        use PlacementValidity::*;
+        if self.state.game.placed_tiles.contains_key(&pos) {
+            return Invalid;
+        }
+
+        let TurnPhase::TilePlacement {
+            tile: held_tile, ..
+        } = &self.state.turn_phase
+        else {
+            return Invalid;
+        };
+
+        if self.state.game.is_valid_tile_position(held_tile, pos) {
+            Valid
+        } else {
+            ValidWithDifferentRotation
+        }
+    }
+
     fn reevaluate_selected_square_inner(&mut self, clockwise: bool) {
+        use PlacementValidity::*;
         self.placement_is_valid = false;
 
-        let Some(selected_square) = &self.selected_square else {
+        let Some(selected_square) = self.selected_square else {
             return;
         };
 
-        if self.state.game.placed_tiles.contains_key(selected_square) {
-            return;
-        }
-
-        if let TurnPhase::TilePlacement {
-            tile: held_tile, ..
-        } = &mut self.state.turn_phase
-        {
-            if self.args.snap_placement {
-                while !self
-                    .state
-                    .game
-                    .is_valid_tile_position(held_tile, *selected_square)
-                {
-                    if clockwise {
-                        held_tile.rotate_clockwise();
-                    } else {
-                        held_tile.rotate_counterclockwise();
-                    }
+        let mut placement_validity = self.is_placement_valid(selected_square);
+        if self.args.snap_placement {
+            for _ in 0..4 {
+                if placement_validity != ValidWithDifferentRotation {
+                    break;
+                } else if clockwise {
+                    self.get_held_tile_mut().unwrap().rotate_clockwise();
+                } else {
+                    self.get_held_tile_mut().unwrap().rotate_counterclockwise();
                 }
-                self.placement_is_valid = true;
-            } else {
-                self.placement_is_valid = self
-                    .state
-                    .game
-                    .is_valid_tile_position(held_tile, *selected_square);
+                placement_validity = self.is_placement_valid(selected_square);
             }
         }
+
+        self.placement_is_valid = placement_validity == Valid
     }
 
     #[inline]
@@ -454,6 +471,7 @@ impl GameClient {
                 self.state.turn_phase = TurnPhase::TilePlacement {
                     tile,
                     placeable_positions,
+                    preview_location: None,
                 }
             }
             None => self.end_game(ctx),
@@ -521,9 +539,7 @@ impl GameClient {
                 rotation,
             } => {
                 if let TurnPhase::TilePlacement { tile, .. } = &mut self.state.turn_phase {
-                    while tile.rotation != rotation {
-                        tile.rotate_clockwise();
-                    }
+                    tile.rotate_to(rotation);
                     self.place_tile(ctx, selected_square)?;
                 }
             }
@@ -540,6 +556,20 @@ impl GameClient {
             GameMessage::Undo => {
                 self.pop_history();
                 self.reevaluate_selected_square();
+            }
+            GameMessage::PreviewTile {
+                selected_square,
+                rotation,
+            } => {
+                if let TurnPhase::TilePlacement {
+                    preview_location,
+                    tile,
+                    ..
+                } = &mut self.state.turn_phase
+                {
+                    *preview_location = Some(selected_square);
+                    tile.rotate_to(rotation);
+                }
             }
         }
         Ok(())
@@ -645,6 +675,18 @@ impl GameClient {
             .get(*self.state.turn_order.front().unwrap())
             .unwrap()
             .ptype
+    }
+
+    fn update_preview(&mut self) {
+        if let (Some(selected_square), TurnPhase::TilePlacement { tile, .. }) =
+            (self.selected_square, &self.state.turn_phase)
+        {
+            let rotation = tile.rotation;
+            self.broadcast_action(GameMessage::PreviewTile {
+                selected_square,
+                rotation,
+            });
+        }
     }
 }
 
@@ -804,6 +846,7 @@ impl SubEventHandler<GameError> for GameClient {
                         if self.selected_square != self.last_selected_square {
                             self.reevaluate_selected_square();
                             self.last_selected_square = self.selected_square;
+                            self.update_preview();
                         }
 
                         // place tile
@@ -824,13 +867,14 @@ impl SubEventHandler<GameError> for GameClient {
                         if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
                             self.get_held_tile_mut().unwrap().rotate_clockwise();
                             self.reevaluate_selected_square();
+                            self.update_preview();
                         }
 
                         // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
                         if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
-                            let tile = self.get_held_tile_mut().unwrap();
-                            tile.rotate_counterclockwise();
+                            self.get_held_tile_mut().unwrap().rotate_counterclockwise();
                             self.reevaluate_selected_square_counterclockwise();
+                            self.update_preview();
                         }
 
                         on_clickable = self.placement_is_valid;
@@ -947,13 +991,7 @@ impl SubEventHandler<GameError> for GameClient {
             let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
             let norm = self.norm(ctx);
             let meeple_scale = 0.001 / norm.x.max(norm.y);
-            GameClient::draw_meeple(
-                ctx,
-                canvas,
-                segment_meeple_spot,
-                color,
-                meeple_scale,
-            )?;
+            GameClient::draw_meeple(ctx, canvas, segment_meeple_spot, color, meeple_scale)?;
         }
 
         // draw score effects
@@ -1103,15 +1141,20 @@ impl SubEventHandler<GameError> for GameClient {
             .draw(canvas);
         } else {
             match &self.state.turn_phase {
-                TurnPhase::TilePlacement { tile, .. } => {
+                TurnPhase::TilePlacement {
+                    tile,
+                    preview_location,
+                    ..
+                } => {
                     // draw tile placement ui
-                    if let Some(pos) = self.selected_square {
+                    if let Some(pos) = self.selected_square.or(*preview_location) {
                         let rect = self.grid_pos_rect(&pos, ctx);
-                        let cursor_color = if !self.placement_is_valid {
-                            Color::RED
-                        } else {
-                            Color::GREEN
-                        };
+                        let cursor_color =
+                            if self.is_placement_valid(pos) != PlacementValidity::Valid {
+                                Color::RED
+                            } else {
+                                Color::GREEN
+                            };
                         if !self.state.game.placed_tiles.contains_key(&pos) {
                             tile.render(ctx, canvas, rect)?;
                         }

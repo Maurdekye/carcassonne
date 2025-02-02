@@ -29,7 +29,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 
 ### For First Release
 
-* Preview clients moving tiles
+* ~~Preview clients moving tiles~~
 * Inspect groups on tab
 * Controls cheatsheet on tab
 * Rules screen

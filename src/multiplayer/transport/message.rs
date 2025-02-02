@@ -23,6 +23,10 @@ pub enum GameMessage {
         selected_square: GridPos,
         rotation: usize,
     },
+    PreviewTile {
+        selected_square: GridPos,
+        rotation: usize,
+    },
     PlaceMeeple {
         seg_ident: SegmentIdentifier,
     },

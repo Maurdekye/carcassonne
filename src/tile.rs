@@ -763,6 +763,12 @@ impl Tile {
         self
     }
 
+    pub fn rotate_to(&mut self, rotations: usize) {
+        while self.rotation != rotations % 4 {
+            self.rotate_clockwise();
+        }
+    }
+
     pub fn validate_mounting(
         &self,
         adjacent: &Tile,
