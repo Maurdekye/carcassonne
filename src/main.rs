@@ -17,13 +17,13 @@ mod game_client;
 mod main_client;
 mod main_menu_client;
 mod multiplayer;
-
 mod line;
 mod pos;
 mod sub_event_handler;
 mod tile;
 mod ui_manager;
 mod util;
+mod colors;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();

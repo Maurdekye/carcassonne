@@ -3,6 +3,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
+use crate::colors::PANEL_COLOR;
 use crate::game::player::PlayerType;
 use crate::game::ShapeDetails;
 use crate::game::{
@@ -11,13 +12,14 @@ use crate::game::{
 use crate::line::LineExt;
 use crate::main_client::MainEvent;
 use crate::multiplayer::transport::message::server::User;
-use crate::multiplayer::transport::message::GameMessage;
+use crate::multiplayer::transport::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
 use crate::util::{
-    point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt,
+    point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
+    TextExt,
 };
 use crate::Args;
 
@@ -134,7 +136,6 @@ pub struct GameClient {
     event_receiver: Receiver<GameEvent>,
     pause_menu: Option<PauseScreenSubclient>,
     selected_square: Option<GridPos>,
-    last_selected_square: Option<GridPos>,
     selected_segment_and_group: Option<(SegmentIdentifier, GroupIdentifier)>,
     placement_is_valid: bool,
     offset: Vec2,
@@ -192,9 +193,9 @@ impl GameClient {
                 Button::new_with_styling(
                     ButtonBounds {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
-                        absolute: Rect::new(-180.0, 20.0, 160.0, 40.0),
+                        absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
                     },
-                    Text::new("Skip meeples"),
+                    Text::new("Skip meeples (Enter)"),
                     DrawParam::default(),
                     Color::from_rgb(0, 128, 192),
                     GameEvent::SkipMeeples,
@@ -216,7 +217,6 @@ impl GameClient {
             event_receiver,
             pause_menu: None,
             selected_square: None,
-            last_selected_square: None,
             selected_segment_and_group: None,
             placement_is_valid: false,
             offset: Vec2::ZERO,
@@ -389,7 +389,7 @@ impl GameClient {
         player_ident: PlayerIdentifier,
         pos: Vec2,
         highlighted: bool,
-    ) -> Result<f32, GameError> {
+    ) -> Result<Rect, GameError> {
         let player = self.state.game.players.get(player_ident).unwrap();
         let mut card_rect = Rect {
             x: pos.x,
@@ -454,7 +454,7 @@ impl GameClient {
                 .draw(canvas);
         }
 
-        Ok(card_rect.h)
+        Ok(card_rect)
     }
 
     fn end_turn(&mut self, ctx: &Context, groups_to_close: Vec<GroupIdentifier>) {
@@ -562,18 +562,23 @@ impl GameClient {
                 self.pop_history();
                 self.reevaluate_selected_square();
             }
-            GameMessage::PreviewTile {
-                selected_square,
-                rotation,
-            } => {
+            GameMessage::PreviewTile(tile_preview) => {
                 if let TurnPhase::TilePlacement {
                     preview_location,
                     tile,
                     ..
                 } = &mut self.state.turn_phase
                 {
-                    *preview_location = Some(selected_square);
-                    tile.rotate_to(rotation);
+                    if let Some(TilePreview {
+                        selected_square,
+                        rotation,
+                    }) = tile_preview
+                    {
+                        *preview_location = Some(selected_square);
+                        tile.rotate_to(rotation);
+                    } else {
+                        *preview_location = None;
+                    }
                 }
             }
         }
@@ -687,14 +692,17 @@ impl GameClient {
     }
 
     fn update_preview(&mut self) {
-        if let (Some(selected_square), TurnPhase::TilePlacement { tile, .. }) =
-            (self.selected_square, &self.state.turn_phase)
+        if let TurnPhase::TilePlacement {
+            tile: Tile { rotation, .. },
+            ..
+        } = self.state.turn_phase
         {
-            let rotation = tile.rotation;
-            self.broadcast_action(GameMessage::PreviewTile {
-                selected_square,
-                rotation,
-            });
+            self.broadcast_action(GameMessage::PreviewTile(self.selected_square.map(
+                |selected_square| TilePreview {
+                    selected_square,
+                    rotation,
+                },
+            )));
         }
     }
 
@@ -717,7 +725,7 @@ impl GameClient {
         &mut self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-    ) -> Result<bool, GameError> {
+    ) -> Result<(), GameError> {
         if let Some(group_inspection) = &self.inspecting_groups {
             let origin_rect = self.origin_rect(ctx);
             let _: Option<()> =
@@ -828,45 +836,23 @@ impl GameClient {
                         .ok()?;
                     }
                 };
-            Ok(true)
-        } else {
-            Ok(false)
         }
+        Ok(())
     }
 
-    fn draw_turn_phase(
-        &mut self,
-        ctx: &mut Context,
-        canvas: &mut Canvas,
-    ) -> GameResult<()> {
-        let time = ctx.time.time_since_start().as_secs_f32();
-        let sin_time = time.sin() * 0.1 + 1.0;
+    fn draw_turn_phase(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()> {
         match &self.state.turn_phase {
-            TurnPhase::TilePlacement {
-                tile,
-                preview_location,
-                ..
-            } => {
-                // draw tile placement ui
-                if let Some(pos) = self.selected_square.or(*preview_location) {
-                    let rect = self.grid_pos_rect(&pos, ctx);
-                    let cursor_color = if self.is_placement_valid(pos) != PlacementValidity::Valid {
-                        Color::RED
-                    } else {
-                        Color::GREEN
-                    };
-                    if !self.state.game.placed_tiles.contains_key(&pos) {
-                        tile.render(ctx, canvas, rect)?;
-                    }
-                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
-                        .draw(canvas);
+            TurnPhase::TilePlacement { .. } => {
+                if let Some(pos) = self.selected_square {
+                    self.draw_held_tile_at_pos(ctx, canvas, pos)?;
                 }
             }
             TurnPhase::MeeplePlacement {
                 placed_position, ..
             } => {
-                // draw meeple placement ui
                 let rect = self.grid_pos_rect(placed_position, ctx);
+                let time = ctx.time.time_since_start().as_secs_f32();
+                let sin_time = time.sin() * 0.1 + 1.0;
                 Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?.draw(canvas);
 
                 if !self.ui.on_ui {
@@ -904,30 +890,54 @@ impl GameClient {
         Ok(())
     }
 
+    fn draw_held_tile_at_pos(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        pos: GridPos,
+    ) -> Result<(), GameError> {
+        let TurnPhase::TilePlacement { tile, .. } = &self.state.turn_phase else {
+            return Ok(());
+        };
+        let rect = self.grid_pos_rect(&pos, ctx);
+        let cursor_color = if self.is_placement_valid(pos) != PlacementValidity::Valid {
+            Color::RED
+        } else {
+            Color::GREEN
+        };
+        if !self.state.game.placed_tiles.contains_key(&pos) {
+            tile.render(ctx, canvas, rect)?;
+        }
+        Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?.draw(canvas);
+        Ok(())
+    }
+
     fn draw_game_details(
         &mut self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-        current_player_ident: PlayerIdentifier,
     ) -> Result<(), GameError> {
         let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
+        let current_player_ident = self.get_current_player();
         if ctx.keyboard.is_key_pressed(KeyCode::Tab) || is_endgame {
             // draw player cards
             let mut card_location = vec2(20.0, 20.0);
+            let mut cards_right_extent: f32 = 0.0;
             for &player_ident in &self.state.turn_order {
-                let height = self.draw_player_card(
+                let rect = self.draw_player_card(
                     ctx,
                     canvas,
                     player_ident,
                     card_location,
                     player_ident == current_player_ident && !is_endgame,
                 )?;
-                card_location.y += height + 20.0;
+                card_location.y += rect.h + 20.0;
+                cards_right_extent = cards_right_extent.max(rect.right());
             }
 
-            // draw remaining tile count
             if !is_endgame {
-                let tile_count_rect = Rect::new(200.0, 20.0, 60.0, 60.0);
+                // draw remaining tile count
+                let tile_count_rect = Rect::new(cards_right_extent + 20.0, 20.0, 60.0, 60.0);
                 Mesh::new_rounded_rectangle(
                     ctx,
                     DrawMode::fill(),
@@ -939,6 +949,35 @@ impl GameClient {
                 Text::new(format!("{}", self.state.game.library.len()))
                     .size(24.0)
                     .centered_on(ctx, tile_count_rect.center().into())?
+                    .draw(canvas);
+
+                // draw controls cheatsheet
+                let res = ctx.res();
+                let cheatsheet_text = Text::new(
+                    "Left mouse - Place tile / meeple    Right mouse - Drag    R - Rotate",
+                )
+                .size(16.0);
+                let bounds: Vec2 = cheatsheet_text.measure(ctx)?.into();
+                let width = bounds.x + 12.0;
+                Mesh::new_rounded_rectangle(
+                    ctx,
+                    DrawMode::fill(),
+                    ButtonBounds {
+                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                        absolute: Rect::new(-width / 2.0, -30.0, width, 24.0),
+                    }
+                    .corrected_bounds(res),
+                    5.0,
+                    PANEL_COLOR,
+                )?
+                .draw(canvas);
+                cheatsheet_text
+                    .anchored_by(
+                        ctx,
+                        res * vec2(0.5, 1.0) + vec2(0.0, -10.0),
+                        AnchorPoint::SouthCenter,
+                    )?
+                    .color(Color::WHITE)
                     .draw(canvas);
             }
         } else {
@@ -972,8 +1011,8 @@ impl GameClient {
         &mut self,
         ctx: &mut Context,
         canvas: &mut Canvas,
-        time: f32,
     ) -> Result<(), GameError> {
+        let time = ctx.time.time_since_start().as_secs_f32();
         for effect in &self.scoring_effects {
             let lifetime = (time - effect.initialized_at) / SCORE_EFFECT_LIFE;
             let alpha = (1.0 - lifetime).max(0.0) * 255.0;
@@ -1025,15 +1064,11 @@ impl GameClient {
 
     fn pause_menu_activation_update(&mut self, ctx: &mut Context) {
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
-            if self.inspecting_groups.is_some() {
-                self.inspecting_groups = None;
-            } else {
-                self.pause_menu = Some(PauseScreenSubclient::new(
-                    self.event_sender.clone(),
-                    self.is_endgame(),
-                    !self.history.is_empty() && self.can_play(),
-                ));
-            }
+            self.pause_menu = Some(PauseScreenSubclient::new(
+                self.event_sender.clone(),
+                self.is_endgame(),
+                !self.history.is_empty() && self.can_play(),
+            ));
         }
     }
 
@@ -1052,31 +1087,20 @@ impl GameClient {
             } => {
                 // determine tile placement location
                 if !can_play {
-                    self.selected_square = None;
+                    self.set_selected_square(None);
                     return Ok(());
                 }
 
                 if self.args.snap_placement {
-                    self.selected_square = placeable_positions
-                        .iter()
-                        .cloned()
-                        .map(|pos| {
-                            (
-                                pos,
-                                Vec2::from(pos).distance_squared(gameboard_pos - vec2(0.5, 0.5)),
-                            )
-                        })
-                        .min_by(|(_, a), (_, b)| a.total_cmp(b))
-                        .map(|(pos, _)| pos);
+                    let gameboard_pos = gameboard_pos - vec2(0.5, 0.5);
+                    self.set_selected_square(
+                        placeable_positions
+                            .iter()
+                            .min_by_f32_key(|pos| Vec2::from(**pos).distance_squared(gameboard_pos))
+                            .cloned(),
+                    );
                 } else {
-                    self.selected_square = Some(focused_pos);
-                }
-
-                // update selected square validity
-                if self.selected_square != self.last_selected_square {
-                    self.reevaluate_selected_square();
-                    self.update_preview();
-                    self.last_selected_square = self.selected_square;
+                    self.set_selected_square(Some(focused_pos));
                 }
 
                 // place tile
@@ -1146,6 +1170,11 @@ impl GameClient {
                         }
                     }
                 }
+
+                if ctx.keyboard.is_key_just_pressed(KeyCode::Return) {
+                    self.skip_meeples(ctx);
+                    self.broadcast_action(GameMessage::SkipMeeples);
+                }
             }
             TurnPhase::EndGame { next_tick } => {
                 if let Some(next_tick) = next_tick {
@@ -1208,6 +1237,55 @@ impl GameClient {
                         .cloned(),
                 });
     }
+
+    fn draw_player_color_outline(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+    ) -> Result<(), GameError> {
+        let current_player_ident = self.get_current_player();
+        let res = ctx.res();
+        if self.can_play() {
+            Mesh::new_rectangle(
+                ctx,
+                DrawMode::stroke(8.0),
+                Rect::new(0.0, 0.0, res.x, res.y),
+                self.state
+                    .game
+                    .players
+                    .get(current_player_ident)
+                    .unwrap()
+                    .color,
+            )?
+            .draw(canvas);
+        };
+        Ok(())
+    }
+
+    fn pause_menu_update(&mut self, ctx: &mut Context) -> Result<bool, GameError> {
+        let is_endgame = self.is_endgame();
+        let can_play = self.can_play();
+        let pause_menu_open = if let Some(pause_menu) = &mut self.pause_menu {
+            pause_menu.can_end_game.set(is_endgame);
+            pause_menu
+                .can_undo
+                .set(can_play && !self.history.is_empty());
+            pause_menu.update(ctx)?;
+            self.set_selected_square(None);
+            true
+        } else {
+            false
+        };
+        Ok(pause_menu_open)
+    }
+
+    fn set_selected_square(&mut self, new_selected_square: Option<GridPos>) {
+        if self.selected_square != new_selected_square {
+            self.selected_square = new_selected_square;
+            self.reevaluate_selected_square();
+            self.update_preview();
+        }
+    }
 }
 
 impl SubEventHandler<GameError> for GameClient {
@@ -1235,16 +1313,7 @@ impl SubEventHandler<GameError> for GameClient {
 
         let mut on_clickable = false;
 
-        // update pause menu
-        let is_endgame = self.is_endgame();
-        let can_play = self.can_play();
-        if let Some(pause_menu) = &mut self.pause_menu {
-            self.selected_square = None;
-            pause_menu.can_end_game.set(is_endgame);
-            pause_menu
-                .can_undo
-                .set(can_play && !self.history.is_empty());
-            pause_menu.update(ctx)?;
+        if self.pause_menu_update(ctx)? {
             return Ok(());
         }
 
@@ -1275,6 +1344,8 @@ impl SubEventHandler<GameError> for GameClient {
 
         if self.inspecting_groups.is_none() {
             self.turn_phase_update(ctx, &mut on_clickable)?;
+        } else {
+            self.set_selected_square(None);
         }
 
         if on_clickable {
@@ -1285,42 +1356,34 @@ impl SubEventHandler<GameError> for GameClient {
     }
 
     fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        let res = ctx.res();
-
-        let time = ctx.time.time_since_start().as_secs_f32();
-        let current_player_ident = self.get_current_player();
-
         for (pos, tile) in &self.state.game.placed_tiles {
             tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
         }
 
         self.draw_meeples(ctx, canvas)?;
 
-        self.draw_scoring_effects(ctx, canvas, time)?;
+        self.draw_scoring_effects(ctx, canvas)?;
 
-        if !self.draw_group_inspection_ui(ctx, canvas)? {
+        if self.inspecting_groups.is_none() {
             self.draw_turn_phase(ctx, canvas)?;
         }
 
+        // draw tile preview
+        if let TurnPhase::TilePlacement {
+            preview_location: Some(pos),
+            ..
+        } = self.state.turn_phase
+        {
+            self.draw_held_tile_at_pos(ctx, canvas, pos)?;
+        }
+
+        self.draw_group_inspection_ui(ctx, canvas)?;
+
         self.ui.draw(ctx, canvas)?;
 
-        self.draw_game_details(ctx, canvas, current_player_ident)?;
+        self.draw_game_details(ctx, canvas)?;
 
-        // draw player color outline if it is your turn
-        if self.can_play() {
-            Mesh::new_rectangle(
-                ctx,
-                DrawMode::stroke(8.0),
-                Rect::new(0.0, 0.0, res.x, res.y),
-                self.state
-                    .game
-                    .players
-                    .get(current_player_ident)
-                    .unwrap()
-                    .color,
-            )?
-            .draw(canvas);
-        }
+        self.draw_player_color_outline(ctx, canvas)?;
 
         if let Some(pause_menu) = &mut self.pause_menu {
             pause_menu.draw(ctx, canvas)?;

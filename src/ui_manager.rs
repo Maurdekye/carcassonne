@@ -42,6 +42,19 @@ impl ButtonBounds {
             absolute: bounds,
         }
     }
+
+    pub fn corrected_bounds(&self, res: Vec2) -> Rect {
+        let ButtonBounds {
+            relative: relative_bounds,
+            absolute: absolute_bounds,
+        } = self;
+        Rect::new(
+            relative_bounds.x * res.x + absolute_bounds.x,
+            relative_bounds.y * res.y + absolute_bounds.y,
+            relative_bounds.w * res.x + absolute_bounds.w,
+            relative_bounds.h * res.y + absolute_bounds.h,
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -59,6 +72,7 @@ impl ButtonState {
             ButtonState::Enabled
         }
     }
+
     pub fn invisible_if(is_invisible: bool) -> ButtonState {
         if is_invisible {
             ButtonState::Invisible
@@ -101,16 +115,7 @@ impl<E> Button<E> {
     }
 
     pub fn corrected_bounds(&self, res: Vec2) -> Rect {
-        let ButtonBounds {
-            relative: relative_bounds,
-            absolute: absolute_bounds,
-        } = self.bounds;
-        Rect::new(
-            relative_bounds.x * res.x + absolute_bounds.x,
-            relative_bounds.y * res.y + absolute_bounds.y,
-            relative_bounds.w * res.x + absolute_bounds.w,
-            relative_bounds.h * res.y + absolute_bounds.h,
-        )
+        self.bounds.corrected_bounds(res)
     }
 }
 

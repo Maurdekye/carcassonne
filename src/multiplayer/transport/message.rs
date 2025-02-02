@@ -14,7 +14,7 @@ pub mod server;
 pub enum Message {
     Client(ClientMessage),
     Server(ServerMessage),
-    YourSocket(SocketAddr)
+    YourSocket(SocketAddr),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -23,14 +23,17 @@ pub enum GameMessage {
         selected_square: GridPos,
         rotation: usize,
     },
-    PreviewTile {
-        selected_square: GridPos,
-        rotation: usize,
-    },
+    PreviewTile(Option<TilePreview>),
     PlaceMeeple {
         seg_ident: SegmentIdentifier,
     },
     SkipMeeples,
     EndGame,
     Undo,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct TilePreview {
+    pub selected_square: GridPos,
+    pub rotation: usize,
 }

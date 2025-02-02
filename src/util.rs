@@ -141,6 +141,7 @@ pub enum AnchorPoint {
     NorthCenter,
     NorthEast,
     SouthWest,
+    SouthCenter,
     SouthEast,
     Center,
 }
@@ -183,6 +184,7 @@ impl TextExt for Text {
             NorthCenter => vec2(0.5, 0.0),
             NorthEast => vec2(1.0, 0.0),
             SouthWest => vec2(0.0, 1.0),
+            SouthCenter => vec2(0.5, 1.0),
             SouthEast => vec2(1.0, 1.0),
             Center => vec2(0.5, 0.5),
         };
@@ -294,6 +296,35 @@ pub trait ContextExt {
 impl ContextExt for Context {
     fn res(&self) -> Vec2 {
         self.gfx.drawable_size().into()
+    }
+}
+
+pub trait MinByF32Key {
+    type Item;
+
+    fn min_by_f32_key(self, f: impl Fn(&Self::Item) -> f32) -> Option<Self::Item>;
+}
+
+impl<I> MinByF32Key for I
+where
+    I: Iterator,
+{
+    type Item = I::Item;
+
+    fn min_by_f32_key(self, f: impl Fn(&Self::Item) -> f32) -> Option<Self::Item> {
+        self.map(|i| (f(&i), i))
+            .min_by(|(a, _), (b, _)| a.total_cmp(b))
+            .map(|(_, i)| i)
+    }
+}
+
+pub trait Vec2ToRectExt {
+    fn to(self, size: Vec2) -> Rect;
+}
+
+impl Vec2ToRectExt for Vec2 {
+    fn to(self, size: Vec2) -> Rect {
+        Rect::new(self.x, self.y, size.x, size.y)
     }
 }
 

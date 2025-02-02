@@ -15,7 +15,7 @@ use crate::{
         GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
         SegmentType, Tile,
     },
-    util::{Bag, HashMapBag},
+    util::{Bag, HashMapBag, MinByF32Key},
 };
 
 pub mod player {
@@ -110,11 +110,7 @@ pub struct ShapeDetails {
 impl From<Vec<Line>> for ShapeDetails {
     fn from(outline: Vec<Line>) -> Self {
         let all_verts: Vec<_> = outline.iter().flatten().collect();
-        let top_edge = all_verts
-            .iter()
-            .min_by(|a, b| a.y.total_cmp(&b.y))
-            .unwrap()
-            .y;
+        let top_edge = all_verts.iter().min_by_f32_key(|v| v.y).unwrap().y;
         let middle: f32 = all_verts.iter().map(|v| v.x).sum();
         let middle = middle / all_verts.len() as f32;
         let popup_location = vec2(middle, top_edge);

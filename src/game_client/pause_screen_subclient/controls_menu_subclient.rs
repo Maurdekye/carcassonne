@@ -1,12 +1,13 @@
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
+    graphics::{Canvas, DrawMode, Mesh, Rect, Text},
     input::keyboard::KeyCode,
     Context, GameError,
 };
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
+    colors::PANEL_COLOR,
     sub_event_handler::SubEventHandler,
     ui_manager::{Button, ButtonBounds, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, TextExt},
@@ -84,28 +85,31 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
             Rect::new(panel_origin.x, panel_origin.y, dims.x, dims.y)
         };
 
-        Mesh::new_rectangle(ctx, DrawMode::fill(), panel, Color::from_rgb(128, 128, 128))?
-            .draw(canvas);
+        Mesh::new_rectangle(ctx, DrawMode::fill(), panel, PANEL_COLOR)?.draw(canvas);
 
         Text::new("Controls")
             .size(56.0)
             .anchored_by(ctx, panel_origin + vec2(10.0, 10.0), AnchorPoint::NorthWest)?
             .draw(canvas);
 
-        Text::new(
-            "\
+        {
+            let controls_text = "\
 Left Mouse - Place tile or meeple
 Right Mouse / WASD / Arrow keys - Move camera
 Scroll - Zoom in and out
 R - Rotate tile 90° clockwise
 E - Rotate tile 90° counterclockwise
+Enter - Skip meeples
 Tab - Detailed game stats
-Esc - Pause",
-        )
-        .size(32.0)
-        .anchored_by(ctx, panel_origin + vec2(10.0, 80.0), AnchorPoint::NorthWest)?
-        .draw(canvas);
-    
+Esc - Pause";
+            let content_height = panel.h - 90.0;
+            let font_size = 32.0f32.min(content_height / controls_text.lines().count() as f32);
+            Text::new(controls_text)
+                .size(font_size)
+                .anchored_by(ctx, panel_origin + vec2(10.0, 80.0), AnchorPoint::NorthWest)?
+                .draw(canvas);
+        }
+
         self.ui.draw(ctx, canvas)?;
 
         Ok(())
