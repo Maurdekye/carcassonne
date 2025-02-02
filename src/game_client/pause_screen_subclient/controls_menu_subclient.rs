@@ -1,6 +1,6 @@
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::{Canvas, DrawMode, Mesh, Rect, Text},
+    graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     input::keyboard::KeyCode,
     Context, GameError,
 };
@@ -10,7 +10,7 @@ use crate::{
     colors::PANEL_COLOR,
     sub_event_handler::SubEventHandler,
     ui_manager::{Button, ButtonBounds, UIManager},
-    util::{AnchorPoint, DrawableWihParamsExt, TextExt},
+    util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
 use super::PauseScreenEvent;
@@ -93,7 +93,8 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
             .draw(canvas);
 
         {
-            let controls_text = "\
+            Text::new(
+                "\
 Left Mouse - Place tile or meeple
 Right Mouse / WASD / Arrow keys - Move camera
 Scroll - Zoom in and out
@@ -101,13 +102,9 @@ R - Rotate tile 90° clockwise
 E - Rotate tile 90° counterclockwise
 Enter - Skip meeples
 Tab - Detailed game stats
-Esc - Pause";
-            let content_height = panel.h - 90.0;
-            let font_size = 32.0f32.min(content_height / controls_text.lines().count() as f32);
-            Text::new(controls_text)
-                .size(font_size)
-                .anchored_by(ctx, panel_origin + vec2(10.0, 80.0), AnchorPoint::NorthWest)?
-                .draw(canvas);
+Esc - Pause",
+            )
+            .draw_into_rect(ctx, canvas, Color::WHITE, 32.0, (panel_origin + vec2(10.0, 80.0)).to(panel.bottom_right() - vec2(10.0, 10.0)))?;
         }
 
         self.ui.draw(ctx, canvas)?;

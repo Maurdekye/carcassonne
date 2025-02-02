@@ -32,7 +32,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Preview clients moving tiles~~
 * ~~Inspect groups on tab~~
 * ~~Controls cheatsheet on tab~~
-* Rules screen
+* ~~Rules screen~~
 * Gui for connecting to host
 
 ### Additional Features
@@ -56,5 +56,6 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * River tiles
 * Special gamemodes
   * Procedurally generated tiles
+  * Screensaver mode
 * Easter egg: replace meeples with emojis / furries / little protogens :3 (furples)
 * Use scans of actual tiles

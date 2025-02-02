@@ -96,6 +96,14 @@ impl MainPauseMenuSubclient {
                     Text::new("Controls"),
                     MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Controls),
                 ),
+                Button::new(
+                    ButtonBounds {
+                        relative: button_center,
+                        absolute: Rect::new(10.0, 120.0, 240.0, 40.0),
+                    },
+                    Text::new("Rules"),
+                    MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Rules),
+                ),
             ],
         );
         end_game_button.borrow_mut().state = ButtonState::disabled_if(can_end_game.get());

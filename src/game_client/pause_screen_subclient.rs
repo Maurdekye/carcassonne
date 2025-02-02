@@ -5,6 +5,7 @@ use ggez::{
     Context, GameError,
 };
 use main_pause_menu_subclient::MainPauseMenuSubclient;
+use rules_menu_subclient::RulesMenuSubclient;
 use std::{
     cell::Cell,
     rc::Rc,
@@ -20,12 +21,14 @@ use crate::{
 
 mod controls_menu_subclient;
 mod main_pause_menu_subclient;
+mod rules_menu_subclient;
 
 #[derive(Debug, Clone)]
 pub enum PauseScreenEvent {
     GameEvent(GameEvent),
     MainMenu,
     Controls,
+    Rules,
 }
 
 pub struct PauseScreenSubclient {
@@ -88,6 +91,7 @@ impl PauseScreenSubclient {
             Controls => {
                 self.scene = Box::new(ControlsMenuSubclient::new(self.event_sender.clone()))
             }
+            Rules => self.scene = Box::new(RulesMenuSubclient::new(self.event_sender.clone())),
         }
         Ok(())
     }

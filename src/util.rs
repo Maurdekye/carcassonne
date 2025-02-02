@@ -160,6 +160,14 @@ pub trait TextExt: Sized {
         anchor: AnchorPoint,
     ) -> Result<DrawableWihParams<'a, Self>, GameError>;
     fn size(self, size: f32) -> Self;
+    fn draw_into_rect(
+        self,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        color: Color,
+        scale: f32,
+        rect: Rect,
+    ) -> Result<(), GameError>;
 }
 
 impl TextExt for Text {
@@ -198,6 +206,28 @@ impl TextExt for Text {
 
     fn pos(&self, pos: Vec2) -> DrawableWihParams<'_, Self> {
         self.with_dest(pos)
+    }
+
+    fn draw_into_rect(
+        mut self,
+        ctx: &Context,
+        canvas: &mut Canvas,
+        color: Color,
+        scale: f32,
+        rect: Rect,
+    ) -> Result<(), GameError> {
+        self.set_scale(scale);
+        let bounds: Vec2 = self.measure(ctx)?.into();
+        let scale_ratio = if bounds.x / bounds.y > rect.w / rect.h {
+            bounds.x / rect.w
+        } else {
+            bounds.y / rect.h
+        };
+        self.size((scale / scale_ratio).min(scale))
+            .anchored_by(ctx, rect.point().into(), AnchorPoint::NorthWest)?
+            .color(color)
+            .draw(canvas);
+        Ok(())
     }
 }
 
@@ -319,12 +349,22 @@ where
 }
 
 pub trait Vec2ToRectExt {
-    fn to(self, size: Vec2) -> Rect;
+    fn to(self, end: Vec2) -> Rect;
 }
 
 impl Vec2ToRectExt for Vec2 {
-    fn to(self, size: Vec2) -> Rect {
-        Rect::new(self.x, self.y, size.x, size.y)
+    fn to(self, end: Vec2) -> Rect {
+        Rect::new(self.x, self.y, end.x - self.x, end.y - self.y)
+    }
+}
+
+pub trait RectExt {
+    fn bottom_right(&self) -> Vec2;
+}
+
+impl RectExt for Rect {
+    fn bottom_right(&self) -> Vec2 {
+        vec2(self.right(), self.bottom())
     }
 }
 
