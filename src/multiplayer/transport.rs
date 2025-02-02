@@ -12,6 +12,8 @@ use message::{client::ClientMessage, server::ServerMessage, Message};
 
 pub mod message;
 
+const MAX_PACKET_SIZE: usize = 16 * 1024 * 1024;
+
 pub enum NetworkEvent<T, M> {
     Connect {
         transport: T,
@@ -48,6 +50,12 @@ impl MessageTransporter {
         let mut len_buf = [0u8; 8];
         self.0.read_exact(&mut len_buf)?;
         let len = u64::from_le_bytes(len_buf) as usize;
+        if len > MAX_PACKET_SIZE {
+            return Err(io::Error::new(
+                ErrorKind::FileTooLarge,
+                format!("Message size cannot exceed {} bytes", MAX_PACKET_SIZE),
+            ));
+        }
         let mut buf = vec![0; len];
         self.0.read_exact(&mut buf)?;
         let message: Message = bincode::deserialize(&buf[..])

@@ -377,6 +377,7 @@ impl GameClient {
         };
         if display_name.is_some() {
             card_rect.h += 20.0;
+            card_rect.w += 60.0;
             content_origin.y += 20.0;
         }
         Mesh::new_rounded_rectangle(
