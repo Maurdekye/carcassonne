@@ -1215,27 +1215,25 @@ impl GameClient {
             ..
         } = self.grid_selection_info(ctx);
 
-        self.inspecting_groups =
-            ctx.keyboard
-                .is_key_pressed(KeyCode::Tab)
-                .then(|| GroupInspection {
-                    selected_group: self
-                        .state
-                        .game
-                        .placed_tiles
-                        .get(&focused_pos)
-                        .and_then(|tile| {
-                            (0..tile.segments.len()).find(|seg_index| {
-                                tile.segments[*seg_index].stype.placeable() && {
-                                    let segment_poly: Vec<_> =
-                                        tile.segment_polygon(*seg_index).collect();
-                                    point_in_polygon(subgrid_pos, &segment_poly)
-                                }
-                            })
+        self.inspecting_groups = (ctx.keyboard.is_key_pressed(KeyCode::Tab) || self.is_endgame())
+            .then(|| GroupInspection {
+                selected_group: self
+                    .state
+                    .game
+                    .placed_tiles
+                    .get(&focused_pos)
+                    .and_then(|tile| {
+                        (0..tile.segments.len()).find(|seg_index| {
+                            tile.segments[*seg_index].stype.placeable() && {
+                                let segment_poly: Vec<_> =
+                                    tile.segment_polygon(*seg_index).collect();
+                                point_in_polygon(subgrid_pos, &segment_poly)
+                            }
                         })
-                        .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
-                        .cloned(),
-                });
+                    })
+                    .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
+                    .cloned(),
+            });
     }
 
     fn draw_player_color_outline(
