@@ -222,7 +222,7 @@ impl HostClient {
                         ClientMessage::Game(message) => {
                             if let MultiplayerPhase::Game { game, .. } = &mut self.phase {
                                 let source_player = PlayerType::from(Some(src_addr));
-                                if game.get_current_player() == source_player {
+                                if game.get_current_player_type() == source_player {
                                     for client_info in self
                                         .users
                                         .values_mut()

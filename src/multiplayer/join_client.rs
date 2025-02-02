@@ -153,7 +153,7 @@ impl JoinClient {
                         }
                         ServerMessage::Game { message, user } => {
                             if let Some(MultiplayerPhase::Game { game, .. }) = &mut self.phase {
-                                if game.get_current_player() == user {
+                                if game.get_current_player_type() == user {
                                     game.handle_message(ctx, message)?;
                                 }
                             }

@@ -46,6 +46,8 @@ const SCORE_EFFECT_DECCEL: f32 = 15.0;
 const END_GAME_SCORE_DELAY: f32 = 3.0;
 const END_GAME_SCORE_INTERVAL: f32 = 1.75;
 
+const MEEPLE_SIZE: f32 = 0.001;
+
 pub const NUM_PLAYERS: usize = 5;
 pub const PLAYER_COLORS: [Color; NUM_PLAYERS] = [
     Color::RED,
@@ -63,7 +65,6 @@ enum GameEvent {
     EndGame,
     ResetCamera,
     Undo,
-    InspectGroups,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -118,6 +119,12 @@ enum PlacementValidity {
     Invalid,
     ValidWithDifferentRotation,
     Valid,
+}
+
+struct GridSelectionInfo {
+    gameboard_pos: Vec2,
+    focused_pos: GridPos,
+    subgrid_pos: Vec2,
 }
 
 pub struct GameClient {
@@ -367,8 +374,12 @@ impl GameClient {
         }
     }
 
+    fn is_endgame(&self) -> bool {
+        matches!(self.state.turn_phase, TurnPhase::EndGame { .. })
+    }
+
     pub fn can_play(&self) -> bool {
-        self.get_current_player() == self.state.game.local_player
+        self.get_current_player_type() == self.state.game.local_player && !self.is_endgame()
     }
 
     fn draw_player_card(
@@ -522,12 +533,6 @@ impl GameClient {
                     self.broadcast_action(GameMessage::Undo);
                 }
             }
-            GameEvent::InspectGroups => {
-                self.pause_menu = None;
-                self.inspecting_groups = Some(GroupInspection {
-                    selected_group: None,
-                });
-            }
         }
         Ok(())
     }
@@ -668,11 +673,15 @@ impl GameClient {
         None
     }
 
-    pub fn get_current_player(&self) -> PlayerType {
+    fn get_current_player(&self) -> PlayerIdentifier {
+        *self.state.turn_order.front().unwrap()
+    }
+
+    pub fn get_current_player_type(&self) -> PlayerType {
         self.state
             .game
             .players
-            .get(*self.state.turn_order.front().unwrap())
+            .get(self.get_current_player())
             .unwrap()
             .ptype
     }
@@ -688,340 +697,29 @@ impl GameClient {
             });
         }
     }
-}
 
-impl SubEventHandler<GameError> for GameClient {
-    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
-        if self.pause_menu.is_some() {
-            return Ok(());
-        }
-
-        // zooming
-        let prev_scale = self.scale;
-        self.scale *= ZOOM_SPEED.powf(y);
-        self.scale = self.scale.clamp(0.01, 1.0);
-        let scale_change = self.scale / prev_scale;
-        let mouse: Vec2 = ctx.mouse.position().into();
-        self.offset = (self.offset + mouse) * scale_change - mouse;
-
-        Ok(())
-    }
-
-    fn update(&mut self, ctx: &mut Context) -> GameResult {
-        self.ui.update(ctx)?;
-        while let Ok(event) = self.event_receiver.try_recv() {
-            self.handle_event(ctx, event)?;
-        }
-
-        let has_history = !self.history.is_empty();
-        let can_play = self.can_play();
-        let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
-
-        // update pause menu
-        if let Some(pause_menu) = &mut self.pause_menu {
-            self.selected_square = None;
-            pause_menu.can_end_game.set(is_endgame);
-            pause_menu.can_undo.set(can_play && has_history);
-            pause_menu.update(ctx)?;
-            return Ok(());
-        }
-
-        let mut on_clickable = false;
-        let mouse: Vec2 = ctx.mouse.position().into();
-        let focused_pos: GridPos = self.to_game_pos(mouse, ctx).into();
-
-        self.skip_meeples_button.borrow_mut().state = ButtonState::invisible_if(
-            !matches!(self.state.turn_phase, TurnPhase::MeeplePlacement { .. }) || !can_play,
-        );
-        self.return_to_main_menu_button.borrow_mut().state = ButtonState::invisible_if(!matches!(
-            self.state.turn_phase,
-            TurnPhase::EndGame { next_tick: None }
-        ));
-
-        // dragging
-        if ctx.mouse.button_pressed(event::MouseButton::Right) {
-            self.offset -= Vec2::from(ctx.mouse.delta());
-        }
-
-        // keyboard based movement
-        {
-            let mut movement_vector: Vec2 = [
-                (KeyCode::W, vec2(0.0, -1.0)),
-                (KeyCode::Up, vec2(0.0, -1.0)),
-                (KeyCode::D, vec2(1.0, 0.0)),
-                (KeyCode::Right, vec2(1.0, 0.0)),
-                (KeyCode::S, vec2(0.0, 1.0)),
-                (KeyCode::Down, vec2(0.0, 1.0)),
-                (KeyCode::A, vec2(-1.0, 0.0)),
-                (KeyCode::Left, vec2(-1.0, 0.0)),
-            ]
-            .into_iter()
-            .map(|(code, dir)| {
-                if ctx.keyboard.is_key_pressed(code) {
-                    dir
-                } else {
-                    Vec2::ZERO
-                }
-            })
-            .sum();
-            if movement_vector != Vec2::ZERO {
-                movement_vector = movement_vector.normalize();
-            }
-            movement_vector = movement_vector * self.scale * MOVE_SPEED;
-            if ctx.keyboard.is_mod_active(KeyMods::SHIFT) {
-                movement_vector *= SPRINT_MOD;
-            }
-            self.camera_movement =
-                self.camera_movement * (1.0 - MOVE_ACCEL) + movement_vector * MOVE_ACCEL;
-            self.offset += self.camera_movement;
-        }
-
-        // open pause menu / close group inspection ui
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
-            if self.inspecting_groups.is_some() {
-                self.inspecting_groups = None;
-            } else {
-                self.pause_menu = Some(PauseScreenSubclient::new(
-                    self.event_sender.clone(),
-                    is_endgame,
-                    has_history && can_play,
-                ));
-            }
-        }
-
-        // update scoring effects
-        self.scoring_effects.retain(|effect| {
-            ctx.time.time_since_start().as_secs_f32() - effect.initialized_at < SCORE_EFFECT_LIFE
-        });
-
-        let gameboard_pos = self.to_game_pos(mouse, ctx);
+    fn grid_selection_info(&self, ctx: &Context) -> GridSelectionInfo {
+        let gameboard_pos = self.to_game_pos(ctx.mouse.position().into(), ctx);
+        let focused_pos = GridPos::from(gameboard_pos);
         let subgrid_pos = gameboard_pos - Vec2::from(focused_pos);
-        if let Some(group_inspection) = &mut self.inspecting_groups {
-            group_inspection.selected_group = self
-                .state
-                .game
-                .placed_tiles
-                .get(&focused_pos)
-                .and_then(|tile| {
-                    (0..tile.segments.len()).find(|seg_index| {
-                        tile.segments[*seg_index].stype.placeable() && {
-                            let segment_poly: Vec<_> = tile.segment_polygon(*seg_index).collect();
-                            point_in_polygon(subgrid_pos, &segment_poly)
-                        }
-                    })
-                })
-                .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
-                .cloned();
-        } else {
-            'game_play: {
-                match &self.state.turn_phase {
-                    TurnPhase::TilePlacement {
-                        placeable_positions,
-                        ..
-                    } => {
-                        // determine tile placement location
-                        if !can_play {
-                            self.selected_square = None;
-                            break 'game_play;
-                        }
-
-                        if self.args.snap_placement {
-                            self.selected_square = placeable_positions
-                                .iter()
-                                .cloned()
-                                .map(|pos| {
-                                    (
-                                        pos,
-                                        Vec2::from(pos)
-                                            .distance_squared(gameboard_pos - vec2(0.5, 0.5)),
-                                    )
-                                })
-                                .min_by(|(_, a), (_, b)| a.total_cmp(b))
-                                .map(|(pos, _)| pos);
-                        } else {
-                            self.selected_square = Some(focused_pos);
-                        }
-
-                        // update selected square validity
-                        if self.selected_square != self.last_selected_square {
-                            self.reevaluate_selected_square();
-                            self.last_selected_square = self.selected_square;
-                            self.update_preview();
-                        }
-
-                        // place tile
-                        if ctx.mouse.button_just_pressed(event::MouseButton::Left)
-                            && self.placement_is_valid
-                        {
-                            if let Some(selected_square) = self.selected_square {
-                                let rotation = self.get_held_tile_mut().unwrap().rotation;
-                                self.place_tile(ctx, selected_square)?;
-                                self.broadcast_action(GameMessage::PlaceTile {
-                                    selected_square,
-                                    rotation,
-                                });
-                            }
-                        }
-
-                        // rotate tile
-                        if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
-                            self.get_held_tile_mut().unwrap().rotate_clockwise();
-                            self.reevaluate_selected_square();
-                            self.update_preview();
-                        }
-
-                        // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
-                        if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
-                            self.get_held_tile_mut().unwrap().rotate_counterclockwise();
-                            self.reevaluate_selected_square_counterclockwise();
-                            self.update_preview();
-                        }
-
-                        on_clickable = self.placement_is_valid;
-                    }
-                    TurnPhase::MeeplePlacement {
-                        placed_position,
-                        closed_groups,
-                    } => {
-                        self.selected_segment_and_group = None;
-
-                        if !can_play {
-                            break 'game_play;
-                        }
-
-                        if *placed_position == focused_pos {
-                            let subgrid_pos =
-                                self.to_game_pos(mouse, ctx) - Vec2::from(focused_pos);
-                            self.selected_segment_and_group = self.get_selected_segment(
-                                focused_pos,
-                                placed_position,
-                                subgrid_pos,
-                            );
-
-                            on_clickable = self.selected_segment_and_group.is_some();
-
-                            if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
-                                if let Some((seg_ident, Some(group))) = self
-                                    .selected_segment_and_group
-                                    .map(|(seg_ident, group_ident)| {
-                                        (seg_ident, self.state.game.groups.get(group_ident))
-                                    })
-                                {
-                                    let player_ident = *self.state.turn_order.front().unwrap();
-                                    let player = self.state.game.players.get(player_ident).unwrap();
-                                    if group.meeples.is_empty() && player.meeples > 0 {
-                                        self.place_meeple(
-                                            ctx,
-                                            closed_groups.clone(),
-                                            seg_ident,
-                                            player_ident,
-                                        )?;
-                                        self.broadcast_action(GameMessage::PlaceMeeple {
-                                            seg_ident,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    TurnPhase::EndGame { next_tick } => {
-                        if let Some(next_tick) = next_tick {
-                            if ctx.time.time_since_start().as_secs_f32() > *next_tick {
-                                let next_tick = 'group_score: {
-                                    let Some((group_ident, _)) = self
-                                        .state
-                                        .game
-                                        .groups
-                                        .iter()
-                                        .find(|(_, group)| !group.meeples.is_empty())
-                                    else {
-                                        break 'group_score None;
-                                    };
-                                    let scored_meeples = self.state.game.score_group(group_ident);
-                                    self.scoring_effects.extend(scored_meeples.into_iter().map(
-                                        |score_result| {
-                                            ScoringEffect::from_scoring_result(ctx, score_result)
-                                        },
-                                    ));
-
-                                    Some(
-                                        ctx.time.time_since_start().as_secs_f32()
-                                            + END_GAME_SCORE_INTERVAL,
-                                    )
-                                };
-                                self.state.turn_phase = TurnPhase::EndGame { next_tick };
-                            }
-                        }
-                    }
-                }
-            }
+        GridSelectionInfo {
+            gameboard_pos,
+            focused_pos,
+            subgrid_pos,
         }
-
-        if on_clickable {
-            set_cursor_type(ctx, CursorIcon::Hand);
-        }
-
-        Ok(())
     }
 
-    fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
-        let res = ctx.res();
+    fn origin_rect(&self, ctx: &Context) -> Rect {
+        self.grid_pos_rect(&GridPos(0, 0), ctx)
+    }
 
-        let time = ctx.time.time_since_start().as_secs_f32();
-        let sin_time = time.sin() * 0.1 + 1.0;
-        let origin_rect = self.grid_pos_rect(&GridPos(0, 0), ctx);
-
-        // draw tiles
-        for (pos, tile) in &self.state.game.placed_tiles {
-            tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
-        }
-
-        // draw meeples
-        for &(seg_ident, player) in self
-            .state
-            .game
-            .groups
-            .values()
-            .flat_map(|group| &group.meeples)
-        {
-            let color = self.state.game.players.get(player).unwrap().color;
-            let (pos, seg_index) = seg_ident;
-            let tile = self.state.game.placed_tiles.get(&pos).unwrap();
-            let rect = self.grid_pos_rect(&pos, ctx);
-            let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
-            let norm = self.norm(ctx);
-            let meeple_scale = 0.001 / norm.x.max(norm.y);
-            GameClient::draw_meeple(ctx, canvas, segment_meeple_spot, color, meeple_scale)?;
-        }
-
-        // draw score effects
-        for effect in &self.scoring_effects {
-            let lifetime = (time - effect.initialized_at) / SCORE_EFFECT_LIFE;
-            let alpha = (1.0 - lifetime).max(0.0) * 255.0;
-            let y_shift = ((-((lifetime * SCORE_EFFECT_DECCEL) / SCORE_EFFECT_LIFE)).exp() - 1.0)
-                * SCORE_EFFECT_DISTANCE;
-            let pos = self.to_screen_pos(effect.position + y_shift * Vec2::Y, ctx);
-            let mut color = effect.color;
-            color.a = alpha;
-            Text::new(format!(" +{} ", effect.score))
-                .size(20.0)
-                .centered_on(ctx, pos)?
-                .color(color)
-                .draw(canvas);
-        }
-
+    fn draw_group_inspection_ui(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+    ) -> Result<bool, GameError> {
         if let Some(group_inspection) = &self.inspecting_groups {
-            // draw group inspection ui
-            Text::new("Press Esc to return")
-                .size(32.0)
-                .anchored_by(
-                    ctx,
-                    res * vec2(0.5, 0.0) + vec2(0.0, 10.0),
-                    AnchorPoint::NorthCenter,
-                )?
-                .color(Color::BLACK)
-                .draw(canvas);
-
+            let origin_rect = self.origin_rect(ctx);
             let _: Option<()> =
                 try {
                     let group_ident = group_inspection.selected_group?;
@@ -1130,83 +828,88 @@ impl SubEventHandler<GameError> for GameClient {
                         .ok()?;
                     }
                 };
-
-            // finish ui
-            Mesh::new_rectangle(
-                ctx,
-                DrawMode::stroke(6.0),
-                Rect::new(0.0, 0.0, res.x, res.y),
-                Color::CYAN,
-            )?
-            .draw(canvas);
+            Ok(true)
         } else {
-            match &self.state.turn_phase {
-                TurnPhase::TilePlacement {
-                    tile,
-                    preview_location,
-                    ..
-                } => {
-                    // draw tile placement ui
-                    if let Some(pos) = self.selected_square.or(*preview_location) {
-                        let rect = self.grid_pos_rect(&pos, ctx);
-                        let cursor_color =
-                            if self.is_placement_valid(pos) != PlacementValidity::Valid {
-                                Color::RED
-                            } else {
-                                Color::GREEN
-                            };
-                        if !self.state.game.placed_tiles.contains_key(&pos) {
-                            tile.render(ctx, canvas, rect)?;
-                        }
-                        Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
-                            .draw(canvas);
-                    }
-                }
-                TurnPhase::MeeplePlacement {
-                    placed_position, ..
-                } => {
-                    // draw meeple placement ui
-                    let rect = self.grid_pos_rect(placed_position, ctx);
-                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?
-                        .draw(canvas);
+            Ok(false)
+        }
+    }
 
-                    if !self.ui.on_ui {
-                        'draw_outline: {
-                            if let Some((_, group_ident)) = self.selected_segment_and_group {
-                                let Some(ShapeDetails { outline, .. }) =
-                                    self.state.game.get_group_shape_details(group_ident)
-                                else {
-                                    break 'draw_outline;
-                                };
-                                for line in outline.iter().map(|line| {
-                                    line.iter()
-                                        .map(|vert| refit_to_rect(*vert, origin_rect))
-                                        .collect::<Vec<_>>()
-                                }) {
-                                    Mesh::new_line(
-                                        ctx,
-                                        &line,
-                                        2.0,
-                                        Color::from_rgb(
-                                            (200.0 * sin_time) as u8,
-                                            (20.0 * sin_time) as u8,
-                                            (70.0 * sin_time) as u8,
-                                        ),
-                                    )?
-                                    .draw(canvas);
-                                }
+    fn draw_turn_phase(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+    ) -> GameResult<()> {
+        let time = ctx.time.time_since_start().as_secs_f32();
+        let sin_time = time.sin() * 0.1 + 1.0;
+        match &self.state.turn_phase {
+            TurnPhase::TilePlacement {
+                tile,
+                preview_location,
+                ..
+            } => {
+                // draw tile placement ui
+                if let Some(pos) = self.selected_square.or(*preview_location) {
+                    let rect = self.grid_pos_rect(&pos, ctx);
+                    let cursor_color = if self.is_placement_valid(pos) != PlacementValidity::Valid {
+                        Color::RED
+                    } else {
+                        Color::GREEN
+                    };
+                    if !self.state.game.placed_tiles.contains_key(&pos) {
+                        tile.render(ctx, canvas, rect)?;
+                    }
+                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
+                        .draw(canvas);
+                }
+            }
+            TurnPhase::MeeplePlacement {
+                placed_position, ..
+            } => {
+                // draw meeple placement ui
+                let rect = self.grid_pos_rect(placed_position, ctx);
+                Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?.draw(canvas);
+
+                if !self.ui.on_ui {
+                    'draw_outline: {
+                        if let Some((_, group_ident)) = self.selected_segment_and_group {
+                            let origin_rect = self.origin_rect(ctx);
+                            let Some(ShapeDetails { outline, .. }) =
+                                self.state.game.get_group_shape_details(group_ident)
+                            else {
+                                break 'draw_outline;
+                            };
+                            for line in outline.iter().map(|line| {
+                                line.iter()
+                                    .map(|vert| refit_to_rect(*vert, origin_rect))
+                                    .collect::<Vec<_>>()
+                            }) {
+                                Mesh::new_line(
+                                    ctx,
+                                    &line,
+                                    2.0,
+                                    Color::from_rgb(
+                                        (200.0 * sin_time) as u8,
+                                        (20.0 * sin_time) as u8,
+                                        (70.0 * sin_time) as u8,
+                                    ),
+                                )?
+                                .draw(canvas);
                             }
                         }
                     }
                 }
-                TurnPhase::EndGame { .. } => {}
             }
+            TurnPhase::EndGame { .. } => {}
         }
+        Ok(())
+    }
 
-        // draw ui
-        self.ui.draw(ctx, canvas)?;
-
-        let current_player_ident = *self.state.turn_order.front().unwrap();
+    fn draw_game_details(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        current_player_ident: PlayerIdentifier,
+    ) -> Result<(), GameError> {
         let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
         if ctx.keyboard.is_key_pressed(KeyCode::Tab) || is_endgame {
             // draw player cards
@@ -1242,9 +945,369 @@ impl SubEventHandler<GameError> for GameClient {
             // draw card of current player
             self.draw_player_card(ctx, canvas, current_player_ident, vec2(20.0, 20.0), false)?;
         }
+        Ok(())
+    }
+
+    fn draw_meeples(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
+        for &(seg_ident, player) in self
+            .state
+            .game
+            .groups
+            .values()
+            .flat_map(|group| &group.meeples)
+        {
+            let color = self.state.game.players.get(player).unwrap().color;
+            let (pos, seg_index) = seg_ident;
+            let tile = self.state.game.placed_tiles.get(&pos).unwrap();
+            let rect = self.grid_pos_rect(&pos, ctx);
+            let segment_meeple_spot = refit_to_rect(tile.segments[seg_index].meeple_spot, rect);
+            let norm = self.norm(ctx);
+            let meeple_scale = MEEPLE_SIZE / norm.x.max(norm.y);
+            GameClient::draw_meeple(ctx, canvas, segment_meeple_spot, color, meeple_scale)?;
+        }
+        Ok(())
+    }
+
+    fn draw_scoring_effects(
+        &mut self,
+        ctx: &mut Context,
+        canvas: &mut Canvas,
+        time: f32,
+    ) -> Result<(), GameError> {
+        for effect in &self.scoring_effects {
+            let lifetime = (time - effect.initialized_at) / SCORE_EFFECT_LIFE;
+            let alpha = (1.0 - lifetime).max(0.0) * 255.0;
+            let y_shift = ((-((lifetime * SCORE_EFFECT_DECCEL) / SCORE_EFFECT_LIFE)).exp() - 1.0)
+                * SCORE_EFFECT_DISTANCE;
+            let pos = self.to_screen_pos(effect.position + y_shift * Vec2::Y, ctx);
+            let mut color = effect.color;
+            color.a = alpha;
+            Text::new(format!(" +{} ", effect.score))
+                .size(20.0)
+                .centered_on(ctx, pos)?
+                .color(color)
+                .draw(canvas);
+        }
+        Ok(())
+    }
+
+    fn keyboard_movement_update(&mut self, ctx: &mut Context) {
+        let mut movement_vector: Vec2 = [
+            (KeyCode::W, vec2(0.0, -1.0)),
+            (KeyCode::Up, vec2(0.0, -1.0)),
+            (KeyCode::D, vec2(1.0, 0.0)),
+            (KeyCode::Right, vec2(1.0, 0.0)),
+            (KeyCode::S, vec2(0.0, 1.0)),
+            (KeyCode::Down, vec2(0.0, 1.0)),
+            (KeyCode::A, vec2(-1.0, 0.0)),
+            (KeyCode::Left, vec2(-1.0, 0.0)),
+        ]
+        .into_iter()
+        .map(|(code, dir)| {
+            if ctx.keyboard.is_key_pressed(code) {
+                dir
+            } else {
+                Vec2::ZERO
+            }
+        })
+        .sum();
+        if movement_vector != Vec2::ZERO {
+            movement_vector = movement_vector.normalize();
+        }
+        movement_vector = movement_vector * self.scale * MOVE_SPEED;
+        if ctx.keyboard.is_mod_active(KeyMods::SHIFT) {
+            movement_vector *= SPRINT_MOD;
+        }
+        self.camera_movement =
+            self.camera_movement * (1.0 - MOVE_ACCEL) + movement_vector * MOVE_ACCEL;
+        self.offset += self.camera_movement;
+    }
+
+    fn pause_menu_activation_update(&mut self, ctx: &mut Context) {
+        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
+            if self.inspecting_groups.is_some() {
+                self.inspecting_groups = None;
+            } else {
+                self.pause_menu = Some(PauseScreenSubclient::new(
+                    self.event_sender.clone(),
+                    self.is_endgame(),
+                    !self.history.is_empty() && self.can_play(),
+                ));
+            }
+        }
+    }
+
+    fn turn_phase_update(&mut self, ctx: &mut Context, on_clickable: &mut bool) -> GameResult<()> {
+        let can_play = self.can_play();
+        let GridSelectionInfo {
+            gameboard_pos,
+            focused_pos,
+            subgrid_pos,
+        } = self.grid_selection_info(ctx);
+
+        match &self.state.turn_phase {
+            TurnPhase::TilePlacement {
+                placeable_positions,
+                ..
+            } => {
+                // determine tile placement location
+                if !can_play {
+                    self.selected_square = None;
+                    return Ok(());
+                }
+
+                if self.args.snap_placement {
+                    self.selected_square = placeable_positions
+                        .iter()
+                        .cloned()
+                        .map(|pos| {
+                            (
+                                pos,
+                                Vec2::from(pos).distance_squared(gameboard_pos - vec2(0.5, 0.5)),
+                            )
+                        })
+                        .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                        .map(|(pos, _)| pos);
+                } else {
+                    self.selected_square = Some(focused_pos);
+                }
+
+                // update selected square validity
+                if self.selected_square != self.last_selected_square {
+                    self.reevaluate_selected_square();
+                    self.update_preview();
+                    self.last_selected_square = self.selected_square;
+                }
+
+                // place tile
+                if ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                    && self.placement_is_valid
+                {
+                    if let Some(selected_square) = self.selected_square {
+                        let rotation = self.get_held_tile_mut().unwrap().rotation;
+                        self.place_tile(ctx, selected_square)?;
+                        self.broadcast_action(GameMessage::PlaceTile {
+                            selected_square,
+                            rotation,
+                        });
+                    }
+                }
+
+                // rotate tile
+                if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
+                    self.get_held_tile_mut().unwrap().rotate_clockwise();
+                    self.reevaluate_selected_square();
+                    self.update_preview();
+                }
+
+                // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
+                if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
+                    self.get_held_tile_mut().unwrap().rotate_counterclockwise();
+                    self.reevaluate_selected_square_counterclockwise();
+                    self.update_preview();
+                }
+
+                *on_clickable = self.placement_is_valid;
+            }
+            TurnPhase::MeeplePlacement {
+                placed_position,
+                closed_groups,
+            } => {
+                self.selected_segment_and_group = None;
+
+                if !can_play {
+                    return Ok(());
+                }
+
+                if *placed_position == focused_pos {
+                    self.selected_segment_and_group =
+                        self.get_selected_segment(focused_pos, placed_position, subgrid_pos);
+
+                    *on_clickable = self.selected_segment_and_group.is_some();
+
+                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                        if let Some((seg_ident, Some(group))) =
+                            self.selected_segment_and_group
+                                .map(|(seg_ident, group_ident)| {
+                                    (seg_ident, self.state.game.groups.get(group_ident))
+                                })
+                        {
+                            let player_ident = *self.state.turn_order.front().unwrap();
+                            let player = self.state.game.players.get(player_ident).unwrap();
+                            if group.meeples.is_empty() && player.meeples > 0 {
+                                self.place_meeple(
+                                    ctx,
+                                    closed_groups.clone(),
+                                    seg_ident,
+                                    player_ident,
+                                )?;
+                                self.broadcast_action(GameMessage::PlaceMeeple { seg_ident });
+                            }
+                        }
+                    }
+                }
+            }
+            TurnPhase::EndGame { next_tick } => {
+                if let Some(next_tick) = next_tick {
+                    if ctx.time.time_since_start().as_secs_f32() > *next_tick {
+                        let next_tick = 'group_score: {
+                            let Some((group_ident, _)) = self
+                                .state
+                                .game
+                                .groups
+                                .iter()
+                                .find(|(_, group)| !group.meeples.is_empty())
+                            else {
+                                break 'group_score None;
+                            };
+                            let scored_meeples = self.state.game.score_group(group_ident);
+                            self.scoring_effects.extend(scored_meeples.into_iter().map(
+                                |score_result| {
+                                    ScoringEffect::from_scoring_result(ctx, score_result)
+                                },
+                            ));
+
+                            Some(
+                                ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_INTERVAL,
+                            )
+                        };
+                        self.state.turn_phase = TurnPhase::EndGame { next_tick };
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn group_inspection_update(&mut self, ctx: &mut Context) {
+        let GridSelectionInfo {
+            focused_pos,
+            subgrid_pos,
+            ..
+        } = self.grid_selection_info(ctx);
+
+        self.inspecting_groups =
+            ctx.keyboard
+                .is_key_pressed(KeyCode::Tab)
+                .then(|| GroupInspection {
+                    selected_group: self
+                        .state
+                        .game
+                        .placed_tiles
+                        .get(&focused_pos)
+                        .and_then(|tile| {
+                            (0..tile.segments.len()).find(|seg_index| {
+                                tile.segments[*seg_index].stype.placeable() && {
+                                    let segment_poly: Vec<_> =
+                                        tile.segment_polygon(*seg_index).collect();
+                                    point_in_polygon(subgrid_pos, &segment_poly)
+                                }
+                            })
+                        })
+                        .and_then(|i| self.state.game.group_associations.get(&(focused_pos, i)))
+                        .cloned(),
+                });
+    }
+}
+
+impl SubEventHandler<GameError> for GameClient {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
+        if self.pause_menu.is_some() {
+            return Ok(());
+        }
+
+        // zooming
+        let prev_scale = self.scale;
+        self.scale *= ZOOM_SPEED.powf(y);
+        self.scale = self.scale.clamp(0.01, 1.0);
+        let scale_change = self.scale / prev_scale;
+        let mouse: Vec2 = ctx.mouse.position().into();
+        self.offset = (self.offset + mouse) * scale_change - mouse;
+
+        Ok(())
+    }
+
+    fn update(&mut self, ctx: &mut Context) -> GameResult {
+        self.ui.update(ctx)?;
+        while let Ok(event) = self.event_receiver.try_recv() {
+            self.handle_event(ctx, event)?;
+        }
+
+        let mut on_clickable = false;
+
+        // update pause menu
+        let is_endgame = self.is_endgame();
+        let can_play = self.can_play();
+        if let Some(pause_menu) = &mut self.pause_menu {
+            self.selected_square = None;
+            pause_menu.can_end_game.set(is_endgame);
+            pause_menu
+                .can_undo
+                .set(can_play && !self.history.is_empty());
+            pause_menu.update(ctx)?;
+            return Ok(());
+        }
+
+        // update button states
+        self.skip_meeples_button.borrow_mut().state = ButtonState::invisible_if(
+            !matches!(self.state.turn_phase, TurnPhase::MeeplePlacement { .. }) || !self.can_play(),
+        );
+        self.return_to_main_menu_button.borrow_mut().state = ButtonState::invisible_if(!matches!(
+            self.state.turn_phase,
+            TurnPhase::EndGame { next_tick: None }
+        ));
+
+        // dragging
+        if ctx.mouse.button_pressed(event::MouseButton::Right) {
+            self.offset -= Vec2::from(ctx.mouse.delta());
+        }
+
+        self.keyboard_movement_update(ctx);
+
+        self.pause_menu_activation_update(ctx);
+
+        // update scoring effects
+        self.scoring_effects.retain(|effect| {
+            ctx.time.time_since_start().as_secs_f32() - effect.initialized_at < SCORE_EFFECT_LIFE
+        });
+
+        self.group_inspection_update(ctx);
+
+        if self.inspecting_groups.is_none() {
+            self.turn_phase_update(ctx, &mut on_clickable)?;
+        }
+
+        if on_clickable {
+            set_cursor_type(ctx, CursorIcon::Hand);
+        }
+
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult {
+        let res = ctx.res();
+
+        let time = ctx.time.time_since_start().as_secs_f32();
+        let current_player_ident = self.get_current_player();
+
+        for (pos, tile) in &self.state.game.placed_tiles {
+            tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
+        }
+
+        self.draw_meeples(ctx, canvas)?;
+
+        self.draw_scoring_effects(ctx, canvas, time)?;
+
+        if !self.draw_group_inspection_ui(ctx, canvas)? {
+            self.draw_turn_phase(ctx, canvas)?;
+        }
+
+        self.ui.draw(ctx, canvas)?;
+
+        self.draw_game_details(ctx, canvas, current_player_ident)?;
 
         // draw player color outline if it is your turn
-        if !is_endgame && self.can_play() && self.inspecting_groups.is_none() {
+        if self.can_play() {
             Mesh::new_rectangle(
                 ctx,
                 DrawMode::stroke(8.0),
@@ -1259,7 +1322,6 @@ impl SubEventHandler<GameError> for GameClient {
             .draw(canvas);
         }
 
-        // draw pause menu
         if let Some(pause_menu) = &mut self.pause_menu {
             pause_menu.draw(ctx, canvas)?;
         }
