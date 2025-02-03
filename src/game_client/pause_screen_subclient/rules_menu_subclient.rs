@@ -126,6 +126,16 @@ impl SubEventHandler<GameError> for RulesMenuSubclient {
 
         Mesh::new_rectangle(ctx, DrawMode::fill(), panel, PANEL_COLOR)?.draw(canvas);
 
+        // page number
+        Text::new(format!("{} / {}", self.page + 1, NUM_PAGES))
+            .size(24.0)
+            .anchored_by(
+                ctx,
+                panel.parametric(vec2(1.0, 0.0)) + vec2(-5.0, 5.0),
+                AnchorPoint::NorthEast,
+            )?
+            .draw(canvas);
+
         match self.page {
             0 => {
                 Text::new("Rules")
