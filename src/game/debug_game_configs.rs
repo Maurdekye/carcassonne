@@ -8,7 +8,7 @@ use crate::{
         tile_definitions::{
             ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
             FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY, FOUR_WAY_CROSSROADS,
-            OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE, THREE_QUARTER_CITY,
+            OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE, STRAIGHT_ROAD, THREE_QUARTER_CITY,
         },
         Tile,
     },
@@ -23,10 +23,10 @@ impl DebugGameConfiguration {
             MultipleSegmentsPerTileScoring => multiple_segments_per_tile_scoring(),
             MultiplePlayerOwnership => multiple_player_ownership(),
             RotationTest => rotation_test(),
+            GroupCoallation => group_coallation(),
         }
     }
 }
-
 pub fn meeple_locations() -> Result<Game, GameError> {
     let library: Vec<Tile> = Tile::default_library_tallies()
         .into_iter()
@@ -194,6 +194,22 @@ pub fn rotation_test() -> GameResult<Game> {
             GridPos(x * 2, 6),
         )?;
     }
+
+    Ok(this)
+}
+
+fn group_coallation() -> GameResult<Game> {
+    let mut this = Game::new_with_library(vec![STRAIGHT_ROAD.clone()]);
+    this.players.insert(Player::new(Color::BLUE));
+
+    this.place_tile(CURVE_ROAD.clone(), GridPos(0, 0))?;
+    this.place_tile(STRAIGHT_ROAD.clone(), GridPos(-1, 0))?;
+    this.place_tile(CURVE_ROAD.clone().rotated(), GridPos(-2, 0))?;
+    this.place_tile(CURVE_ROAD.clone().rotated().rotated(), GridPos(-2, -1))?;
+    this.place_tile(
+        CURVE_ROAD.clone().rotated().rotated().rotated(),
+        GridPos(0, -1),
+    )?;
 
     Ok(this)
 }

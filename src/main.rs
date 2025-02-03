@@ -52,6 +52,7 @@ enum DebugGameConfiguration {
     MultipleSegmentsPerTileScoring,
     MultiplePlayerOwnership,
     RotationTest,
+    GroupCoallation,
 }
 
 #[derive(Parser, Clone)]

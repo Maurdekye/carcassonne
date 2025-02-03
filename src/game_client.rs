@@ -1347,7 +1347,7 @@ impl SubEventHandler<GameError> for GameClient {
 
         self.group_inspection_update(ctx);
 
-        if self.inspecting_groups.is_none() {
+        if self.inspecting_groups.is_none() || self.is_endgame() {
             self.turn_phase_update(ctx, &mut on_clickable)?;
         } else {
             self.set_selected_square(None);
