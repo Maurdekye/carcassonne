@@ -92,6 +92,7 @@ pub struct HostClient {
     users: HashMap<IpOrHost, HostUser>,
     phase: MultiplayerPhase<HostEvent>,
     start_game_button: Rc<RefCell<Button<UIEvent>>>,
+    port: u16,
 }
 
 impl HostClient {
@@ -143,6 +144,7 @@ impl HostClient {
             _event_sender: event_sender,
             event_receiver,
             start_game_button,
+            port,
         };
         this.update_lobby_clients();
         this
@@ -349,7 +351,7 @@ impl SubEventHandler<GameError> for HostClient {
 
     fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
         if let MultiplayerPhase::Lobby(_) = self.phase {
-            Text::new(format!("Hosting on port {}", self.args.port))
+            Text::new(format!("Hosting on port {}", self.port))
                 .size(36.0)
                 .anchored_by(
                     ctx,
