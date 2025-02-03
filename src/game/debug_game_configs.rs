@@ -199,7 +199,7 @@ pub fn rotation_test() -> GameResult<Game> {
 }
 
 fn group_coallation() -> GameResult<Game> {
-    let mut this = Game::new_with_library(vec![STRAIGHT_ROAD.clone()]);
+    let mut this = Game::new_with_library(vec![CROSSROADS.clone()]);
     this.players.insert(Player::new(Color::BLUE));
 
     this.place_tile(CURVE_ROAD.clone(), GridPos(0, 0))?;

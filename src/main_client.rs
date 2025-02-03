@@ -1,5 +1,6 @@
 use std::{
     net::SocketAddr,
+    path::PathBuf,
     sync::mpsc::{channel, Receiver, Sender},
 };
 
@@ -17,8 +18,7 @@ use crate::{
     game_client::GameClient,
     main_menu_client::MainMenuClient,
     multiplayer::{
-        host_client::HostClient,
-        join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
+        host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
     },
     sub_event_handler::SubEventHandler,
     Args, DebugGameConfiguration,
@@ -27,6 +27,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum MainEvent {
     StartGame(Vec<Color>),
+    LoadGame(PathBuf),
     StartDebugGame(DebugGameConfiguration),
     MainMenu,
     MultiplayerHost(u16),
@@ -46,7 +47,11 @@ pub struct MainClient {
 impl MainClient {
     pub fn new(args: Args) -> MainClient {
         let (event_sender, event_receiver) = channel();
-        if let Some(debug_config) = &args.debug_config {
+        if let Some(load_path) = &args.load {
+            event_sender
+                .send(MainEvent::LoadGame(load_path.clone()))
+                .unwrap();
+        } else if let Some(debug_config) = &args.debug_config {
             event_sender
                 .send(MainEvent::StartDebugGame(debug_config.clone()))
                 .unwrap();
@@ -80,33 +85,42 @@ impl MainClient {
                 self.quitting = true;
                 ctx.request_quit();
             }
+            MainEvent::LoadGame(path) => {
+                self.scene = Box::new(GameClient::load(
+                    ctx,
+                    self.args.clone(),
+                    self.event_sender.clone(),
+                    None,
+                    path,
+                )?);
+            }
             MainEvent::StartDebugGame(config) => {
                 self.scene = Box::new(GameClient::new_with_game(
                     ctx,
                     self.args.clone(),
                     config.get_game()?,
                     self.event_sender.clone(),
-                ))
+                ));
             }
             MainEvent::MultiplayerHost(port) => {
                 self.scene = Box::new(HostClient::new(
                     self.event_sender.clone(),
                     self.args.clone(),
-                    port
-                ))
+                    port,
+                ));
             }
             MainEvent::MultiplayerJoin(socket) => {
                 self.scene = Box::new(JoinClient::new(
                     self.event_sender.clone(),
                     self.args.clone(),
                     socket,
-                ))
+                ));
             }
             MainEvent::MultiplayerMenu => {
                 self.scene = Box::new(MultiplayerMenuClient::new(
                     self.event_sender.clone(),
                     self.args.clone(),
-                ))
+                ));
             }
         }
         Ok(())

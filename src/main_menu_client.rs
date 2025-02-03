@@ -4,6 +4,7 @@ use std::{
     sync::mpsc::{channel, Receiver, Sender},
 };
 
+use clap::crate_version;
 use ggez::{
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
@@ -15,7 +16,7 @@ use crate::{
     main_client::MainEvent,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
-    util::{DrawableWihParamsExt, TextExt},
+    util::{AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt},
     Args,
 };
 
@@ -195,13 +196,24 @@ impl SubEventHandler<GameError> for MainMenuClient {
     }
 
     fn draw(&mut self, ctx: &mut ggez::Context, canvas: &mut Canvas) -> Result<(), GameError> {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
+        let res = ctx.res();
 
         // render title
         Text::new("Carcassonne")
             .size(144.0)
             .centered_on(ctx, res * vec2(0.5, 0.2))?
             .color(Color::BLACK)
+            .draw(canvas);
+
+        // render version
+        Text::new(format!("v{}", crate_version!()))
+            .size(32.0)
+            .anchored_by(
+                ctx,
+                res * vec2(0.0, 1.0) + vec2(20.0, -20.0),
+                AnchorPoint::SouthWest,
+            )?
+            .color(Color::from_rgb(196, 196, 196))
             .draw(canvas);
 
         // render ui

@@ -1,10 +1,34 @@
-use std::collections::{hash_map::Entry, HashMap, HashSet};
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    time::SystemTime,
+};
 
+use chrono::{DateTime, Utc};
 use ggez::{
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawParam, Drawable, Rect, Text},
     Context, GameError,
 };
+
+#[macro_export]
+macro_rules! sdbg {
+    ($e:expr) => {
+        match $e {
+            tmp => {
+                std::eprintln!(
+                    "[{}:{}:{}] {} = {:?}",
+                    std::file!(),
+                    std::line!(),
+                    std::column!(),
+                    std::stringify!($e),
+                    &tmp
+                );
+                tmp
+            }
+        };
+    };
+    () => {};
+}
 
 pub fn refit_to_rect(vec: Vec2, rect: Rect) -> Vec2 {
     vec2(vec.x * rect.w + rect.x, vec.y * rect.h + rect.y)
@@ -376,22 +400,21 @@ impl RectExt for Rect {
     }
 }
 
-#[macro_export]
-macro_rules! sdbg {
-    ($e:expr) => {
-        match $e {
-            tmp => {
-                std::eprintln!(
-                    "[{}:{}:{}] {} = {:?}",
-                    std::file!(),
-                    std::line!(),
-                    std::column!(),
-                    std::stringify!($e),
-                    &tmp
-                );
-                tmp
-            }
-        };
-    };
-    () => {};
+pub trait SystemTimeExt {
+    fn format_pathname(self) -> String;
+    fn format_filename(self) -> String;
+}
+
+impl SystemTimeExt for SystemTime {
+    fn format_pathname(self) -> String {
+        <DateTime<Utc>>::from(self)
+            .format("%Y-%m-%d_%H-%M-%S")
+            .to_string()
+    }
+    
+    fn format_filename(self) -> String {
+        <DateTime<Utc>>::from(self)
+            .format("%Y-%m-%d_%H-%M-%S%.3f")
+            .to_string()
+    }
 }

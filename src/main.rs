@@ -3,7 +3,7 @@
 #![feature(duration_millis_float)]
 #![feature(lazy_get)]
 
-use std::{net::IpAddr, time::Duration};
+use std::{net::IpAddr, path::PathBuf, time::Duration};
 
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
@@ -12,19 +12,19 @@ use ggez::{
 };
 use main_client::MainClient;
 
+mod colors;
 mod game;
 mod game_client;
+mod keycode;
+mod line;
 mod main_client;
 mod main_menu_client;
 mod multiplayer;
-mod line;
 mod pos;
 mod sub_event_handler;
 mod tile;
 mod ui_manager;
 mod util;
-mod colors;
-mod keycode;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -80,6 +80,14 @@ struct Args {
     /// Ping interval in seconds for multiplayer games.
     #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
     ping_interval: Duration,
+
+    /// Enable to save ongoing game progress to this directory [default: saves/]
+    #[arg(short = 'v', long)]
+    save_directory: Option<Option<PathBuf>>,
+
+    /// Load a save file
+    #[arg(short, long)]
+    load: Option<PathBuf>,
 }
 
 fn main() -> GameResult {

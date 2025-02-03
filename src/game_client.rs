@@ -1,7 +1,12 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::fs::{create_dir_all, File};
+use std::io::{Read, Write};
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::str::FromStr;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::SystemTime;
 
 use crate::colors::PANEL_COLOR;
 use crate::game::player::PlayerType;
@@ -19,7 +24,7 @@ use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
 use crate::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
-    TextExt,
+    SystemTimeExt, TextExt,
 };
 use crate::Args;
 
@@ -33,6 +38,7 @@ use ggez::{
 };
 use pause_screen_subclient::PauseScreenSubclient;
 use rand::{seq::SliceRandom, thread_rng};
+use serde::{Deserialize, Serialize};
 
 mod pause_screen_subclient;
 
@@ -70,7 +76,7 @@ enum GameEvent {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 enum TurnPhase {
     TilePlacement {
         tile: Tile,
@@ -109,7 +115,7 @@ struct GroupInspection {
     selected_group: Option<GroupIdentifier>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct GameState {
     game: Game,
     turn_phase: TurnPhase,
@@ -148,6 +154,7 @@ pub struct GameClient {
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent, GameEvent>,
     camera_movement: Vec2,
+    creation_time: SystemTime,
     args: Args,
 }
 
@@ -174,10 +181,10 @@ impl GameClient {
         game: Game,
         parent_channel: Sender<MainEvent>,
     ) -> Self {
-        GameClient::new_inner(ctx, args, game, parent_channel, None)
+        GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, None)
     }
 
-    pub fn new_inner(
+    pub fn new_with_game_and_action_channel(
         ctx: &Context,
         args: Args,
         mut game: Game,
@@ -185,6 +192,30 @@ impl GameClient {
         action_channel: Option<Sender<GameMessage>>,
     ) -> Self {
         let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
+        GameClient::new_from_state(
+            ctx,
+            args,
+            GameState {
+                turn_phase: TurnPhase::TilePlacement {
+                    tile: first_tile,
+                    placeable_positions,
+                    preview_location: None,
+                },
+                turn_order: game.players.keys().collect(),
+                game,
+            },
+            parent_channel,
+            action_channel,
+        )
+    }
+
+    pub fn new_from_state(
+        ctx: &Context,
+        args: Args,
+        state: GameState,
+        parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameMessage>>,
+    ) -> Self {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let (
@@ -229,28 +260,64 @@ impl GameClient {
             scale: 1.0,
             scoring_effects: Vec::new(),
             history: Vec::new(),
-            state: GameState {
-                turn_phase: TurnPhase::TilePlacement {
-                    tile: first_tile,
-                    placeable_positions,
-                    preview_location: None,
-                },
-                turn_order: game.players.keys().collect(),
-                game,
-            },
+            state,
             inspecting_groups: None,
             skip_meeples_button,
             return_to_main_menu_button,
             ui,
             camera_movement: Vec2::ZERO,
+            creation_time: SystemTime::now(),
             args,
         };
         this.reset_camera(ctx);
         this
     }
 
-    fn push_history(&mut self) {
+    pub fn load(
+        ctx: &Context,
+        args: Args,
+        parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameMessage>>,
+        path: PathBuf,
+    ) -> GameResult<Self> {
+        let mut file = File::open(path)?;
+        let mut file_contents = Vec::new();
+        file.read_to_end(&mut file_contents)?;
+        let mut state: GameState = bincode::deserialize(&file_contents)
+            .map_err(|e| GameError::CustomError(e.to_string()))?;
+        for (_, player) in &mut state.game.players {
+            player.ptype = PlayerType::Local;
+        }
+        Ok(Self::new_from_state(
+            ctx,
+            args,
+            state,
+            parent_channel,
+            action_channel,
+        ))
+    }
+
+    fn save(&self, mut path: PathBuf) -> GameResult<()> {
+        path.push(self.creation_time.format_pathname());
+        let _ = create_dir_all(&path);
+        path.push(format!("{}.save", SystemTime::now().format_filename()));
+        let game_state: Vec<u8> =
+            bincode::serialize(&self.state).map_err(|e| GameError::CustomError(e.to_string()))?;
+        let mut file = File::create(path)?;
+        file.write_all(&game_state)?;
+        Ok(())
+    }
+
+    fn push_history(&mut self) -> GameResult<()> {
+        if let Some(base_path) = &self.args.save_directory {
+            self.save(
+                base_path
+                    .clone()
+                    .unwrap_or(PathBuf::from_str("saves/").unwrap()),
+            )?;
+        }
         self.history.push(self.state.clone());
+        Ok(())
     }
 
     fn pop_history(&mut self) {
@@ -501,30 +568,32 @@ impl GameClient {
         };
     }
 
-    fn skip_meeples(&mut self, ctx: &Context) {
+    fn skip_meeples(&mut self, ctx: &Context) -> GameResult<()> {
         if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.state.turn_phase {
             let groups_to_close = closed_groups.clone();
-            self.push_history();
+            self.push_history()?;
             self.end_turn(ctx, groups_to_close);
         }
+        Ok(())
     }
 
-    fn end_game_immediately(&mut self, ctx: &Context) {
-        self.push_history();
+    fn end_game_immediately(&mut self, ctx: &Context) -> GameResult<()> {
+        self.push_history()?;
         self.end_game(ctx);
+        Ok(())
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: GameEvent) -> Result<(), GameError> {
         match event {
             GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
             GameEvent::SkipMeeples => {
-                self.skip_meeples(ctx);
+                self.skip_meeples(ctx)?;
                 self.broadcast_action(GameMessage::SkipMeeples);
             }
             GameEvent::ClosePauseMenu => self.pause_menu = None,
             GameEvent::EndGame => {
                 self.pause_menu = None;
-                self.end_game_immediately(ctx);
+                self.end_game_immediately(ctx)?;
                 self.broadcast_action(GameMessage::EndGame);
             }
             GameEvent::ResetCamera => {
@@ -562,8 +631,8 @@ impl GameClient {
                     self.place_meeple(ctx, closed_groups, seg_ident, *player_ident)?;
                 }
             }
-            GameMessage::SkipMeeples => self.skip_meeples(ctx),
-            GameMessage::EndGame => self.end_game_immediately(ctx),
+            GameMessage::SkipMeeples => self.skip_meeples(ctx)?,
+            GameMessage::EndGame => self.end_game_immediately(ctx)?,
             GameMessage::Undo => {
                 self.pop_history();
                 self.reevaluate_selected_square();
@@ -608,7 +677,7 @@ impl GameClient {
     }
 
     fn place_tile(&mut self, ctx: &mut Context, focused_pos: GridPos) -> Result<(), GameError> {
-        self.push_history();
+        self.push_history()?;
 
         let tile = self.get_held_tile_mut().unwrap().clone();
         let closed_groups = self.state.game.place_tile(tile, focused_pos)?;
@@ -646,7 +715,7 @@ impl GameClient {
         seg_ident: SegmentIdentifier,
         player_ident: PlayerIdentifier,
     ) -> Result<(), GameError> {
-        self.push_history();
+        self.push_history()?;
 
         self.state.game.place_meeple(seg_ident, player_ident)?;
         self.selected_segment_and_group = None;
@@ -1178,7 +1247,7 @@ impl GameClient {
                 }
 
                 if ctx.keyboard.is_key_just_pressed(KeyCode::Return) {
-                    self.skip_meeples(ctx);
+                    self.skip_meeples(ctx)?;
                     self.broadcast_action(GameMessage::SkipMeeples);
                 }
             }

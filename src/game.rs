@@ -6,6 +6,7 @@ use ggez::{
     GameError,
 };
 use player::{Player, PlayerType};
+use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
@@ -62,7 +63,7 @@ pub mod player {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Serialize, Deserialize)]
     pub struct Player {
         pub meeples: usize,
         pub score: usize,
@@ -95,13 +96,13 @@ pub type EdgeIdentifier = (GridPos, Orientation);
 pub type PlayerIdentifier = DefaultKey;
 pub type PlacedMeeple = (SegmentIdentifier, PlayerIdentifier);
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ScoringDetails {
     pub score: usize,
     pub owners: Vec<(PlayerIdentifier, Color)>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct ShapeDetails {
     pub outline: Vec<Line>,
     pub popup_location: Vec2,
@@ -121,7 +122,7 @@ impl From<Vec<Line>> for ShapeDetails {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct SegmentGroup {
     pub gtype: SegmentType,
     pub segments: Vec<SegmentIdentifier>,
@@ -160,7 +161,7 @@ pub struct ScoringResult {
     pub score: usize,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Game {
     pub local_player: PlayerType,
     pub library: Vec<Tile>,

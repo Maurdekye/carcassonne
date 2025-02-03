@@ -54,7 +54,7 @@ impl<T> MultiplayerPhase<T> {
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
             .unwrap();
         MultiplayerPhase::Game {
-            game: GameClient::new_inner(ctx, args, game, parent_channel, Some(action_sender)),
+            game: GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, Some(action_sender)),
             action_channel,
         }
     }

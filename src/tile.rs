@@ -7,6 +7,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect},
     Context, GameError,
 };
+use serde::{Deserialize, Serialize};
 use tile_definitions::{
     ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CORNER_CITY_CURVE_ROAD, CROSSROADS, CURVE_ROAD,
     EDGE_CITY, EDGE_CITY_CROSSROADS, EDGE_CITY_LEFT_CURVE_ROAD, EDGE_CITY_RIGHT_CURVE_ROAD,
@@ -31,7 +32,7 @@ const MOUNTS_PER_SIDE: usize = 3;
 pub type Mount = [usize; MOUNTS_PER_SIDE];
 pub type TileEdge = (TileEdgeSpan, Orientation);
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Orientation {
     North,
     East,
@@ -86,7 +87,7 @@ pub struct MountingPair {
     pub to_segment: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SegmentType {
     Farm,
     City,
@@ -123,7 +124,7 @@ impl SegmentType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Mounts {
     north: Mount,
     east: Mount,
@@ -168,13 +169,13 @@ impl Mounts {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum SegmentAttribute {
     Fortified { shield_location: Vec2 },
     CustomMeepleSpot(Vec2),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Segment {
     pub stype: SegmentType,
     pub poly: Vec<usize>,
@@ -183,7 +184,7 @@ pub struct Segment {
     pub edge_definition: Vec<SegmentBorderPiece>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum TileAttribute {}
 
 pub trait Opposite {
@@ -355,7 +356,7 @@ impl std::fmt::Debug for GridBorderCoordinate {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash, Serialize, Deserialize)]
 pub enum TileEdgeSpan {
     Beginning,
     Middle,
@@ -426,7 +427,7 @@ pub fn edges_contiguous(before: TileEdge, after: TileEdge) -> bool {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash, Serialize, Deserialize)]
 pub enum SegmentBorderPiece {
     Edge(TileEdge),
     Vert(usize),
@@ -446,7 +447,7 @@ pub enum SegmentDefinition {
     },
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Tile {
     pub verts: Line,
     pub segments: Vec<Segment>,
