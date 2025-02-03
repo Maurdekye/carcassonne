@@ -13,7 +13,7 @@ use std::{
 use crate::{
     colors::PANEL_COLOR,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
@@ -42,32 +42,36 @@ impl RulesMenuSubclient {
     pub fn new(parent_channel: Sender<PauseScreenEvent>) -> Self {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [_, prev_page, next_page]) = UIManager::new_and_rc_buttons(
-            ui_sender,
-            [
-                Button::new(
-                    ButtonBounds::absolute(Rect::new(55.0, 20.0, 50.0, 30.0)),
-                    Text::new("<").size(24.0),
-                    RulesMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
-                        absolute: Rect::new(-160.0, -80.0, 50.0, 30.0),
-                    },
-                    Text::new("<-"),
-                    RulesMenuEvent::PreviousPage,
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: Rect::new(0.5, 1.0, 0.0, 0.0),
-                        absolute: Rect::new(130.0, -80.0, 50.0, 30.0),
-                    },
-                    Text::new("->"),
-                    RulesMenuEvent::NextPage,
-                ),
-            ],
-        );
+        let (ui, [_, UIElement::Button(prev_page), UIElement::Button(next_page)]) =
+            UIManager::new_and_rc_elements(
+                ui_sender,
+                [
+                    UIElement::Button(Button::new(
+                        Bounds::absolute(Rect::new(55.0, 20.0, 50.0, 30.0)),
+                        Text::new("<").size(24.0),
+                        RulesMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                            absolute: Rect::new(-160.0, -80.0, 50.0, 30.0),
+                        },
+                        Text::new("<-"),
+                        RulesMenuEvent::PreviousPage,
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: Rect::new(0.5, 1.0, 0.0, 0.0),
+                            absolute: Rect::new(130.0, -80.0, 50.0, 30.0),
+                        },
+                        Text::new("->"),
+                        RulesMenuEvent::NextPage,
+                    )),
+                ],
+            )
+        else {
+            panic!()
+        };
         Self {
             parent_channel,
             event_sender,
@@ -105,8 +109,8 @@ impl SubEventHandler<GameError> for RulesMenuSubclient {
             self.handle_event(ctx, event)?;
         }
 
-        self.next_page.borrow_mut().state = ButtonState::disabled_if(self.page == NUM_PAGES - 1);
-        self.prev_page.borrow_mut().state = ButtonState::disabled_if(self.page == 0);
+        self.next_page.borrow_mut().state = UIElementState::disabled_if(self.page == NUM_PAGES - 1);
+        self.prev_page.borrow_mut().state = UIElementState::disabled_if(self.page == 0);
 
         Ok(())
     }

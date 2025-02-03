@@ -22,6 +22,7 @@ pub mod host_client;
 pub mod join_client;
 mod lobby_client;
 pub mod transport;
+pub mod multiplayer_menu;
 
 enum MultiplayerPhase<T> {
     Lobby(LobbyClient<T>),

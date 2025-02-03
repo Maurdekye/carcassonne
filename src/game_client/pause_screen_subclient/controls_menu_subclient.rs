@@ -9,7 +9,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::{
     colors::PANEL_COLOR,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
@@ -37,11 +37,11 @@ impl ControlsMenuSubclient {
             event_receiver,
             ui: UIManager::new(
                 ui_sender,
-                [Button::new(
-                    ButtonBounds::absolute(Rect::new(55.0, 20.0, 50.0, 30.0)),
+                [UIElement::Button(Button::new(
+                    Bounds::absolute(Rect::new(55.0, 20.0, 50.0, 30.0)),
                     Text::new("<").size(24.0),
                     ControlsMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu),
-                )],
+                ))],
             ),
         }
     }

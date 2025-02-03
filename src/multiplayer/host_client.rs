@@ -18,7 +18,7 @@ use crate::{
     main_client::MainEvent,
     multiplayer::transport::message::client::{self, ClientMessage},
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
     Args,
 };
@@ -95,29 +95,31 @@ pub struct HostClient {
 }
 
 impl HostClient {
-    pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> HostClient {
+    pub fn new(parent_channel: Sender<MainEvent>, args: Args, port: u16) -> HostClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [_, start_game_button]) = UIManager::new_and_rc_buttons(
+        let (ui, [_, UIElement::Button(start_game_button)]) = UIManager::new_and_rc_elements(
             ui_sender,
             [
-                Button::new(
-                    ButtonBounds::absolute(Rect::new(30.0, 30.0, 120.0, 40.0)),
+                UIElement::Button(Button::new(
+                    Bounds::absolute(Rect::new(30.0, 30.0, 120.0, 40.0)),
                     Text::new("Back"),
-                    UIEvent::MainEvent(MainEvent::ReturnToMainMenu),
-                ),
-                Button::new(
-                    ButtonBounds {
+                    UIEvent::MainEvent(MainEvent::MultiplayerMenu),
+                )),
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: Rect::new(1.0, 1.0, 0.0, 0.0),
                         absolute: Rect::new(-260.0, -60.0, 240.0, 40.0),
                     },
                     Text::new("Start Game").size(32.0),
                     UIEvent::StartGame,
-                ),
+                )),
             ],
-        );
-        start_game_button.borrow_mut().state = ButtonState::Disabled;
-        let message_server = MessageServer::start(event_sender.clone(), args.port);
+        ) else {
+            panic!()
+        };
+        start_game_button.borrow_mut().state = UIElementState::Disabled;
+        let message_server = MessageServer::start(event_sender.clone(), port);
         let mut this = HostClient {
             args,
             parent_channel,
@@ -173,7 +175,7 @@ impl HostClient {
         });
         match &mut self.phase {
             MultiplayerPhase::Lobby(lobby) => {
-                self.start_game_button.borrow_mut().state = ButtonState::disabled_if(
+                self.start_game_button.borrow_mut().state = UIElementState::disabled_if(
                     users.len() < 2 || users.iter().any(|user| user.color.is_none()),
                 );
                 let _ = lobby.handle_message(message.clone());

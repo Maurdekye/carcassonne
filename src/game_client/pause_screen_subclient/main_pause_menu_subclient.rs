@@ -13,7 +13,7 @@ use crate::{
     game_client::GameEvent,
     main_client::MainEvent,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
 };
 
 use super::PauseScreenEvent;
@@ -53,61 +53,65 @@ impl MainPauseMenuSubclient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let button_center = Rect::new(0.5, 0.2, 0.0, 0.0);
-        let (ui, [end_game_button, _, _, undo_button, ..]) = UIManager::new_and_rc_buttons(
-            ui_sender,
-            [
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
-                    },
-                    Text::new("End Game"),
-                    MainPauseMenuEvent::game_event(GameEvent::EndGame),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
-                    },
-                    Text::new("Reset Camera"),
-                    MainPauseMenuEvent::game_event(GameEvent::ResetCamera),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
-                    },
-                    Text::new("Return to Main Menu"),
-                    MainPauseMenuEvent::main_event(MainEvent::ReturnToMainMenu),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(10.0, 60.0, 240.0, 40.0),
-                    },
-                    Text::new("Undo Last Move"),
-                    MainPauseMenuEvent::game_event(GameEvent::Undo),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(-250.0, 120.0, 240.0, 40.0),
-                    },
-                    Text::new("Controls"),
-                    MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Controls),
-                ),
-                Button::new(
-                    ButtonBounds {
-                        relative: button_center,
-                        absolute: Rect::new(10.0, 120.0, 240.0, 40.0),
-                    },
-                    Text::new("Rules"),
-                    MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Rules),
-                ),
-            ],
-        );
-        end_game_button.borrow_mut().state = ButtonState::disabled_if(can_end_game.get());
-        undo_button.borrow_mut().state = ButtonState::disabled_if(!can_undo.get());
+        let (ui, [UIElement::Button(end_game_button), _, _, UIElement::Button(undo_button), ..]) =
+            UIManager::new_and_rc_elements(
+                ui_sender,
+                [
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(-250.0, 0.0, 240.0, 40.0),
+                        },
+                        Text::new("End Game"),
+                        MainPauseMenuEvent::game_event(GameEvent::EndGame),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(10.0, 0.0, 240.0, 40.0),
+                        },
+                        Text::new("Reset Camera"),
+                        MainPauseMenuEvent::game_event(GameEvent::ResetCamera),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(-250.0, 60.0, 240.0, 40.0),
+                        },
+                        Text::new("Return to Main Menu"),
+                        MainPauseMenuEvent::main_event(MainEvent::MainMenu),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(10.0, 60.0, 240.0, 40.0),
+                        },
+                        Text::new("Undo Last Move"),
+                        MainPauseMenuEvent::game_event(GameEvent::Undo),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(-250.0, 120.0, 240.0, 40.0),
+                        },
+                        Text::new("Controls"),
+                        MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Controls),
+                    )),
+                    UIElement::Button(Button::new(
+                        Bounds {
+                            relative: button_center,
+                            absolute: Rect::new(10.0, 120.0, 240.0, 40.0),
+                        },
+                        Text::new("Rules"),
+                        MainPauseMenuEvent::PauseScreenEvent(PauseScreenEvent::Rules),
+                    )),
+                ],
+            )
+        else {
+            panic!()
+        };
+        end_game_button.borrow_mut().state = UIElementState::disabled_if(can_end_game.get());
+        undo_button.borrow_mut().state = UIElementState::disabled_if(!can_undo.get());
         MainPauseMenuSubclient {
             parent_channel,
             event_sender,
@@ -135,8 +139,9 @@ impl MainPauseMenuSubclient {
 
 impl SubEventHandler<GameError> for MainPauseMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        self.end_game_button.borrow_mut().state = ButtonState::disabled_if(self.can_end_game.get());
-        self.undo_button.borrow_mut().state = ButtonState::disabled_if(!self.can_undo.get());
+        self.end_game_button.borrow_mut().state =
+            UIElementState::disabled_if(self.can_end_game.get());
+        self.undo_button.borrow_mut().state = UIElementState::disabled_if(!self.can_undo.get());
         self.ui.update(ctx)?;
 
         if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {

@@ -9,7 +9,7 @@ use ggez::{
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
 };
 
@@ -37,32 +37,35 @@ where
     pub fn new(users: Vec<User>, me: Option<IpAddr>, parent_channel: Sender<T>) -> LobbyClient<T> {
         let button_pos = Rect::new(0.6, 0.3, 0.0, 0.0);
         let mut i = 0;
-        let (color_choice_ui, color_choice_buttons) = UIManager::new_and_rc_buttons(
+        let (color_choice_ui, color_choice_buttons) = UIManager::new_and_rc_elements(
             parent_channel.clone(),
             PLAYER_COLORS.map(|color| {
                 i += 1;
-                Button::new(
-                    ButtonBounds {
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: button_pos,
                         absolute: Rect::new((i - 1) as f32 * 40.0, 0.0, 30.0, 30.0),
                     },
                     Text::new(""),
                     LobbyEvent::ChooseColor(Some(color)),
-                )
+                ))
             }),
         );
-        let (ui, [deselect_color_button]) = UIManager::new_and_rc_buttons(
+        let (ui, [UIElement::Button(deselect_color_button)]) = UIManager::new_and_rc_elements(
             parent_channel.clone(),
-            [Button::new(
-                ButtonBounds {
+            [UIElement::Button(Button::new(
+                Bounds {
                     relative: button_pos,
                     absolute: Rect::new(0.0, 40.0, 120.0, 40.0),
                 },
                 Text::new("Deselect"),
                 LobbyEvent::ChooseColor(None),
-            )],
-        );
-        deselect_color_button.borrow_mut().state = ButtonState::Disabled;
+            ))],
+        ) else {
+            panic!()
+        };
+        deselect_color_button.borrow_mut().state = UIElementState::Disabled;
+        let color_choice_buttons = color_choice_buttons.map(UIElement::unwrap_button);
         LobbyClient {
             me,
             users,
@@ -83,7 +86,7 @@ where
                     self.users.iter().filter_map(|user| user.color).collect();
                 for (color, button) in PLAYER_COLORS.iter().zip(self.color_choice_buttons.iter()) {
                     button.borrow_mut().state =
-                        ButtonState::disabled_if(selected_colors.contains(color));
+                        UIElementState::disabled_if(selected_colors.contains(color));
                 }
 
                 let me = self
@@ -92,7 +95,7 @@ where
                     .find(|user| user.ip() == self.me.as_ref())
                     .unwrap();
                 self.deselect_color_button.borrow_mut().state =
-                    ButtonState::disabled_if(me.color.is_none());
+                    UIElementState::disabled_if(me.color.is_none());
             }
         }
 

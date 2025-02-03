@@ -8,10 +8,10 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
   -f, --fullscreen [<FULLSCREEN>]      Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
   -d, --debug-config <DEBUG_CONFIG>    Immediately start a debug game configuration [possible values: meeple-placement, multiple-segments-per-tile-scoring, multiple-player-ownership, rotation-test]
   -s, --snap-placement                 Enable experimental snapping tile placement
-  -i, --ip <IP>                        Ip address to attempt to connect to a multiplayer game
-  -p, --port <PORT>                    Port to host a multiplayer game on / connect to [default: 11069]
+  -i, --ip <IP>                        Default multiplayer Ip address
+  -p, --port <PORT>                    Default multiplayer port [default: 11069]
   -g, --ping-interval <PING_INTERVAL>  Ping interval in seconds for multiplayer games [default: 5]
-  -h, --help                           Print help
+  -h, --help                           Print hel
 ```
 
 ### Controls
@@ -23,6 +23,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * E to rotate counterclockwise
 * Left click to place a tile / meeple
 * Hold Tab to see detailed game stats
+* Enter to skip meeple placement
 * Esc to pause
 
 ## Todo
@@ -33,7 +34,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Inspect groups on tab~~
 * ~~Controls cheatsheet on tab~~
 * ~~Rules screen~~
-* Gui for connecting to host
+* ~~Gui for connecting to host~~
 
 ### Additional Features
 

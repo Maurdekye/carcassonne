@@ -140,9 +140,11 @@ pub enum AnchorPoint {
     NorthWest,
     NorthCenter,
     NorthEast,
+    CenterWest,
     SouthWest,
     SouthCenter,
     SouthEast,
+    CenterEast,
     Center,
 }
 
@@ -191,9 +193,11 @@ impl TextExt for Text {
             NorthWest => vec2(0.0, 0.0),
             NorthCenter => vec2(0.5, 0.0),
             NorthEast => vec2(1.0, 0.0),
+            CenterWest => vec2(0.0, 0.5),
             SouthWest => vec2(0.0, 1.0),
             SouthCenter => vec2(0.5, 1.0),
             SouthEast => vec2(1.0, 1.0),
+            CenterEast => vec2(1.0, 0.5),
             Center => vec2(0.5, 0.5),
         };
         Ok(self.with_dest(pos - bounds * anchor_offset))
@@ -360,11 +364,15 @@ impl Vec2ToRectExt for Vec2 {
 
 pub trait RectExt {
     fn bottom_right(&self) -> Vec2;
+    fn parametric(&self, v: Vec2) -> Vec2;
 }
 
 impl RectExt for Rect {
     fn bottom_right(&self) -> Vec2 {
         vec2(self.right(), self.bottom())
+    }
+    fn parametric(&self, v: Vec2) -> Vec2 {
+        vec2(self.x + self.w * v.x, self.y + self.h * v.y)
     }
 }
 

@@ -14,7 +14,7 @@ use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     main_client::MainEvent,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, ButtonState, UIManager, BUTTON_COLOR},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
     util::{DrawableWihParamsExt, TextExt},
     Args,
 };
@@ -60,11 +60,11 @@ impl MainMenuClient {
     pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MainMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [start_game_button, ..]) = UIManager::new_and_rc_buttons(
+        let (ui, [UIElement::Button(start_game_button), ..]) = UIManager::new_and_rc_elements(
             ui_sender,
             [
-                Button::new(
-                    ButtonBounds {
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: Self::BUTTONS_CENTER,
                         absolute: Rect::new(
                             -120.0,
@@ -75,9 +75,9 @@ impl MainMenuClient {
                     },
                     Text::new("Start Local 0 Player Game"),
                     MainMenuEvent::StartGame,
-                ),
-                Button::new(
-                    ButtonBounds {
+                )),
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: Self::BUTTONS_CENTER,
                         absolute: Rect::new(
                             -120.0,
@@ -87,31 +87,33 @@ impl MainMenuClient {
                         ),
                     },
                     Text::new("Multiplayer"),
-                    MainMenuEvent::MainEvent(MainEvent::HostMultiplayerMenu),
-                ),
-                Button::new(
-                    ButtonBounds {
+                    MainMenuEvent::MainEvent(MainEvent::MultiplayerMenu),
+                )),
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: Rect::new(0.5, 1.0, 0.0, 0.0),
                         absolute: Rect::new(-90.0, -80.0, 180.0, 60.0),
                     },
                     Text::new("Quit"),
                     MainMenuEvent::MainEvent(MainEvent::Close),
-                ),
+                )),
             ],
-        );
-        start_game_button.borrow_mut().state = ButtonState::Disabled;
+        ) else {
+            panic!()
+        };
+        start_game_button.borrow_mut().state = UIElementState::Disabled;
         let (color_selection_ui, color_selection_buttons) = {
             let full_width = (Self::BUTTON_SIZE * NUM_PLAYERS as f32)
                 + (Self::BUTTON_SPACING * (NUM_PLAYERS - 1) as f32);
             let ui_sender = event_sender.clone();
             let mut i = 0;
-            UIManager::new_and_rc_buttons(
+            UIManager::new_and_rc_elements(
                 ui_sender,
                 PLAYER_COLORS.map(|color| {
                     i += 1;
                     let offset = (i - 1) as f32;
-                    Button::new(
-                        ButtonBounds {
+                    UIElement::Button(Button::new(
+                        Bounds {
                             relative: Self::BUTTONS_CENTER,
                             absolute: Rect::new(
                                 (Self::BUTTON_SIZE + Self::BUTTON_SPACING) * offset
@@ -123,10 +125,11 @@ impl MainMenuClient {
                         },
                         Text::new(""),
                         color,
-                    )
+                    ))
                 }),
             )
         };
+        let color_selection_buttons = color_selection_buttons.map(UIElement::unwrap_button);
         MainMenuClient {
             parent_channel,
             _event_sender: event_sender,
@@ -159,9 +162,12 @@ impl MainMenuClient {
                     button.color = Self::SELECTED_COLOR;
                 }
                 let mut start_game_button = self.start_game_button.borrow_mut();
-                start_game_button.state = ButtonState::disabled_if(self.selected_colors.len() < 2);
-                start_game_button.text =
-                    Text::new(format!("Start Local {} Player Game", self.selected_colors.len()));
+                start_game_button.state =
+                    UIElementState::disabled_if(self.selected_colors.len() < 2);
+                start_game_button.text = Text::new(format!(
+                    "Start Local {} Player Game",
+                    self.selected_colors.len()
+                ));
             }
             MainMenuEvent::StartGame => {
                 if self.selected_colors.len() < 2 {

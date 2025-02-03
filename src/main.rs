@@ -24,6 +24,7 @@ mod tile;
 mod ui_manager;
 mod util;
 mod colors;
+mod keycode;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -67,11 +68,11 @@ struct Args {
     #[arg(short, long, action = ArgAction::SetTrue)]
     snap_placement: bool,
 
-    /// Ip address to attempt to connect to a multiplayer game
+    /// Default multiplayer Ip address
     #[arg(short, long)]
     ip: Option<IpAddr>,
 
-    /// Port to host a multiplayer game on / connect to
+    /// Default multiplayer port
     #[arg(short, long, default_value_t = 11069)]
     port: u16,
 

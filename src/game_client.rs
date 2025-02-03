@@ -16,7 +16,7 @@ use crate::multiplayer::transport::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
-use crate::ui_manager::{Button, ButtonBounds, ButtonState, UIManager};
+use crate::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
 use crate::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
     TextExt,
@@ -187,11 +187,14 @@ impl GameClient {
         let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
-        let (ui, [skip_meeples_button, return_to_main_menu_button]) = UIManager::new_and_rc_buttons(
+        let (
+            ui,
+            [UIElement::Button(skip_meeples_button), UIElement::Button(return_to_main_menu_button)],
+        ) = UIManager::new_and_rc_elements(
             ui_sender,
             [
-                Button::new_with_styling(
-                    ButtonBounds {
+                UIElement::Button(Button::new_with_styling(
+                    Bounds {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                         absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
                     },
@@ -199,17 +202,20 @@ impl GameClient {
                     DrawParam::default(),
                     Color::from_rgb(0, 128, 192),
                     GameEvent::SkipMeeples,
-                ),
-                Button::new(
-                    ButtonBounds {
+                )),
+                UIElement::Button(Button::new(
+                    Bounds {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                         absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
                     },
                     Text::new("Return to Main Menu"),
-                    GameEvent::MainEvent(MainEvent::ReturnToMainMenu),
-                ),
+                    GameEvent::MainEvent(MainEvent::MainMenu),
+                )),
             ],
-        );
+        )
+        else {
+            panic!()
+        };
         let mut this = Self {
             parent_channel,
             action_channel,
@@ -855,7 +861,7 @@ impl GameClient {
                 let sin_time = time.sin() * 0.1 + 1.0;
                 Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, Color::CYAN)?.draw(canvas);
 
-                if !self.ui.on_ui {
+                if self.ui.cursor_override.is_none() {
                     'draw_outline: {
                         if let Some((_, group_ident)) = self.selected_segment_and_group {
                             let origin_rect = self.origin_rect(ctx);
@@ -962,7 +968,7 @@ impl GameClient {
                 Mesh::new_rounded_rectangle(
                     ctx,
                     DrawMode::fill(),
-                    ButtonBounds {
+                    Bounds {
                         relative: Rect::new(0.5, 1.0, 0.0, 0.0),
                         absolute: Rect::new(-width / 2.0, -30.0, width, 24.0),
                     }
@@ -1316,13 +1322,14 @@ impl SubEventHandler<GameError> for GameClient {
         }
 
         // update button states
-        self.skip_meeples_button.borrow_mut().state = ButtonState::invisible_if(
+        self.skip_meeples_button.borrow_mut().state = UIElementState::invisible_if(
             !matches!(self.state.turn_phase, TurnPhase::MeeplePlacement { .. }) || !self.can_play(),
         );
-        self.return_to_main_menu_button.borrow_mut().state = ButtonState::invisible_if(!matches!(
-            self.state.turn_phase,
-            TurnPhase::EndGame { next_tick: None }
-        ));
+        self.return_to_main_menu_button.borrow_mut().state =
+            UIElementState::invisible_if(!matches!(
+                self.state.turn_phase,
+                TurnPhase::EndGame { next_tick: None }
+            ));
 
         // dragging
         if ctx.mouse.button_pressed(event::MouseButton::Right) {

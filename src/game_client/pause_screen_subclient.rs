@@ -15,7 +15,7 @@ use std::{
 use crate::{
     game_client::GameEvent,
     sub_event_handler::SubEventHandler,
-    ui_manager::{Button, ButtonBounds, UIManager},
+    ui_manager::{Bounds, Button, UIElement, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, TextExt},
 };
 
@@ -64,11 +64,11 @@ impl PauseScreenSubclient {
             can_undo,
             ui: UIManager::new(
                 ui_sender,
-                [Button::new(
-                    ButtonBounds::absolute(Rect::new(20.0, 20.0, 30.0, 30.0)),
+                [UIElement::Button(Button::new(
+                    Bounds::absolute(Rect::new(20.0, 20.0, 30.0, 30.0)),
                     Text::new("X"),
                     PauseScreenEvent::GameEvent(GameEvent::ClosePauseMenu),
-                )],
+                ))],
             ),
         }
     }

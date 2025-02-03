@@ -1,13 +1,14 @@
 use std::{
-    cell::LazyCell,
+    cell::{LazyCell, RefCell},
     net::{IpAddr, SocketAddr},
+    rc::Rc,
     sync::mpsc::{channel, Receiver, Sender},
     time::{Duration, Instant},
 };
 
 use ggez::{
     glam::vec2,
-    graphics::{Color, Text},
+    graphics::{Canvas, Color, Rect, Text},
     Context, GameError, GameResult,
 };
 
@@ -18,7 +19,7 @@ use crate::{
         server::{self, LobbyState, ServerMessage},
     },
     sub_event_handler::SubEventHandler,
-    ui_manager::UIManager,
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
     Args,
 };
@@ -36,7 +37,9 @@ use super::{
 };
 
 #[derive(Clone)]
-enum UIEvent {}
+enum UIEvent {
+    MainEvent(MainEvent),
+}
 
 #[allow(clippy::enum_variant_names)]
 enum JoinEvent {
@@ -74,12 +77,23 @@ pub struct JoinClient {
     last_ping: Instant,
     latency: Option<Duration>,
     phase: Option<MultiplayerPhase<JoinEvent>>,
+    socket: SocketAddr,
+    back_button: Rc<RefCell<Button<UIEvent>>>,
 }
 
 impl JoinClient {
     pub fn new(parent_channel: Sender<MainEvent>, args: Args, socket: SocketAddr) -> Self {
         let (event_sender, event_receiver) = channel();
-        let ui = UIManager::new(event_sender.clone(), []);
+        let (ui, [UIElement::Button(back_button)]) = UIManager::new_and_rc_elements(
+            event_sender.clone(),
+            [UIElement::Button(Button::new(
+                Bounds::absolute(Rect::new(30.0, 30.0, 120.0, 40.0)),
+                Text::new("Cancel"),
+                UIEvent::MainEvent(MainEvent::MultiplayerMenu),
+            ))],
+        ) else {
+            panic!()
+        };
         let message_client = MessageClient::start(event_sender.clone(), socket);
         JoinClient {
             parent_channel,
@@ -92,6 +106,8 @@ impl JoinClient {
             last_ping: Instant::now(),
             latency: None,
             phase: None,
+            socket,
+            back_button,
         }
     }
 
@@ -167,7 +183,9 @@ impl JoinClient {
                     self.phase = None;
                 }
             },
-            JoinEvent::UIEvent(_uievent) => {}
+            JoinEvent::UIEvent(ui_event) => match ui_event {
+                UIEvent::MainEvent(main_event) => self.parent_channel.send(main_event).unwrap(),
+            },
             JoinEvent::LobbyEvent(LobbyEvent::ChooseColor(color)) => {
                 if let Some((connection, _)) = &mut self.connection {
                     connection.blind_send(ClientMessage::Lobby(client::LobbyMessage::ChooseColor(
@@ -188,10 +206,23 @@ impl SubEventHandler<GameError> for JoinClient {
         Ok(())
     }
 
-    fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
+    fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
+        }
+
+        {
+            let mut back_button = self.back_button.borrow_mut();
+            match self.phase {
+                None => back_button.text = Text::new("Cancel"),
+                Some(MultiplayerPhase::Lobby(_)) => back_button.text = Text::new("Leave"),
+                _ => {}
+            }
+            back_button.state = UIElementState::invisible_if(matches!(
+                self.phase,
+                Some(MultiplayerPhase::Game { .. })
+            ));
         }
 
         if let Some(phase) = &mut self.phase {
@@ -216,26 +247,18 @@ impl SubEventHandler<GameError> for JoinClient {
         Ok(())
     }
 
-    fn draw(
-        &mut self,
-        ctx: &mut ggez::Context,
-        canvas: &mut ggez::graphics::Canvas,
-    ) -> Result<(), GameError> {
+    fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
         match &mut self.phase {
             None => {
-                Text::new(format!(
-                    "Connecting to {}:{}...",
-                    self.args.ip.unwrap(),
-                    self.args.port
-                ))
-                .size(36.0)
-                .anchored_by(
-                    ctx,
-                    ctx.res() * vec2(0.5, 0.0) + vec2(0.0, 30.0),
-                    AnchorPoint::NorthCenter,
-                )?
-                .color(Color::BLACK)
-                .draw(canvas);
+                Text::new(format!("Connecting to {}...", self.socket))
+                    .size(36.0)
+                    .anchored_by(
+                        ctx,
+                        ctx.res() * vec2(0.5, 0.0) + vec2(0.0, 30.0),
+                        AnchorPoint::NorthCenter,
+                    )?
+                    .color(Color::BLACK)
+                    .draw(canvas);
             }
             Some(MultiplayerPhase::Lobby(lobby)) => {
                 Text::new("Connected")
