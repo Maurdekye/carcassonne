@@ -196,7 +196,10 @@ impl HostClient {
         self.broadcast(ServerMessage::Lobby(message.clone()));
     }
 
-    fn add_client(&mut self, transport: ServersideTransport, client_info: ClientInfo) {
+    fn add_client(&mut self, mut transport: ServersideTransport, client_info: ClientInfo) {
+        if let MultiplayerPhase::Game { game, .. } = &self.phase {
+            transport.blind_send(ServerMessage::GameState(game.state.clone()));
+        }
         self.users.insert(
             IpOrHost::Ip(client_info.ip),
             HostUser {

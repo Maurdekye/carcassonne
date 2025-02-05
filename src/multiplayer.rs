@@ -10,7 +10,7 @@ use transport::message::{server::User, GameMessage};
 
 use crate::{
     game::{player::Player, Game},
-    game_client::GameClient,
+    game_client::{GameClient, GameState},
     main_client::MainEvent,
     pos::GridPos,
     sub_event_handler::SubEventHandler,
@@ -58,6 +58,27 @@ impl<T> MultiplayerPhase<T> {
                 ctx,
                 args,
                 game,
+                parent_channel,
+                Some(action_sender),
+            ),
+            action_channel,
+        }
+    }
+
+    pub fn new_from_state(
+        ctx: &Context,
+        shared: SharedResources,
+        parent_channel: Sender<MainEvent>,
+        mut state: GameState,
+        local_user: Option<IpAddr>,
+    ) -> MultiplayerPhase<T> {
+        state.game.local_player = local_user.into();
+        let (action_sender, action_channel) = channel();
+        MultiplayerPhase::Game {
+            game: GameClient::new_from_state(
+                ctx,
+                shared,
+                state,
                 parent_channel,
                 Some(action_sender),
             ),

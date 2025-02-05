@@ -8,7 +8,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::SystemTime;
 
 use crate::colors::PANEL_COLOR;
-use crate::game::player::PlayerType;
+use crate::game::player::{ConnectionState, PlayerType};
 use crate::game::ShapeDetails;
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
@@ -25,7 +25,7 @@ use crate::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
     ResultExt, SystemTimeExt, TextExt,
 };
-use crate::SharedResources;
+use crate::{game_client, SharedResources};
 
 use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -117,9 +117,47 @@ struct GroupInspection {
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct GameState {
-    game: Game,
+    pub game: Game,
     turn_phase: TurnPhase,
     turn_order: VecDeque<PlayerIdentifier>,
+}
+
+impl std::fmt::Debug for GameState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[allow(unused)]
+        #[derive(Debug)]
+        struct Game<'a> {
+            tiles: usize,
+            players: Vec<&'a Player>,
+        }
+        #[derive(Debug)]
+        enum TurnPhase {
+            MeeplePlacement,
+            TilePlacement,
+            EndGame,
+        }
+        f.debug_struct("GameState")
+            .field(
+                "game",
+                &Game {
+                    tiles: self.game.placed_tiles.len(),
+                    players: self
+                        .turn_order
+                        .iter()
+                        .map(|p| self.game.players.get(*p).unwrap())
+                        .collect(),
+                },
+            )
+            .field(
+                "turn_phase",
+                &match &self.turn_phase {
+                    game_client::TurnPhase::TilePlacement { .. } => TurnPhase::TilePlacement,
+                    game_client::TurnPhase::MeeplePlacement { .. } => TurnPhase::MeeplePlacement,
+                    game_client::TurnPhase::EndGame { .. } => TurnPhase::EndGame,
+                },
+            )
+            .finish()
+    }
 }
 
 #[derive(PartialEq, Eq, Debug)]
@@ -150,7 +188,7 @@ pub struct GameClient {
     history: Vec<GameState>,
     skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
     return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
-    state: GameState,
+    pub state: GameState,
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent, GameEvent>,
     camera_movement: Vec2,
@@ -494,19 +532,37 @@ impl GameClient {
                 .pos(pos + content_origin + vec2(0.0, -20.0))
                 .color(Color::BLACK)
                 .draw(canvas);
-            if let PlayerType::MultiplayerClient {
-                latency: Some(latency),
-                ..
-            } = player.ptype
-            {
-                Text::new(format!("{}ms", latency.as_millis()))
-                    .anchored_by(
-                        ctx,
-                        pos + vec2(card_rect.w, 0.0) + vec2(-10.0, 10.0),
-                        AnchorPoint::NorthEast,
-                    )?
-                    .color(Color::BLACK)
-                    .draw(canvas);
+            match player.ptype {
+                PlayerType::MultiplayerClient {
+                    connection_state:
+                        ConnectionState::Connected {
+                            latency: Some(latency),
+                        },
+                    ..
+                } => {
+                    Text::new(format!("{}ms", latency.as_millis()))
+                        .anchored_by(
+                            ctx,
+                            pos + vec2(card_rect.w, 0.0) + vec2(-10.0, 10.0),
+                            AnchorPoint::NorthEast,
+                        )?
+                        .color(Color::BLACK)
+                        .draw(canvas);
+                }
+                PlayerType::MultiplayerClient {
+                    connection_state: ConnectionState::Disconnected,
+                    ..
+                } => {
+                    Text::new(format!("Disconnected"))
+                        .anchored_by(
+                            ctx,
+                            pos + vec2(card_rect.w, 0.0) + vec2(-10.0, 10.0),
+                            AnchorPoint::NorthEast,
+                        )?
+                        .color(Color::from_rgb(128, 0, 0))
+                        .draw(canvas);
+                }
+                _ => (),
             }
         }
         Text::new(format!("Score: {}", player.score))
@@ -665,14 +721,23 @@ impl GameClient {
 
     pub fn update_pings(&mut self, users: Vec<User>) -> GameResult<()> {
         for player in self.state.game.players.values_mut() {
-            if let Some(new_latency) = users.iter().find_map(|user| {
+            let new_latency = users.iter().find_map(|user| {
                 user.client_info.as_ref().and_then(|client_info| {
                     (PlayerType::from(Some(client_info.ip)) == player.ptype)
                         .then_some(client_info.latency)
                 })
-            }) {
-                if let PlayerType::MultiplayerClient { latency, .. } = &mut player.ptype {
-                    *latency = new_latency;
+            });
+
+            if let PlayerType::MultiplayerClient {
+                connection_state, ..
+            } = &mut player.ptype
+            {
+                if let Some(new_latency) = new_latency {
+                    *connection_state = ConnectionState::Connected {
+                        latency: new_latency,
+                    };
+                } else {
+                    *connection_state = ConnectionState::Disconnected;
                 }
             }
         }

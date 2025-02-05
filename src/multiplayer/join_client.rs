@@ -84,7 +84,11 @@ pub struct JoinClient {
 }
 
 impl JoinClient {
-    pub fn new(parent_channel: Sender<MainEvent>, shared: SharedResources, socket: SocketAddr) -> Self {
+    pub fn new(
+        parent_channel: Sender<MainEvent>,
+        shared: SharedResources,
+        socket: SocketAddr,
+    ) -> Self {
         let (event_sender, event_receiver) = channel();
         let (ui, [UIElement::Button(back_button)]) = UIManager::new_and_rc_elements(
             event_sender.clone(),
@@ -177,6 +181,15 @@ impl JoinClient {
                                     game.handle_message(ctx, message)?;
                                 }
                             }
+                        }
+                        ServerMessage::GameState(state) => {
+                            self.phase = Some(MultiplayerPhase::new_from_state(
+                                ctx,
+                                self.shared.clone(),
+                                self.parent_channel.clone(),
+                                state,
+                                Some(self.connection.as_ref().unwrap().1),
+                            ));
                         }
                     }
                 }

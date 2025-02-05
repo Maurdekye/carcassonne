@@ -27,12 +27,18 @@ pub mod player {
     use serde::{Deserialize, Serialize};
 
     #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+    pub enum ConnectionState {
+        Disconnected,
+        Connected { latency: Option<Duration> },
+    }
+
+    #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
     pub enum PlayerType {
         Local,
         MultiplayerHost,
         MultiplayerClient {
             address: IpAddr,
-            latency: Option<Duration>,
+            connection_state: ConnectionState,
         },
     }
 
@@ -41,7 +47,7 @@ pub mod player {
             match value {
                 Some(ip) => PlayerType::MultiplayerClient {
                     address: ip,
-                    latency: None,
+                    connection_state: ConnectionState::Connected { latency: None },
                 },
                 None => PlayerType::MultiplayerHost,
             }
@@ -64,7 +70,7 @@ pub mod player {
         }
     }
 
-    #[derive(Clone, Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize, Debug)]
     pub struct Player {
         pub meeples: usize,
         pub score: usize,

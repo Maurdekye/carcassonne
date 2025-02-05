@@ -6,6 +6,7 @@ use std::time::Duration;
 use std::net::IpAddr;
 
 use crate::game::player::PlayerType;
+use crate::game_client::GameState;
 
 use super::GameMessage;
 
@@ -21,6 +22,7 @@ pub enum ServerMessage {
     StartGame {
         game_seed: u64,
     },
+    GameState(GameState),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
