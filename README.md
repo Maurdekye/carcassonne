@@ -28,7 +28,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * E to rotate counterclockwise
 * Left click to place a tile / meeple
 * Hold Tab to see detailed game stats
-* Enter to skip meeple placement
+* Space to skip meeple placement
 * Esc to pause
 
 ## Todo

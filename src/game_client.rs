@@ -275,7 +275,7 @@ impl GameClient {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                         absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
                     },
-                    Text::new("Skip meeples (Enter)"),
+                    Text::new("Skip meeples (Space)"),
                     DrawParam::default(),
                     Color::from_rgb(0, 128, 192),
                     GameEvent::SkipMeeples,
@@ -1338,7 +1338,7 @@ impl GameClient {
                     }
                 }
 
-                if ctx.keyboard.is_key_just_pressed(KeyCode::Return) {
+                if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
                     self.skip_meeples(ctx)?;
                     self.broadcast_action(GameMessage::SkipMeeples);
                 }

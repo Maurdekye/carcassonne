@@ -102,7 +102,7 @@ Right Mouse / WASD / Arrow keys - Move camera
 Scroll - Zoom in and out
 R - Rotate tile 90° clockwise
 E - Rotate tile 90° counterclockwise
-Enter - Skip meeples
+Space - Skip meeples
 Tab - Detailed game stats
 Esc - Pause",
             )
