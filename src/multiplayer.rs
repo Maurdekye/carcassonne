@@ -6,11 +6,11 @@ use std::{
 use ggez::{graphics::Canvas, Context, GameError};
 use lobby_client::{LobbyClient, LobbyEvent};
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use transport::message::{server::User, GameMessage};
+use transport::message::server::User;
 
 use crate::{
     game::{player::Player, Game},
-    game_client::{GameClient, GameState},
+    game_client::{GameAction, GameClient, GameState},
     main_client::MainEvent,
     pos::GridPos,
     sub_event_handler::SubEventHandler,
@@ -28,7 +28,7 @@ enum MultiplayerPhase<T> {
     Lobby(LobbyClient<T>),
     Game {
         game: GameClient,
-        action_channel: Receiver<GameMessage>,
+        action_channel: Receiver<GameAction>,
     },
 }
 

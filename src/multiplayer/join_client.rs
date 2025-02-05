@@ -14,6 +14,7 @@ use ggez::{
 use log::{debug, info, trace};
 
 use crate::{
+    game_client::GameAction,
     main_client::MainEvent,
     multiplayer::transport::message::{
         client::ClientMessage,
@@ -81,6 +82,7 @@ pub struct JoinClient {
     phase: Option<MultiplayerPhase<JoinEvent>>,
     socket: SocketAddr,
     back_button: Rc<RefCell<Button<UIEvent>>>,
+    users: Option<Vec<User>>,
 }
 
 impl JoinClient {
@@ -114,6 +116,7 @@ impl JoinClient {
             phase: None,
             socket,
             back_button,
+            users: None,
         }
     }
 
@@ -137,7 +140,7 @@ impl JoinClient {
                     transport,
                     my_socket_addr,
                 } => {
-                    debug!("disconnected");
+                    debug!("connected");
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         Some(my_socket_addr.ip()),
@@ -157,6 +160,11 @@ impl JoinClient {
                             LazyCell::force_mut(&mut server).blind_send(ClientMessage::Pong)
                         }
                         ServerMessage::Lobby(lobby_message) => {
+                            match &lobby_message {
+                                server::LobbyMessage::LobbyState(lobby_state) => {
+                                    self.users = Some(lobby_state.users.clone());
+                                }
+                            }
                             match (&mut self.phase, lobby_message) {
                                 (Some(MultiplayerPhase::Lobby(lobby)), lobby_message) => {
                                     lobby.handle_message(lobby_message)?;
@@ -171,8 +179,8 @@ impl JoinClient {
                             }
                         }
                         ServerMessage::StartGame { game_seed } => {
-                            if let Some(MultiplayerPhase::Lobby(lobby)) = &self.phase {
-                                self.start_game(ctx, lobby.users.clone(), game_seed);
+                            if let Some(users) = &self.users {
+                                self.start_game(ctx, users.clone(), game_seed);
                             }
                         }
                         ServerMessage::Game { message, user } => {
@@ -198,6 +206,7 @@ impl JoinClient {
                     self.connection = None;
                     self.latency = None;
                     self.phase = None;
+                    self.users = None;
                 }
             },
             JoinEvent::UIEvent(ui_event) => match ui_event {
@@ -244,12 +253,24 @@ impl SubEventHandler<GameError> for JoinClient {
 
         if let Some(phase) = &mut self.phase {
             phase.update(ctx)?;
-            if let (MultiplayerPhase::Game { action_channel, .. }, Some((connection, _))) =
+            if let (MultiplayerPhase::Game { action_channel, .. }, Some((connection, my_ip))) =
                 (phase, &mut self.connection)
             {
                 while let Ok(message) = action_channel.try_recv() {
-                    debug!("sending {message:?}");
-                    connection.blind_send(ClientMessage::Game(message));
+                    match message {
+                        GameAction::Message(message) => {
+                            debug!("sending {message:?}");
+                            connection.blind_send(ClientMessage::Game(message));
+                        }
+                        GameAction::ReturnToLobby => {
+                            self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
+                                self.users.clone().unwrap_or_default(),
+                                Some(*my_ip),
+                                self.event_sender.clone(),
+                            )));
+                            break;
+                        }
+                    }
                 }
             }
         }

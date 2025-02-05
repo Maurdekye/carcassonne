@@ -16,6 +16,7 @@ use log::{debug, info, trace};
 
 use crate::{
     game::player::PlayerType,
+    game_client::GameAction,
     main_client::MainEvent,
     multiplayer::transport::message::client::{self, ClientMessage},
     sub_event_handler::SubEventHandler,
@@ -87,7 +88,7 @@ pub enum IpOrHost {
 pub struct HostClient {
     shared: SharedResources,
     parent_channel: Sender<MainEvent>,
-    _event_sender: Sender<HostEvent>,
+    event_sender: Sender<HostEvent>,
     event_receiver: Receiver<HostEvent>,
     ui: UIManager<UIEvent, HostEvent>,
     _message_server: MessageServer,
@@ -147,7 +148,7 @@ impl HostClient {
                 None,
                 event_sender.clone(),
             )),
-            _event_sender: event_sender,
+            event_sender,
             event_receiver,
             start_game_button,
             port,
@@ -343,16 +344,29 @@ impl SubEventHandler<GameError> for HostClient {
         }
 
         self.phase.update(ctx)?;
-        let messages = if let MultiplayerPhase::Game { action_channel, .. } = &mut self.phase {
+        let actions = if let MultiplayerPhase::Game { action_channel, .. } = &mut self.phase {
             action_channel.try_iter().collect()
         } else {
             Vec::new()
         };
-        for message in messages {
-            self.broadcast(ServerMessage::Game {
-                message,
-                user: PlayerType::MultiplayerHost,
-            });
+        for action in actions {
+            match action {
+                GameAction::Message(message) => {
+                    self.broadcast(ServerMessage::Game {
+                        message,
+                        user: PlayerType::MultiplayerHost,
+                    });
+                }
+                GameAction::ReturnToLobby => {
+                    self.phase = MultiplayerPhase::Lobby(LobbyClient::new(
+                        Vec::new(),
+                        None,
+                        self.event_sender.clone(),
+                    ));
+                    self.update_lobby_clients();
+                    break;
+                },
+            }
         }
 
         self.ping_clients();

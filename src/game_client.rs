@@ -73,6 +73,13 @@ enum GameEvent {
     EndGame,
     ResetCamera,
     Undo,
+    ReturnToLobby,
+}
+
+#[derive(Clone, Debug)]
+pub enum GameAction {
+    Message(GameMessage),
+    ReturnToLobby,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -175,7 +182,7 @@ struct GridSelectionInfo {
 
 pub struct GameClient {
     parent_channel: Sender<MainEvent>,
-    action_channel: Option<Sender<GameMessage>>,
+    action_channel: Option<Sender<GameAction>>,
     event_sender: Sender<GameEvent>,
     event_receiver: Receiver<GameEvent>,
     pause_menu: Option<PauseScreenSubclient>,
@@ -227,7 +234,7 @@ impl GameClient {
         shared: SharedResources,
         mut game: Game,
         parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameMessage>>,
+        action_channel: Option<Sender<GameAction>>,
     ) -> Self {
         let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
         GameClient::new_from_state(
@@ -252,9 +259,10 @@ impl GameClient {
         shared: SharedResources,
         state: GameState,
         parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameMessage>>,
+        action_channel: Option<Sender<GameAction>>,
     ) -> Self {
         let (event_sender, event_receiver) = channel();
+        let is_local = matches!(state.game.local_player, PlayerType::Local);
         let ui_sender = event_sender.clone();
         let (
             ui,
@@ -277,8 +285,16 @@ impl GameClient {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                         absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
                     },
-                    Text::new("Return to Main Menu"),
-                    GameEvent::MainEvent(MainEvent::MainMenu),
+                    Text::new(if is_local {
+                        "Return to Main Menu"
+                    } else {
+                        "Return to Lobby"
+                    }),
+                    if is_local {
+                        GameEvent::MainEvent(MainEvent::MainMenu)
+                    } else {
+                        GameEvent::ReturnToLobby
+                    },
                 )),
             ],
         )
@@ -315,7 +331,7 @@ impl GameClient {
         ctx: &Context,
         args: SharedResources,
         parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameMessage>>,
+        action_channel: Option<Sender<GameAction>>,
         path: PathBuf,
     ) -> GameResult<Self> {
         let mut file = File::open(path)?;
@@ -666,6 +682,11 @@ impl GameClient {
                     self.broadcast_action(GameMessage::Undo);
                 }
             }
+            GameEvent::ReturnToLobby => {
+                if let Some(action_channel) = &mut self.action_channel {
+                    let _ = action_channel.send(GameAction::ReturnToLobby);
+                }
+            }
         }
         Ok(())
     }
@@ -796,7 +817,7 @@ impl GameClient {
     fn broadcast_action(&mut self, message: GameMessage) {
         trace!("sending {message:?}");
         if let Some(action_channel) = &mut self.action_channel {
-            let _ = action_channel.send(message);
+            let _ = action_channel.send(GameAction::Message(message));
         }
     }
 
