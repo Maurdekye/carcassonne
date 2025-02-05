@@ -1178,20 +1178,6 @@ impl GameClient {
                     self.set_selected_square(Some(focused_pos));
                 }
 
-                // place tile
-                if ctx.mouse.button_just_pressed(event::MouseButton::Left)
-                    && self.placement_is_valid
-                {
-                    if let Some(selected_square) = self.selected_square {
-                        let rotation = self.get_held_tile_mut().unwrap().rotation;
-                        self.place_tile(ctx, selected_square)?;
-                        self.broadcast_action(GameMessage::PlaceTile {
-                            selected_square,
-                            rotation,
-                        });
-                    }
-                }
-
                 // rotate tile
                 if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
                     self.get_held_tile_mut().unwrap().rotate_clockwise();
@@ -1204,6 +1190,20 @@ impl GameClient {
                     self.get_held_tile_mut().unwrap().rotate_counterclockwise();
                     self.reevaluate_selected_square_counterclockwise();
                     self.update_preview();
+                }
+
+                // place tile
+                if ctx.mouse.button_just_pressed(event::MouseButton::Left)
+                    && self.placement_is_valid
+                {
+                    if let Some(selected_square) = self.selected_square {
+                        let rotation = self.get_held_tile_mut().unwrap().rotation;
+                        self.place_tile(ctx, selected_square)?;
+                        self.broadcast_action(GameMessage::PlaceTile {
+                            selected_square,
+                            rotation,
+                        });
+                    }
                 }
 
                 *on_clickable = self.placement_is_valid;
