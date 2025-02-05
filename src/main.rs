@@ -10,7 +10,7 @@ use ggez::{
     conf::{FullscreenType, WindowMode, WindowSetup},
     event, ContextBuilder, GameResult,
 };
-use log::{debug, info};
+use log::debug;
 use logger::Logger;
 use main_client::MainClient;
 use shared::SharedResources;
@@ -61,14 +61,39 @@ enum DebugGameConfiguration {
     GroupCoallation,
 }
 
+#[derive(ValueEnum, Debug, Clone, Copy)]
+enum LogLevel {
+    Off,
+    Error,
+    Warn,
+    Info,
+    Debug,
+    Trace,
+    Full,
+}
+
+impl From<LogLevel> for log::LevelFilter {
+    fn from(value: LogLevel) -> Self {
+        use LogLevel::*;
+        match value {
+            Off => log::LevelFilter::Off,
+            Error => log::LevelFilter::Error,
+            Warn => log::LevelFilter::Warn,
+            Info => log::LevelFilter::Info,
+            Debug => log::LevelFilter::Debug,
+            Trace | Full => log::LevelFilter::Trace,
+        }
+    }
+}
+
 #[derive(Parser, Clone, Debug)]
 struct Args {
-    /// Start in fullscreen; optionally provide a resolution to run with that res.
+    /// Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
     #[arg(short, long, value_parser = fullscreen_value_parser, default_missing_value = "1920x1080")]
     fullscreen: Option<Option<(usize, usize)>>,
 
     /// Immediately start a debug game configuration
-    #[arg(short, long)]
+    #[arg(short = 'c', long)]
     debug_config: Option<DebugGameConfiguration>,
 
     /// Enable experimental snapping tile placement
@@ -87,32 +112,43 @@ struct Args {
     #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
     ping_interval: Duration,
 
-    /// Enable to save ongoing game progress to this directory
+    /// Enable to save ongoing game progress to this directory [default: saves/]
     #[arg(short = 'v', long, default_missing_value = "saves/")]
     save_games: Option<Option<PathBuf>>,
 
-    /// Enable to save logs to this path
+    /// Enable to save logs to this path [default: logs/]
     #[arg(short = 'o', long, default_missing_value = "logs/")]
     save_logs: Option<Option<PathBuf>>,
 
     /// Logging level
     #[arg(short = 'e', long, default_value = "info")]
-    log_level: log::LevelFilter,
+    log_level: LogLevel,
 
     /// Load a save file
     #[arg(short, long)]
     load: Option<PathBuf>,
+
+    /// Enables debug mode: increases log level to 'trace',
+    /// enables saving log files, and enables saving game state
+    #[arg(short, long, action = ArgAction::SetTrue)]
+    debug: bool,
 }
 
 fn main() -> GameResult {
-    let args = Args::parse();
+    let mut args = Args::parse();
+    if args.debug {
+        args.save_games = args.save_games.or(Some(Some(PathBuf::from("saves/"))));
+        args.save_logs = args.save_logs.or(Some(Some(PathBuf::from("logs/"))));
+        args.log_level = LogLevel::Trace;
+    }
+
     let logger = Logger::new(args.clone())?;
     log::set_boxed_logger(Box::new(logger))
-        .map(|()| log::set_max_level(args.log_level))
+        .map(|()| log::set_max_level(args.log_level.into()))
         .as_gameerror()?;
 
-    info!("Logger initialized");
-    info!("Arguments: {args:#?}");
+    debug!("Logger initialized");
+    debug!("Arguments: {args:#?}");
 
     let shared = SharedResources { args };
 

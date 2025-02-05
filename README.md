@@ -6,12 +6,17 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 
 ```
   -f, --fullscreen [<FULLSCREEN>]      Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
-  -d, --debug-config <DEBUG_CONFIG>    Immediately start a debug game configuration [possible values: meeple-placement, multiple-segments-per-tile-scoring, multiple-player-ownership, rotation-test]
+  -c, --debug-config <DEBUG_CONFIG>    Immediately start a debug game configuration [possible values: meeple-placement, multiple-segments-per-tile-scoring, multiple-player-ownership, rotation-test, group-coallation]
   -s, --snap-placement                 Enable experimental snapping tile placement
   -i, --ip <IP>                        Default multiplayer Ip address
-  -p, --port <PORT>                    Default multiplayer port [default: 11069]
+  -p, --port <PORT>                    Default multiplayer port [default: 11069]  
   -g, --ping-interval <PING_INTERVAL>  Ping interval in seconds for multiplayer games [default: 5]
-  -h, --help                           Print hel
+  -v, --save-games [<SAVE_GAMES>]      Enable to save ongoing game progress to this directory [default: saves/]
+  -o, --save-logs [<SAVE_LOGS>]        Enable to save logs to this path [default: logs/]
+  -e, --log-level <LOG_LEVEL>          Logging level [default: info] [possible values: off, error, warn, info, debug, trace, full]
+  -l, --load <LOAD>                    Load a save file
+  -d, --debug                          Enables debug mode: increases log level to 'trace', enables saving log files, and enables saving game state
+  -h, --help                           Print help
 ```
 
 ### Controls
@@ -49,6 +54,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Counterclockwise rotation~~
 * ~~Snap tile directly to nearest valid square~~
 * ~~Multiplayer~~
+* ~~Robust logging & debugging functionality~~
 * Persistent host ip & port / Minecraft-style server browser
 * Reconnection for clients who lose connections
 * Return to lobby after game end instead of main menu

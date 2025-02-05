@@ -1,5 +1,5 @@
 use std::{
-    fs::File,
+    fs::{create_dir_all, File},
     io,
     sync::mpsc::{channel, Receiver, Sender},
     thread::{self, JoinHandle},
@@ -8,14 +8,16 @@ use std::{
 
 use std::io::Write as _;
 
+use clap::crate_name;
 use log::{Log, Record};
 
-use crate::{util::SystemTimeExt, Args};
+use crate::{util::SystemTimeExt, Args, LogLevel};
 
 pub struct Logger {
-    args: Args,
     join_handle: Option<JoinHandle<()>>,
     message_sender: Option<Sender<MessageEvent>>,
+    level_filter: log::LevelFilter,
+    full_logs: bool,
 }
 
 #[derive(Clone)]
@@ -39,6 +41,7 @@ impl Logger {
             .map(|mut path| {
                 let now = SystemTime::now();
                 path.push(now.strftime("%Y-%m-%d"));
+                let _ = create_dir_all(&path);
                 path.push(now.strftime("%H-%M-%S.log"));
                 Ok::<_, io::Error>(File::create(path)?)
             })
@@ -47,10 +50,13 @@ impl Logger {
         let message_sender = Some(message_sender);
         let join_handle = thread::spawn(move || Logger::writer_thread(file, message_receiver));
         let join_handle = Some(join_handle);
+        let level_filter = args.log_level.into();
+        let full_logs = matches!(args.log_level, LogLevel::Full);
         Ok(Logger {
-            args,
             join_handle,
             message_sender,
+            level_filter,
+            full_logs,
         })
     }
 
@@ -76,8 +82,18 @@ impl Logger {
 impl Log for Logger {
     fn log(&self, record: &Record) {
         use log::Level::*;
-        let timestamp = SystemTime::now().strftime("$H:$M:$S$.3f");
-        let log_str = format!("[{}|{}] {}", record.level(), timestamp, record.args());
+        if !self.enabled(record.metadata()) {
+            return;
+        }
+        let timestamp = SystemTime::now().strftime("%H:%M:%S%.3f");
+        let log_str = format!(
+            "[{}|{}|{}{}] {}",
+            record.level(),
+            timestamp,
+            record.target(),
+            record.line().map(|x| format!(":{x}")).unwrap_or_default(),
+            record.args()
+        );
         let _ = self
             .message_sender
             .as_ref()
@@ -92,7 +108,8 @@ impl Log for Logger {
     }
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
-        metadata.level() <= self.args.log_level
+        (self.full_logs || metadata.target().starts_with(crate_name!()))
+            && metadata.level() <= self.level_filter
     }
 
     fn flush(&self) {
