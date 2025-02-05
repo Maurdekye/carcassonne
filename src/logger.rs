@@ -15,7 +15,19 @@ use crate::{util::SystemTimeExt, Args};
 pub struct Logger {
     args: Args,
     join_handle: Option<JoinHandle<()>>,
-    message_sender: Option<Sender<Option<String>>>,
+    message_sender: Option<Sender<MessageEvent>>,
+}
+
+#[derive(Clone)]
+enum MessageEventKind {
+    Info,
+    Error,
+}
+
+#[derive(Clone)]
+enum MessageEvent {
+    Message(MessageEventKind, String),
+    Flush,
 }
 
 impl Logger {
@@ -42,14 +54,17 @@ impl Logger {
         })
     }
 
-    fn writer_thread(mut file: Option<File>, message_receiver: Receiver<Option<String>>) {
+    fn writer_thread(mut file: Option<File>, message_receiver: Receiver<MessageEvent>) {
         for message in message_receiver {
             match (message, &mut file) {
-                (None, Some(file)) => file.flush().unwrap(),
-                (Some(message), file) => {
-                    println!("{message}");
+                (MessageEvent::Flush, Some(file)) => file.flush().unwrap(),
+                (MessageEvent::Message(kind, text), file) => {
+                    match kind {
+                        MessageEventKind::Info => println!("{text}"),
+                        MessageEventKind::Error => eprintln!("{text}"),
+                    };
                     if let Some(file) = file {
-                        let _ = writeln!(file, "{message}");
+                        let _ = writeln!(file, "{text}");
                     }
                 }
                 _ => {}
@@ -60,9 +75,20 @@ impl Logger {
 
 impl Log for Logger {
     fn log(&self, record: &Record) {
+        use log::Level::*;
         let timestamp = SystemTime::now().strftime("$H:$M:$S$.3f");
         let log_str = format!("[{}|{}] {}", record.level(), timestamp, record.args());
-        let _ = self.message_sender.as_ref().unwrap().send(Some(log_str));
+        let _ = self
+            .message_sender
+            .as_ref()
+            .unwrap()
+            .send(MessageEvent::Message(
+                match record.level() {
+                    Error | Warn => MessageEventKind::Error,
+                    Info | Debug | Trace => MessageEventKind::Info,
+                },
+                log_str,
+            ));
     }
 
     fn enabled(&self, metadata: &log::Metadata) -> bool {
@@ -70,7 +96,11 @@ impl Log for Logger {
     }
 
     fn flush(&self) {
-        let _ = self.message_sender.as_ref().unwrap().send(None);
+        let _ = self
+            .message_sender
+            .as_ref()
+            .unwrap()
+            .send(MessageEvent::Flush);
     }
 }
 

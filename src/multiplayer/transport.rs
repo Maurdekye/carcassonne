@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     io::{self, ErrorKind, Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4, TcpListener, TcpStream},
@@ -8,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use log::{debug, error};
 use message::{client::ClientMessage, server::ServerMessage, Message};
 
 pub mod message;
@@ -194,6 +194,7 @@ impl MessageServer {
     where
         T: From<(IpAddr, ServerNetworkEvent)> + Send + 'static,
     {
+        debug!("message server starting");
         let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0), port);
         let listener = TcpListener::bind(addr).unwrap();
         listener.set_nonblocking(true).unwrap();
@@ -203,12 +204,13 @@ impl MessageServer {
                     thread::sleep(Duration::from_millis(100));
                 }
                 Ok((stream, socket)) => {
+                    debug!("new client connected: {socket}");
                     let event_sender = event_sender.clone();
                     stream.set_nonblocking(false).unwrap();
                     let mut transport = ServersideTransport::new(stream);
                     let _ = transport.0.send(&Message::YourSocket(socket));
                     let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
-                        eprintln!("Expected socket response from client");
+                        error!("Expected socket response from client");
                         continue;
                     };
                     {
@@ -225,9 +227,13 @@ impl MessageServer {
                     }
                     thread::spawn(move || Self::connection_thread(event_sender, transport, socket));
                 }
-                Err(e) => panic!("{e}"),
+                Err(e) => {
+                    error!("Message server listener error: {e}");
+                    panic!();
+                }
             }
         }
+        debug!("message server shutting down");
     }
 
     fn connection_thread<T>(
@@ -247,7 +253,7 @@ impl MessageServer {
         }) else {
             return;
         };
-        println!("{err}");
+        debug!("connection ended with {socket}: {err}");
         let _ = (send_event)(NetworkEvent::Disconnect);
     }
 }
@@ -286,12 +292,14 @@ impl MessageClient {
         while deathswitch.try_recv().is_err() {
             let _: Result<_, io::Error> = try {
                 let stream = TcpStream::connect(socket)?;
+                debug!("connected to {socket}");
                 let Err(err): Result<_, io::Error> = (try {
                     let mut transport = ClientsideTransport::new(stream);
                     {
                         let mut transport = transport.try_clone().unwrap();
                         let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
-                            panic!("Expected socket message from server");
+                            error!("Expected socket message from server");
+                            panic!();
                         };
                         let _ = transport.0.send(&Message::YourSocket(socket));
                         event_sender
@@ -314,7 +322,7 @@ impl MessageClient {
                 }) else {
                     return;
                 };
-                println!("{err}");
+                debug!("connection ended with {socket}: {err}");
                 let _ = event_sender.send(NetworkEvent::Disconnect.into());
             };
         }

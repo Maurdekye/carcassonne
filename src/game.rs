@@ -5,6 +5,7 @@ use ggez::{
     graphics::Color,
     GameError,
 };
+use log::warn;
 use player::{Player, PlayerType};
 use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
@@ -813,10 +814,11 @@ impl Game {
                         }
 
                         // no line segments remaining, just place the incomplete line into polylines (and print a warning)
+                        warn!("Incomplete line segment created!");
+                        warn!("Incomplete segment: {current_line:?}");
                         polylines.push(current_line);
                         current_line = VecDeque::new();
                         // sdgb!(&polylines);
-                        eprintln!("Incomplete line segment created!");
                     }
                 }
                 _ => unimplemented!("non-border coordinate capped lines"),

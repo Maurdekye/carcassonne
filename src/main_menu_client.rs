@@ -10,7 +10,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     GameError,
 };
-use log::trace;
+use log::{trace, warn};
 
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
@@ -174,7 +174,7 @@ impl MainMenuClient {
             }
             MainMenuEvent::StartGame => {
                 if self.selected_colors.len() < 2 {
-                    eprintln!("Can't start a game with less than two players!");
+                    warn!("Can't start a game with less than two players!");
                 } else {
                     self.parent_channel
                         .send(MainEvent::StartGame(self.selected_colors.clone()))
