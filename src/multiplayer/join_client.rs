@@ -187,7 +187,7 @@ impl JoinClient {
                                 ctx,
                                 self.shared.clone(),
                                 self.parent_channel.clone(),
-                                state,
+                                *state,
                                 Some(self.connection.as_ref().unwrap().1),
                             ));
                         }

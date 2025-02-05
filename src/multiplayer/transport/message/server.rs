@@ -22,7 +22,7 @@ pub enum ServerMessage {
     StartGame {
         game_seed: u64,
     },
-    GameState(GameState),
+    GameState(Box<GameState>),
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
