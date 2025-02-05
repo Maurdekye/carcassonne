@@ -3,6 +3,7 @@ use ggez::{
     input::keyboard::KeyCode,
     Context, GameError,
 };
+use log::trace;
 use std::{
     cell::{Cell, RefCell},
     rc::Rc,
@@ -129,6 +130,7 @@ impl MainPauseMenuSubclient {
         _ctx: &mut Context,
         event: MainPauseMenuEvent,
     ) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         use MainPauseMenuEvent::*;
         match event {
             PauseScreenEvent(event) => self.parent_channel.send(event).unwrap(),

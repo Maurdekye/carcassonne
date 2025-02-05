@@ -7,20 +7,26 @@ use std::{net::IpAddr, path::PathBuf, time::Duration};
 
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
-    conf::{WindowMode, WindowSetup},
+    conf::{FullscreenType, WindowMode, WindowSetup},
     event, ContextBuilder, GameResult,
 };
+use log::{debug, info};
+use logger::Logger;
 use main_client::MainClient;
+use shared::SharedResources;
+use util::ResultExt;
 
 mod colors;
 mod game;
 mod game_client;
 mod keycode;
 mod line;
+mod logger;
 mod main_client;
 mod main_menu_client;
 mod multiplayer;
 mod pos;
+mod shared;
 mod sub_event_handler;
 mod tile;
 mod ui_manager;
@@ -55,10 +61,10 @@ enum DebugGameConfiguration {
     GroupCoallation,
 }
 
-#[derive(Parser, Clone)]
+#[derive(Parser, Clone, Debug)]
 struct Args {
-    /// Start in fullscreen; optionally provide a resolution to run with that res. [default: 1920x1080]
-    #[arg(short, long, value_parser = fullscreen_value_parser)]
+    /// Start in fullscreen; optionally provide a resolution to run with that res.
+    #[arg(short, long, value_parser = fullscreen_value_parser, default_missing_value = "1920x1080")]
     fullscreen: Option<Option<(usize, usize)>>,
 
     /// Immediately start a debug game configuration
@@ -81,9 +87,17 @@ struct Args {
     #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
     ping_interval: Duration,
 
-    /// Enable to save ongoing game progress to this directory [default: saves/]
-    #[arg(short = 'v', long)]
-    save_directory: Option<Option<PathBuf>>,
+    /// Enable to save ongoing game progress to this directory
+    #[arg(short = 'v', long, default_missing_value = "saves/")]
+    save_games: Option<Option<PathBuf>>,
+
+    /// Enable to save logs to this path
+    #[arg(short = 'o', long, default_missing_value = "logs/")]
+    save_logs: Option<Option<PathBuf>>,
+
+    /// Logging level
+    #[arg(short = 'e', long, default_value = "info")]
+    log_level: log::LevelFilter,
 
     /// Load a save file
     #[arg(short, long)]
@@ -92,25 +106,36 @@ struct Args {
 
 fn main() -> GameResult {
     let args = Args::parse();
+    let logger = Logger::new(args.clone())?;
+    log::set_boxed_logger(Box::new(logger))
+        .map(|()| log::set_max_level(args.log_level))
+        .as_gameerror()?;
 
-    let window_mode = if let Some(fullscreen_res) = args.fullscreen {
-        let (w, h) = fullscreen_res.unwrap_or((1920, 1080));
+    info!("Logger initialized");
+    info!("Arguments: {args:#?}");
+
+    let shared = SharedResources { args };
+
+    let window_mode = if let Some(fullscreen_res) = shared.args.fullscreen {
+        let (w, h) = fullscreen_res.unwrap();
         WindowMode::default()
             .dimensions(w as f32, h as f32)
-            .fullscreen_type(ggez::conf::FullscreenType::Desktop)
+            .fullscreen_type(FullscreenType::Desktop)
             .borderless(true)
     } else {
         WindowMode::default()
             .dimensions(1280.0, 720.0)
             .resizable(true)
     };
+    debug!("window_mode = {window_mode:?}");
 
     let (ctx, event_loop) = ContextBuilder::new("carcassonne", "maurdekye")
         .window_mode(window_mode)
         .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
-    let client = MainClient::new(args);
+    let client = MainClient::new(shared);
+    debug!("initialized main client");
 
     event::run(ctx, event_loop, client);
 }

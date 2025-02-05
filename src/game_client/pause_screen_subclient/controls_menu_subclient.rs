@@ -4,6 +4,7 @@ use ggez::{
     input::keyboard::KeyCode,
     Context, GameError,
 };
+use log::trace;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
@@ -15,7 +16,7 @@ use crate::{
 
 use super::PauseScreenEvent;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ControlsMenuEvent {
     PauseScreenEvent(PauseScreenEvent),
 }
@@ -51,6 +52,7 @@ impl ControlsMenuSubclient {
         _ctx: &mut Context,
         event: ControlsMenuEvent,
     ) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         match event {
             ControlsMenuEvent::PauseScreenEvent(event) => self.parent_channel.send(event).unwrap(),
         }

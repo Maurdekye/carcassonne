@@ -12,6 +12,7 @@ use ggez::{
     graphics::{Canvas, Color, Rect, Text},
     Context, GameError, GameResult,
 };
+use log::{debug, info, trace};
 
 use crate::{
     game::player::PlayerType,
@@ -20,7 +21,7 @@ use crate::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
-    Args,
+    SharedResources,
 };
 
 use super::{
@@ -32,13 +33,14 @@ use super::{
     MultiplayerPhase,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum UIEvent {
     MainEvent(MainEvent),
     StartGame,
 }
 
 #[allow(clippy::enum_variant_names)]
+#[derive(Debug)]
 enum HostEvent {
     UIEvent(UIEvent),
     NetworkEvent {
@@ -83,7 +85,7 @@ pub enum IpOrHost {
 }
 
 pub struct HostClient {
-    args: Args,
+    shared: SharedResources,
     parent_channel: Sender<MainEvent>,
     _event_sender: Sender<HostEvent>,
     event_receiver: Receiver<HostEvent>,
@@ -96,7 +98,11 @@ pub struct HostClient {
 }
 
 impl HostClient {
-    pub fn new(parent_channel: Sender<MainEvent>, args: Args, port: u16) -> HostClient {
+    pub fn new(
+        parent_channel: Sender<MainEvent>,
+        shared: SharedResources,
+        port: u16,
+    ) -> HostClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let (ui, [_, UIElement::Button(start_game_button)]) = UIManager::new_and_rc_elements(
@@ -122,7 +128,7 @@ impl HostClient {
         start_game_button.borrow_mut().state = UIElementState::Disabled;
         let message_server = MessageServer::start(event_sender.clone(), port);
         let mut this = HostClient {
-            args,
+            shared,
             parent_channel,
             ui,
             _message_server: message_server,
@@ -155,6 +161,7 @@ impl HostClient {
     }
 
     fn broadcast_filter(&mut self, message: ServerMessage, filter: impl Fn(IpAddr) -> bool) {
+        trace!("message = {message:?}");
         for client_info in self
             .users
             .values_mut()
@@ -207,10 +214,11 @@ impl HostClient {
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: HostEvent) -> GameResult<()> {
+        trace!("event = {event:?}");
         match event {
             HostEvent::NetworkEvent { src_addr, event } => match event {
                 NetworkEvent::Connect { transport, .. } => {
-                    println!("[{src_addr:?}] connected");
+                    debug!("[{src_addr:?}] connected");
                     self.add_client(
                         transport,
                         ClientInfo {
@@ -220,7 +228,7 @@ impl HostClient {
                     );
                 }
                 NetworkEvent::Message(client_message) => {
-                    println!("[{src_addr:?}] {client_message:?}");
+                    debug!("[{src_addr:?}] message: {client_message:?}");
                     let host_client = self.users.get_mut(&IpOrHost::Ip(src_addr)).unwrap();
                     let host_client_info = host_client.client_info.as_mut().unwrap();
                     match client_message {
@@ -257,7 +265,7 @@ impl HostClient {
                     }
                 }
                 NetworkEvent::Disconnect => {
-                    println!("[{src_addr:?}] disconnected");
+                    debug!("[{src_addr:?}] disconnected");
                     self.users.remove(&IpOrHost::Ip(src_addr));
                     self.update_lobby_clients();
                 }
@@ -284,12 +292,12 @@ impl HostClient {
     }
 
     fn start_game(&mut self, ctx: &Context) {
-        println!("Game Start!");
+        info!("Game Start!");
         let game_seed = rand::random();
         self.broadcast(ServerMessage::StartGame { game_seed });
         self.phase = MultiplayerPhase::new_game(
             ctx,
-            self.args.clone(),
+            self.shared.clone(),
             self.parent_channel.clone(),
             self.users.values().map(|user| user.user.clone()).collect(),
             game_seed,
@@ -305,7 +313,7 @@ impl HostClient {
             .values_mut()
             .filter_map(|user| user.client_info.as_mut())
         {
-            if now - client.last_ping > self.args.ping_interval {
+            if now - client.last_ping > self.shared.args.ping_interval {
                 client.last_ping = now;
                 client.transport.blind_send(ServerMessage::Ping);
                 updated_ping = true;

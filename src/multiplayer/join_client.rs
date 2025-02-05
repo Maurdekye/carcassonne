@@ -11,6 +11,7 @@ use ggez::{
     graphics::{Canvas, Color, Rect, Text},
     Context, GameError, GameResult,
 };
+use log::{debug, info, trace};
 
 use crate::{
     main_client::MainEvent,
@@ -21,7 +22,7 @@ use crate::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
-    Args,
+    SharedResources,
 };
 
 use super::{
@@ -36,12 +37,13 @@ use super::{
     MultiplayerPhase,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum UIEvent {
     MainEvent(MainEvent),
 }
 
 #[allow(clippy::enum_variant_names)]
+#[derive(Debug)]
 enum JoinEvent {
     NetworkEvent(ClientNetworkEvent),
     UIEvent(UIEvent),
@@ -70,7 +72,7 @@ pub struct JoinClient {
     parent_channel: Sender<MainEvent>,
     event_sender: Sender<JoinEvent>,
     event_receiver: Receiver<JoinEvent>,
-    args: Args,
+    shared: SharedResources,
     ui: UIManager<UIEvent, JoinEvent>,
     _message_client: MessageClient,
     connection: Option<(ClientsideTransport, IpAddr)>,
@@ -82,7 +84,7 @@ pub struct JoinClient {
 }
 
 impl JoinClient {
-    pub fn new(parent_channel: Sender<MainEvent>, args: Args, socket: SocketAddr) -> Self {
+    pub fn new(parent_channel: Sender<MainEvent>, shared: SharedResources, socket: SocketAddr) -> Self {
         let (event_sender, event_receiver) = channel();
         let (ui, [UIElement::Button(back_button)]) = UIManager::new_and_rc_elements(
             event_sender.clone(),
@@ -100,7 +102,7 @@ impl JoinClient {
             event_sender,
             event_receiver,
             ui,
-            args,
+            shared,
             _message_client: message_client,
             connection: None,
             last_ping: Instant::now(),
@@ -112,9 +114,10 @@ impl JoinClient {
     }
 
     fn start_game(&mut self, ctx: &Context, users: Vec<User>, seed: u64) {
+        info!("Game start!");
         self.phase = Some(MultiplayerPhase::new_game(
             ctx,
-            self.args.clone(),
+            self.shared.clone(),
             self.parent_channel.clone(),
             users,
             seed,
@@ -123,13 +126,14 @@ impl JoinClient {
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: JoinEvent) -> GameResult<()> {
+        trace!("event = {event:?}");
         match event {
             JoinEvent::NetworkEvent(network_event) => match network_event {
                 NetworkEvent::Connect {
                     transport,
                     my_socket_addr,
                 } => {
-                    println!("connected");
+                    debug!("disconnected");
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         Some(my_socket_addr.ip()),
@@ -138,7 +142,7 @@ impl JoinClient {
                     self.connection = Some((transport, my_socket_addr.ip()));
                 }
                 NetworkEvent::Message(server_message) => {
-                    println!("{server_message:?}");
+                    debug!("received {server_message:?}");
                     let mut server = LazyCell::new(|| &mut self.connection.as_mut().unwrap().0);
                     match server_message {
                         ServerMessage::Pong => {
@@ -177,7 +181,7 @@ impl JoinClient {
                     }
                 }
                 NetworkEvent::Disconnect => {
-                    println!("disconnected");
+                    debug!("disconnected");
                     self.connection = None;
                     self.latency = None;
                     self.phase = None;
@@ -231,6 +235,7 @@ impl SubEventHandler<GameError> for JoinClient {
                 (phase, &mut self.connection)
             {
                 while let Ok(message) = action_channel.try_recv() {
+                    debug!("sending {message:?}");
                     connection.blind_send(ClientMessage::Game(message));
                 }
             }
@@ -238,7 +243,7 @@ impl SubEventHandler<GameError> for JoinClient {
 
         if let Some((connection, _)) = &mut self.connection {
             let now = Instant::now();
-            if now - self.last_ping > self.args.ping_interval {
+            if now - self.last_ping > self.shared.args.ping_interval {
                 connection.blind_send(ClientMessage::Ping);
                 self.last_ping = now;
             }

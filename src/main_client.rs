@@ -13,6 +13,7 @@ use ggez::{
     },
     Context, GameError,
 };
+use log::{info, trace};
 
 use crate::{
     game_client::GameClient,
@@ -21,7 +22,7 @@ use crate::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
     },
     sub_event_handler::SubEventHandler,
-    Args, DebugGameConfiguration,
+    DebugGameConfiguration, SharedResources,
 };
 
 #[derive(Clone, Debug)]
@@ -41,36 +42,37 @@ pub struct MainClient {
     event_sender: Sender<MainEvent>,
     event_receiver: Receiver<MainEvent>,
     quitting: bool,
-    args: Args,
+    shared: SharedResources,
 }
 
 impl MainClient {
-    pub fn new(args: Args) -> MainClient {
+    pub fn new(shared: SharedResources) -> MainClient {
         let (event_sender, event_receiver) = channel();
-        if let Some(load_path) = &args.load {
+        if let Some(load_path) = &shared.args.load {
             event_sender
                 .send(MainEvent::LoadGame(load_path.clone()))
                 .unwrap();
-        } else if let Some(debug_config) = &args.debug_config {
+        } else if let Some(debug_config) = &shared.args.debug_config {
             event_sender
                 .send(MainEvent::StartDebugGame(debug_config.clone()))
                 .unwrap();
         }
         MainClient {
-            scene: Box::new(MainMenuClient::new(event_sender.clone(), args.clone())),
+            scene: Box::new(MainMenuClient::new(event_sender.clone(), shared.clone())),
             event_sender,
             event_receiver,
             quitting: false,
-            args,
+            shared,
         }
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: MainEvent) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         match event {
             MainEvent::StartGame(player_colors) => {
                 self.scene = Box::new(GameClient::new(
                     ctx,
-                    self.args.clone(),
+                    self.shared.clone(),
                     player_colors,
                     self.event_sender.clone(),
                 ))
@@ -78,7 +80,7 @@ impl MainClient {
             MainEvent::MainMenu => {
                 self.scene = Box::new(MainMenuClient::new(
                     self.event_sender.clone(),
-                    self.args.clone(),
+                    self.shared.clone(),
                 ))
             }
             MainEvent::Close => {
@@ -88,7 +90,7 @@ impl MainClient {
             MainEvent::LoadGame(path) => {
                 self.scene = Box::new(GameClient::load(
                     ctx,
-                    self.args.clone(),
+                    self.shared.clone(),
                     self.event_sender.clone(),
                     None,
                     path,
@@ -97,7 +99,7 @@ impl MainClient {
             MainEvent::StartDebugGame(config) => {
                 self.scene = Box::new(GameClient::new_with_game(
                     ctx,
-                    self.args.clone(),
+                    self.shared.clone(),
                     config.get_game()?,
                     self.event_sender.clone(),
                 ));
@@ -105,21 +107,21 @@ impl MainClient {
             MainEvent::MultiplayerHost(port) => {
                 self.scene = Box::new(HostClient::new(
                     self.event_sender.clone(),
-                    self.args.clone(),
+                    self.shared.clone(),
                     port,
                 ));
             }
             MainEvent::MultiplayerJoin(socket) => {
                 self.scene = Box::new(JoinClient::new(
                     self.event_sender.clone(),
-                    self.args.clone(),
+                    self.shared.clone(),
                     socket,
                 ));
             }
             MainEvent::MultiplayerMenu => {
                 self.scene = Box::new(MultiplayerMenuClient::new(
                     self.event_sender.clone(),
-                    self.args.clone(),
+                    self.shared.clone(),
                 ));
             }
         }
@@ -153,6 +155,7 @@ impl EventHandler<GameError> for MainClient {
     }
 
     fn quit_event(&mut self, ctx: &mut Context) -> Result<bool, GameError> {
+        info!("Quitting");
         match (self.quitting, ctx.keyboard.is_key_pressed(KeyCode::Escape)) {
             (true, _) => Ok(false),
             (_, true) => Ok(true),

@@ -4,7 +4,6 @@ use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::SystemTime;
 
@@ -24,9 +23,9 @@ use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
 use crate::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
-    SystemTimeExt, TextExt,
+    ResultExt, SystemTimeExt, TextExt,
 };
-use crate::Args;
+use crate::SharedResources;
 
 use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -36,6 +35,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     Context, GameError, GameResult,
 };
+use log::{debug, trace};
 use pause_screen_subclient::PauseScreenSubclient;
 use rand::{seq::SliceRandom, thread_rng};
 use serde::{Deserialize, Serialize};
@@ -155,13 +155,13 @@ pub struct GameClient {
     ui: UIManager<GameEvent, GameEvent>,
     camera_movement: Vec2,
     creation_time: SystemTime,
-    args: Args,
+    shared: SharedResources,
 }
 
 impl GameClient {
     pub fn new(
         ctx: &Context,
-        args: Args,
+        shared: SharedResources,
         players: Vec<Color>,
         parent_channel: Sender<MainEvent>,
     ) -> Self {
@@ -172,12 +172,12 @@ impl GameClient {
         }
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
             .unwrap();
-        Self::new_with_game(ctx, args, game, parent_channel)
+        Self::new_with_game(ctx, shared, game, parent_channel)
     }
 
     pub fn new_with_game(
         ctx: &Context,
-        args: Args,
+        args: SharedResources,
         game: Game,
         parent_channel: Sender<MainEvent>,
     ) -> Self {
@@ -186,7 +186,7 @@ impl GameClient {
 
     pub fn new_with_game_and_action_channel(
         ctx: &Context,
-        args: Args,
+        shared: SharedResources,
         mut game: Game,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameMessage>>,
@@ -194,7 +194,7 @@ impl GameClient {
         let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
         GameClient::new_from_state(
             ctx,
-            args,
+            shared,
             GameState {
                 turn_phase: TurnPhase::TilePlacement {
                     tile: first_tile,
@@ -211,7 +211,7 @@ impl GameClient {
 
     pub fn new_from_state(
         ctx: &Context,
-        args: Args,
+        shared: SharedResources,
         state: GameState,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameMessage>>,
@@ -267,7 +267,7 @@ impl GameClient {
             ui,
             camera_movement: Vec2::ZERO,
             creation_time: SystemTime::now(),
-            args,
+            shared,
         };
         this.reset_camera(ctx);
         this
@@ -275,7 +275,7 @@ impl GameClient {
 
     pub fn load(
         ctx: &Context,
-        args: Args,
+        args: SharedResources,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameMessage>>,
         path: PathBuf,
@@ -283,8 +283,7 @@ impl GameClient {
         let mut file = File::open(path)?;
         let mut file_contents = Vec::new();
         file.read_to_end(&mut file_contents)?;
-        let mut state: GameState = bincode::deserialize(&file_contents)
-            .map_err(|e| GameError::CustomError(e.to_string()))?;
+        let mut state: GameState = bincode::deserialize(&file_contents).as_gameerror()?;
         for (_, player) in &mut state.game.players {
             player.ptype = PlayerType::Local;
         }
@@ -298,23 +297,22 @@ impl GameClient {
     }
 
     fn save(&self, mut path: PathBuf) -> GameResult<()> {
-        path.push(self.creation_time.format_pathname());
+        path.push(self.creation_time.strftime("%Y-%m-%d_%H-%M-%S"));
         let _ = create_dir_all(&path);
-        path.push(format!("{}.save", SystemTime::now().format_filename()));
-        let game_state: Vec<u8> =
-            bincode::serialize(&self.state).map_err(|e| GameError::CustomError(e.to_string()))?;
+        path.push(format!(
+            "{}.save",
+            SystemTime::now().strftime("%Y-%m-%d_%H-%M-%S%.3f")
+        ));
+        debug!("saving game state to {}", path.to_str().unwrap_or_default());
+        let game_state: Vec<u8> = bincode::serialize(&self.state).as_gameerror()?;
         let mut file = File::create(path)?;
         file.write_all(&game_state)?;
         Ok(())
     }
 
     fn push_history(&mut self) -> GameResult<()> {
-        if let Some(base_path) = &self.args.save_directory {
-            self.save(
-                base_path
-                    .clone()
-                    .unwrap_or(PathBuf::from_str("saves/").unwrap()),
-            )?;
+        if let Some(Some(base_path)) = &self.shared.args.save_games {
+            self.save(base_path.clone())?;
         }
         self.history.push(self.state.clone());
         Ok(())
@@ -322,11 +320,13 @@ impl GameClient {
 
     fn pop_history(&mut self) {
         if let Some(state) = self.history.pop() {
+            debug!("pop history");
             self.state = state;
         }
     }
 
     fn reset_camera(&mut self, ctx: &Context) {
+        debug!("camera reset");
         self.scale = 0.1;
         self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
         self.camera_movement = Vec2::ZERO;
@@ -369,7 +369,7 @@ impl GameClient {
         };
 
         let mut placement_validity = self.is_placement_valid(selected_square);
-        if self.args.snap_placement {
+        if self.shared.args.snap_placement {
             for _ in 0..4 {
                 if placement_validity != ValidWithDifferentRotation {
                     break;
@@ -569,6 +569,7 @@ impl GameClient {
     }
 
     fn skip_meeples(&mut self, ctx: &Context) -> GameResult<()> {
+        debug!("skipping meeple placement");
         if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.state.turn_phase {
             let groups_to_close = closed_groups.clone();
             self.push_history()?;
@@ -584,6 +585,7 @@ impl GameClient {
     }
 
     fn handle_event(&mut self, ctx: &mut Context, event: GameEvent) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         match event {
             GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
             GameEvent::SkipMeeples => {
@@ -613,6 +615,7 @@ impl GameClient {
     }
 
     pub fn handle_message(&mut self, ctx: &mut Context, message: GameMessage) -> GameResult<()> {
+        trace!("received {message:?}");
         match message {
             GameMessage::PlaceTile {
                 selected_square,
@@ -677,6 +680,7 @@ impl GameClient {
     }
 
     fn place_tile(&mut self, ctx: &mut Context, focused_pos: GridPos) -> Result<(), GameError> {
+        debug!("place_tile at {focused_pos:?}");
         self.push_history()?;
 
         let tile = self.get_held_tile_mut().unwrap().clone();
@@ -715,6 +719,7 @@ impl GameClient {
         seg_ident: SegmentIdentifier,
         player_ident: PlayerIdentifier,
     ) -> Result<(), GameError> {
+        debug!("player {player_ident:?} placing meeple at {seg_ident:?}");
         self.push_history()?;
 
         self.state.game.place_meeple(seg_ident, player_ident)?;
@@ -724,6 +729,7 @@ impl GameClient {
     }
 
     fn broadcast_action(&mut self, message: GameMessage) {
+        trace!("sending {message:?}");
         if let Some(action_channel) = &mut self.action_channel {
             let _ = action_channel.send(message);
         }
@@ -1166,7 +1172,7 @@ impl GameClient {
                     return Ok(());
                 }
 
-                if self.args.snap_placement {
+                if self.shared.args.snap_placement {
                     let gameboard_pos = gameboard_pos - vec2(0.5, 0.5);
                     self.set_selected_square(
                         placeable_positions

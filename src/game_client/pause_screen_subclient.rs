@@ -4,6 +4,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     Context, GameError,
 };
+use log::trace;
 use main_pause_menu_subclient::MainPauseMenuSubclient;
 use rules_menu_subclient::RulesMenuSubclient;
 use std::{
@@ -79,6 +80,7 @@ impl PauseScreenSubclient {
         event: PauseScreenEvent,
     ) -> Result<(), GameError> {
         use PauseScreenEvent::*;
+        trace!("event = {event:?}");
         match event {
             GameEvent(event) => self.parent_channel.send(event).unwrap(),
             MainMenu => {

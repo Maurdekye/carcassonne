@@ -5,6 +5,7 @@ use ggez::{
     graphics::{Color, Rect, Text},
     GameError,
 };
+use log::trace;
 
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
@@ -15,7 +16,7 @@ use crate::{
 
 use super::transport::message::server::{LobbyMessage, User};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LobbyEvent {
     ChooseColor(Option<Color>),
 }
@@ -78,6 +79,7 @@ where
     }
 
     pub fn handle_message(&mut self, message: LobbyMessage) -> Result<(), GameError> {
+        trace!("message = {message:?}");
         #[allow(clippy::single_match)]
         match message {
             LobbyMessage::LobbyState(state) => {

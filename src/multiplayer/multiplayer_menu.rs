@@ -11,18 +11,19 @@ use ggez::{
     graphics::{Canvas, Color, Rect, Text},
     Context, GameError, GameResult,
 };
+use log::trace;
 
 use crate::{
     main_client::MainEvent,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, TextInput, UIElement, UIManager},
     util::{AnchorPoint, ContextExt, RectExt, TextExt},
-    Args,
+    SharedResources,
 };
 
 const ERROR_DISPLAY_PERIOD: Duration = Duration::from_secs(10);
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum MultiplayerMenuEvent {
     MainEvent(MainEvent),
     JoinLobby,
@@ -31,7 +32,7 @@ enum MultiplayerMenuEvent {
 
 pub struct MultiplayerMenuClient {
     parent_channel: Sender<MainEvent>,
-    _args: Args,
+    _shared: SharedResources,
     _event_sender: Sender<MultiplayerMenuEvent>,
     event_receiver: Receiver<MultiplayerMenuEvent>,
     ui: UIManager<MultiplayerMenuEvent, MultiplayerMenuEvent>,
@@ -43,7 +44,7 @@ pub struct MultiplayerMenuClient {
 }
 
 impl MultiplayerMenuClient {
-    pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MultiplayerMenuClient {
+    pub fn new(parent_channel: Sender<MainEvent>, shared: SharedResources) -> MultiplayerMenuClient {
         let (event_sender, event_receiver) = channel();
         let (
             ui,
@@ -90,15 +91,15 @@ impl MultiplayerMenuClient {
         };
         {
             let mut ip_input = ip_input.borrow_mut();
-            ip_input.text = args.ip.map_or(String::new(), |ip| ip.to_string());
+            ip_input.text = shared.args.ip.map_or(String::new(), |ip| ip.to_string());
             let mut port_input = port_input.borrow_mut();
             port_input.maxlen = Some(5);
-            port_input.text = args.port.to_string();
+            port_input.text = shared.args.port.to_string();
         }
 
         MultiplayerMenuClient {
             parent_channel,
-            _args: args,
+            _shared: shared,
             _event_sender: event_sender,
             event_receiver,
             ui,
@@ -127,6 +128,7 @@ impl MultiplayerMenuClient {
     }
 
     fn handle_event(&mut self, _ctx: &mut Context, event: MultiplayerMenuEvent) -> GameResult<()> {
+        trace!("event = {event:?}");
         match event {
             MultiplayerMenuEvent::MainEvent(main_event) => {
                 self.parent_channel.send(main_event).unwrap()

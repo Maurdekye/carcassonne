@@ -15,14 +15,14 @@ use crate::{
     pos::GridPos,
     sub_event_handler::SubEventHandler,
     tile::{tile_definitions::STARTING_TILE, Tile},
-    Args,
+    SharedResources,
 };
 
 pub mod host_client;
 pub mod join_client;
 mod lobby_client;
-pub mod transport;
 pub mod multiplayer_menu;
+pub mod transport;
 
 enum MultiplayerPhase<T> {
     Lobby(LobbyClient<T>),
@@ -35,7 +35,7 @@ enum MultiplayerPhase<T> {
 impl<T> MultiplayerPhase<T> {
     pub fn new_game(
         ctx: &Context,
-        args: Args,
+        args: SharedResources,
         parent_channel: Sender<MainEvent>,
         users: Vec<User>,
         seed: u64,
@@ -54,7 +54,13 @@ impl<T> MultiplayerPhase<T> {
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
             .unwrap();
         MultiplayerPhase::Game {
-            game: GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, Some(action_sender)),
+            game: GameClient::new_with_game_and_action_channel(
+                ctx,
+                args,
+                game,
+                parent_channel,
+                Some(action_sender),
+            ),
             action_channel,
         }
     }

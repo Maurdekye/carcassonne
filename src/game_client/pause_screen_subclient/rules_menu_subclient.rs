@@ -4,6 +4,7 @@ use ggez::{
     input::keyboard::KeyCode,
     Context, GameError,
 };
+use log::trace;
 use std::{
     cell::RefCell,
     rc::Rc,
@@ -21,7 +22,7 @@ use super::PauseScreenEvent;
 
 const NUM_PAGES: usize = 11;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum RulesMenuEvent {
     PauseScreenEvent(PauseScreenEvent),
     PreviousPage,
@@ -84,6 +85,7 @@ impl RulesMenuSubclient {
     }
 
     fn handle_event(&mut self, _ctx: &mut Context, event: RulesMenuEvent) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         match event {
             RulesMenuEvent::PauseScreenEvent(event) => self.parent_channel.send(event).unwrap(),
             RulesMenuEvent::PreviousPage => {

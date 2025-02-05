@@ -10,6 +10,7 @@ use ggez::{
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
     GameError,
 };
+use log::trace;
 
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
@@ -17,7 +18,7 @@ use crate::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
     util::{AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt},
-    Args,
+    SharedResources,
 };
 
 #[derive(Clone, Debug)]
@@ -37,7 +38,7 @@ pub struct MainMenuClient {
     parent_channel: Sender<MainEvent>,
     _event_sender: Sender<MainMenuEvent>,
     event_receiver: Receiver<MainMenuEvent>,
-    _args: Args,
+    _args: SharedResources,
     ui: UIManager<MainMenuEvent, MainMenuEvent>,
     color_selection_ui: UIManager<Color, MainMenuEvent>,
     color_selection_buttons: [Rc<RefCell<Button<Color>>>; NUM_PLAYERS],
@@ -58,7 +59,7 @@ impl MainMenuClient {
     };
     const DESELECTED_COLOR: Color = BUTTON_COLOR;
 
-    pub fn new(parent_channel: Sender<MainEvent>, args: Args) -> MainMenuClient {
+    pub fn new(parent_channel: Sender<MainEvent>, args: SharedResources) -> MainMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let (ui, [UIElement::Button(start_game_button), ..]) = UIManager::new_and_rc_elements(
@@ -145,6 +146,7 @@ impl MainMenuClient {
     }
 
     fn handle_event(&mut self, event: MainMenuEvent) -> Result<(), GameError> {
+        trace!("event = {event:?}");
         match event {
             MainMenuEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
             MainMenuEvent::SelectColor(color) => {

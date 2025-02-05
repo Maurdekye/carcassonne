@@ -14,6 +14,7 @@ pub mod message;
 
 const MAX_PACKET_SIZE: usize = 16 * 1024 * 1024;
 
+#[derive(Debug)]
 pub enum NetworkEvent<T, M> {
     Connect {
         transport: T,
@@ -26,6 +27,7 @@ pub enum NetworkEvent<T, M> {
 pub type ServerNetworkEvent = NetworkEvent<ServersideTransport, ClientMessage>;
 pub type ClientNetworkEvent = NetworkEvent<ClientsideTransport, ServerMessage>;
 
+#[derive(Debug)]
 pub struct MessageTransporter(TcpStream);
 
 impl MessageTransporter {
@@ -76,6 +78,7 @@ impl Deref for MessageTransporter {
     }
 }
 
+#[derive(Debug)]
 pub struct ClientsideTransport(MessageTransporter);
 
 impl ClientsideTransport {
@@ -120,6 +123,7 @@ impl DerefMut for ClientsideTransport {
     }
 }
 
+#[derive(Debug)]
 pub struct ServersideTransport(MessageTransporter);
 
 impl ServersideTransport {

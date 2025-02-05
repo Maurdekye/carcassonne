@@ -401,20 +401,28 @@ impl RectExt for Rect {
 }
 
 pub trait SystemTimeExt {
-    fn format_pathname(self) -> String;
-    fn format_filename(self) -> String;
+    fn strftime(self, format_str: &str) -> String;
 }
 
 impl SystemTimeExt for SystemTime {
-    fn format_pathname(self) -> String {
-        <DateTime<Utc>>::from(self)
-            .format("%Y-%m-%d_%H-%M-%S")
-            .to_string()
+    fn strftime(self, format_str: &str) -> String {
+        <DateTime<Utc>>::from(self).format(format_str).to_string()
     }
-    
-    fn format_filename(self) -> String {
-        <DateTime<Utc>>::from(self)
-            .format("%Y-%m-%d_%H-%M-%S%.3f")
-            .to_string()
+}
+
+pub trait ResultExt {
+    type T;
+
+    fn as_gameerror(self) -> Result<Self::T, GameError>;
+}
+
+impl<T, E> ResultExt for Result<T, E>
+where
+    E: ToString,
+{
+    type T = T;
+
+    fn as_gameerror(self) -> Result<Self::T, GameError> {
+        self.map_err(|e| GameError::CustomError(e.to_string()))
     }
 }
