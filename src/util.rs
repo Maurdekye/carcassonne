@@ -413,7 +413,7 @@ impl SystemTimeExt for SystemTime {
 pub trait ResultExt {
     type T;
 
-    fn as_gameerror(self) -> Result<Self::T, GameError>;
+    fn to_gameerror(self) -> Result<Self::T, GameError>;
 }
 
 impl<T, E> ResultExt for Result<T, E>
@@ -422,7 +422,7 @@ where
 {
     type T = T;
 
-    fn as_gameerror(self) -> Result<Self::T, GameError> {
+    fn to_gameerror(self) -> Result<Self::T, GameError> {
         self.map_err(|e| GameError::CustomError(e.to_string()))
     }
 }

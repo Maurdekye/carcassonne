@@ -321,7 +321,7 @@ impl GameClient {
         let mut file = File::open(path)?;
         let mut file_contents = Vec::new();
         file.read_to_end(&mut file_contents)?;
-        let mut state: GameState = bincode::deserialize(&file_contents).as_gameerror()?;
+        let mut state: GameState = bincode::deserialize(&file_contents).to_gameerror()?;
         for (_, player) in &mut state.game.players {
             player.ptype = PlayerType::Local;
         }
@@ -342,7 +342,7 @@ impl GameClient {
             SystemTime::now().strftime("%Y-%m-%d_%H-%M-%S%.3f")
         ));
         debug!("saving game state to {}", path.to_str().unwrap_or_default());
-        let game_state: Vec<u8> = bincode::serialize(&self.state).as_gameerror()?;
+        let game_state: Vec<u8> = bincode::serialize(&self.state).to_gameerror()?;
         let mut file = File::create(path)?;
         file.write_all(&game_state)?;
         Ok(())
@@ -553,7 +553,7 @@ impl GameClient {
                     connection_state: ConnectionState::Disconnected,
                     ..
                 } => {
-                    Text::new(format!("Disconnected"))
+                    Text::new("Disconnected")
                         .anchored_by(
                             ctx,
                             pos + vec2(card_rect.w, 0.0) + vec2(-10.0, 10.0),

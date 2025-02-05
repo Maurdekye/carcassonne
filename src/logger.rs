@@ -43,7 +43,7 @@ impl Logger {
                 path.push(now.strftime("%Y-%m-%d"));
                 let _ = create_dir_all(&path);
                 path.push(now.strftime("%H-%M-%S.log"));
-                Ok::<_, io::Error>(File::create(path)?)
+                File::create(path)
             })
             .transpose()?;
         let (message_sender, message_receiver) = channel();

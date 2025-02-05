@@ -145,7 +145,7 @@ fn main() -> GameResult {
     let logger = Logger::new(args.clone())?;
     log::set_boxed_logger(Box::new(logger))
         .map(|()| log::set_max_level(args.log_level.into()))
-        .as_gameerror()?;
+        .to_gameerror()?;
 
     debug!("Logger initialized");
     debug!("Arguments: {args:#?}");
