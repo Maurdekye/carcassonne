@@ -57,7 +57,9 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Robust logging & debugging functionality~~
 * ~~Reconnection for clients who lose connections~~
 * ~~Return to lobby after game end instead of main menu~~
-* Persistent host ip & port / Minecraft-style server browser
+* ~~Persistent host ip & port~~
+* ~~Usernames~~
+* Minecraft-style server browser
 * Highlight on most recently placed tile
 * More animations in general
 * River tiles

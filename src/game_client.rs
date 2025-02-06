@@ -341,6 +341,7 @@ impl GameClient {
         for (_, player) in &mut state.game.players {
             player.ptype = PlayerType::Local;
         }
+        state.game.local_player = PlayerType::Local;
         Ok(Self::new_from_state(
             ctx,
             args,
@@ -357,7 +358,7 @@ impl GameClient {
             "{}.save",
             SystemTime::now().strftime("%Y-%m-%d_%H-%M-%S%.3f")
         ));
-        debug!("saving game state to {}", path.to_str().unwrap_or_default());
+        debug!("saving game state to {}", path.display());
         let game_state: Vec<u8> = bincode::serialize(&self.state).to_gameerror()?;
         let mut file = File::create(path)?;
         file.write_all(&game_state)?;
@@ -506,7 +507,7 @@ impl GameClient {
     }
 
     pub fn can_play(&self) -> bool {
-        self.get_current_player_type() == self.state.game.local_player && !self.is_endgame()
+        self.get_current_player_type() == &self.state.game.local_player && !self.is_endgame()
     }
 
     fn draw_player_card(
@@ -525,10 +526,10 @@ impl GameClient {
             h: 60.0,
         };
         let mut content_origin = vec2(10.0, 10.0);
-        let display_name = match player.ptype {
+        let display_name = match &player.ptype {
             PlayerType::Local => None,
-            PlayerType::MultiplayerHost => Some("Host".to_string()),
-            PlayerType::MultiplayerClient { address, .. } => Some(address.to_string()),
+            PlayerType::MultiplayerHost { username }
+            | PlayerType::MultiplayerClient { username, .. } => Some(username.clone()),
         };
         if display_name.is_some() {
             card_rect.h += 20.0;
@@ -742,21 +743,26 @@ impl GameClient {
 
     pub fn update_pings(&mut self, users: Vec<User>) -> GameResult<()> {
         for player in self.state.game.players.values_mut() {
-            let new_latency = users.iter().find_map(|user| {
+            let user_data = users.iter().find_map(|user| {
                 user.client_info.as_ref().and_then(|client_info| {
-                    (PlayerType::from(Some(client_info.ip)) == player.ptype)
-                        .then_some(client_info.latency)
+                    player
+                        .ptype
+                        .matches_address(Some(client_info.ip))
+                        .then_some((client_info.latency, user.username.clone()))
                 })
             });
 
             if let PlayerType::MultiplayerClient {
-                connection_state, ..
+                username,
+                connection_state,
+                ..
             } = &mut player.ptype
             {
-                if let Some(new_latency) = new_latency {
+                if let Some((new_latency, new_username)) = user_data {
                     *connection_state = ConnectionState::Connected {
                         latency: new_latency,
                     };
+                    *username = new_username;
                 } else {
                     *connection_state = ConnectionState::Disconnected;
                 }
@@ -849,8 +855,9 @@ impl GameClient {
         *self.state.turn_order.front().unwrap()
     }
 
-    pub fn get_current_player_type(&self) -> PlayerType {
-        self.state
+    pub fn get_current_player_type(&self) -> &PlayerType {
+        &self
+            .state
             .game
             .players
             .get(self.get_current_player())

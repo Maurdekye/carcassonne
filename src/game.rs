@@ -32,24 +32,38 @@ pub mod player {
         Connected { latency: Option<Duration> },
     }
 
-    #[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+    #[derive(Clone, Debug, Serialize, Deserialize)]
     pub enum PlayerType {
         Local,
-        MultiplayerHost,
+        MultiplayerHost {
+            username: String,
+        },
         MultiplayerClient {
+            username: String,
             address: IpAddr,
             connection_state: ConnectionState,
         },
     }
 
-    impl From<Option<IpAddr>> for PlayerType {
-        fn from(value: Option<IpAddr>) -> Self {
-            match value {
-                Some(ip) => PlayerType::MultiplayerClient {
-                    address: ip,
+    impl PlayerType {
+        pub fn from_details(username: String, address: Option<IpAddr>) -> PlayerType {
+            match address {
+                Some(address) => PlayerType::MultiplayerClient {
+                    username,
+                    address,
                     connection_state: ConnectionState::Connected { latency: None },
                 },
-                None => PlayerType::MultiplayerHost,
+                None => PlayerType::MultiplayerHost { username },
+            }
+        }
+
+        pub fn matches_address(&self, address: Option<IpAddr>) -> bool {
+            match (&self, address) {
+                (PlayerType::MultiplayerHost { .. }, None) => true,
+                (PlayerType::MultiplayerClient { address, .. }, Some(check_address)) => {
+                    address == &check_address
+                }
+                _ => false,
             }
         }
     }

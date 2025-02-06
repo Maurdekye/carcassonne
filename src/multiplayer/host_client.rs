@@ -96,12 +96,14 @@ pub struct HostClient {
     phase: MultiplayerPhase<HostEvent>,
     start_game_button: Rc<RefCell<Button<UIEvent>>>,
     port: u16,
+    username: String,
 }
 
 impl HostClient {
     pub fn new(
         parent_channel: Sender<MainEvent>,
         shared: SharedResources,
+        username: String,
         port: u16,
     ) -> HostClient {
         let (event_sender, event_receiver) = channel();
@@ -140,6 +142,7 @@ impl HostClient {
                     user: User {
                         client_info: None,
                         color: None,
+                        username: username.clone(),
                     },
                 },
             )]),
@@ -152,6 +155,7 @@ impl HostClient {
             event_receiver,
             start_game_button,
             port,
+            username,
         };
         this.update_lobby_clients();
         this
@@ -201,6 +205,7 @@ impl HostClient {
         if let MultiplayerPhase::Game { game, .. } = &self.phase {
             transport.blind_send(ServerMessage::GameState(game.state.clone().into()));
         }
+        let username = client_info.ip.to_string();
         self.users.insert(
             IpOrHost::Ip(client_info.ip),
             HostUser {
@@ -211,6 +216,7 @@ impl HostClient {
                 user: User {
                     color: None,
                     client_info: Some(client_info),
+                    username,
                 },
             },
         );
@@ -253,18 +259,27 @@ impl HostClient {
                         }
                         ClientMessage::Game(message) => {
                             if let MultiplayerPhase::Game { game, .. } = &mut self.phase {
-                                let source_player = PlayerType::from(Some(src_addr));
-                                if game.get_current_player_type() == source_player {
+                                if game
+                                    .get_current_player_type()
+                                    .matches_address(Some(src_addr))
+                                {
+                                    let username = host_client.user.username.clone();
                                     game.handle_message(ctx, message.clone())?;
                                     self.broadcast_filter(
                                         ServerMessage::Game {
                                             message,
-                                            user: source_player,
+                                            user: PlayerType::from_details(
+                                                username,
+                                                Some(src_addr),
+                                            ),
                                         },
                                         |ip| ip != src_addr,
                                     );
                                 }
                             }
+                        }
+                        ClientMessage::Username(username) => {
+                            host_client.user.username = username;
                         }
                     }
                 }
@@ -306,6 +321,7 @@ impl HostClient {
             self.users.values().map(|user| user.user.clone()).collect(),
             game_seed,
             None,
+            self.username.clone(),
         );
     }
 
@@ -354,7 +370,9 @@ impl SubEventHandler<GameError> for HostClient {
                 GameAction::Message(message) => {
                     self.broadcast(ServerMessage::Game {
                         message,
-                        user: PlayerType::MultiplayerHost,
+                        user: PlayerType::MultiplayerHost {
+                            username: self.username.clone(),
+                        },
                     });
                 }
                 GameAction::ReturnToLobby => {
@@ -365,7 +383,7 @@ impl SubEventHandler<GameError> for HostClient {
                     ));
                     self.update_lobby_clients();
                     break;
-                },
+                }
             }
         }
 

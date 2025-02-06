@@ -45,6 +45,7 @@ pub struct ClientInfo {
 pub struct User {
     pub client_info: Option<ClientInfo>,
     pub color: Option<Color>,
+    pub username: String,
 }
 
 impl User {

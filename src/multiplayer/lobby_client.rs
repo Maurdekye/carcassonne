@@ -129,7 +129,7 @@ where
 
         for (i, user) in self.users.iter().enumerate() {
             let text = if let Some(client_info) = &user.client_info {
-                let mut text = format!("{}", client_info.ip);
+                let mut text = user.username.clone();
                 if let Some(latency) = client_info.latency {
                     text += &format!(" {}ms", latency.as_millis());
                 }

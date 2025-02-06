@@ -31,9 +31,15 @@ pub enum MainEvent {
     LoadGame(PathBuf),
     StartDebugGame(DebugGameConfiguration),
     MainMenu,
-    MultiplayerHost(u16),
+    MultiplayerHost {
+        username: String,
+        port: u16,
+    },
     MultiplayerMenu,
-    MultiplayerJoin(SocketAddr),
+    MultiplayerJoin {
+        username: String,
+        socket: SocketAddr,
+    },
     Close,
 }
 
@@ -52,7 +58,7 @@ impl MainClient {
             event_sender
                 .send(MainEvent::LoadGame(load_path.clone()))
                 .unwrap();
-        } else if let Some(debug_config) = &shared.args.debug_config {
+        } else if let Some(debug_config) = &shared.args.debug_game {
             event_sender
                 .send(MainEvent::StartDebugGame(debug_config.clone()))
                 .unwrap();
@@ -104,17 +110,19 @@ impl MainClient {
                     self.event_sender.clone(),
                 ));
             }
-            MainEvent::MultiplayerHost(port) => {
+            MainEvent::MultiplayerHost { username, port } => {
                 self.scene = Box::new(HostClient::new(
                     self.event_sender.clone(),
                     self.shared.clone(),
+                    username,
                     port,
                 ));
             }
-            MainEvent::MultiplayerJoin(socket) => {
+            MainEvent::MultiplayerJoin { username, socket } => {
                 self.scene = Box::new(JoinClient::new(
                     self.event_sender.clone(),
                     self.shared.clone(),
+                    username,
                     socket,
                 ));
             }

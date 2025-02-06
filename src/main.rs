@@ -3,7 +3,7 @@
 #![feature(duration_millis_float)]
 #![feature(lazy_get)]
 
-use std::{net::IpAddr, path::PathBuf, time::Duration};
+use std::{path::PathBuf, time::Duration};
 
 use clap::{ArgAction, Parser, ValueEnum};
 use ggez::{
@@ -25,6 +25,7 @@ mod logger;
 mod main_client;
 mod main_menu_client;
 mod multiplayer;
+mod persist;
 mod pos;
 mod shared;
 mod sub_event_handler;
@@ -94,19 +95,11 @@ struct Args {
 
     /// Immediately start a debug game configuration
     #[arg(short = 'c', long)]
-    debug_config: Option<DebugGameConfiguration>,
+    debug_game: Option<DebugGameConfiguration>,
 
     /// Enable experimental snapping tile placement
-    #[arg(short, long, action = ArgAction::SetTrue)]
+    #[arg(short = 'p', long, action = ArgAction::SetTrue)]
     snap_placement: bool,
-
-    /// Default multiplayer Ip address
-    #[arg(short, long)]
-    ip: Option<IpAddr>,
-
-    /// Default multiplayer port
-    #[arg(short, long, default_value_t = 11069)]
-    port: u16,
 
     /// Ping interval in seconds for multiplayer games.
     #[arg(short = 'g', long, default_value = "5", value_parser = duration_value_parser)]
@@ -132,6 +125,10 @@ struct Args {
     /// enables saving log files, and enables saving game state
     #[arg(short, long, action = ArgAction::SetTrue)]
     debug: bool,
+
+    /// Path to save persistent data to.
+    #[arg(short, long, default_value = "data.json")]
+    save_path: PathBuf,
 }
 
 fn main() -> GameResult {
@@ -150,7 +147,7 @@ fn main() -> GameResult {
     debug!("Logger initialized");
     debug!("Arguments: {args:#?}");
 
-    let shared = SharedResources { args };
+    let shared = SharedResources::new(args);
 
     let window_mode = if let Some(fullscreen_res) = shared.args.fullscreen {
         let (w, h) = fullscreen_res.unwrap();

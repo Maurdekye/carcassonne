@@ -83,12 +83,14 @@ pub struct JoinClient {
     socket: SocketAddr,
     back_button: Rc<RefCell<Button<UIEvent>>>,
     users: Option<Vec<User>>,
+    username: String,
 }
 
 impl JoinClient {
     pub fn new(
         parent_channel: Sender<MainEvent>,
         shared: SharedResources,
+        username: String,
         socket: SocketAddr,
     ) -> Self {
         let (event_sender, event_receiver) = channel();
@@ -117,6 +119,7 @@ impl JoinClient {
             socket,
             back_button,
             users: None,
+            username,
         }
     }
 
@@ -129,6 +132,7 @@ impl JoinClient {
             users,
             seed,
             Some(self.connection.as_ref().unwrap().1),
+            self.username.clone(),
         ));
     }
 
@@ -137,10 +141,11 @@ impl JoinClient {
         match event {
             JoinEvent::NetworkEvent(network_event) => match network_event {
                 NetworkEvent::Connect {
-                    transport,
+                    mut transport,
                     my_socket_addr,
                 } => {
                     debug!("connected");
+                    transport.blind_send(ClientMessage::Username(self.username.clone()));
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         Some(my_socket_addr.ip()),
@@ -185,7 +190,7 @@ impl JoinClient {
                         }
                         ServerMessage::Game { message, user } => {
                             if let Some(MultiplayerPhase::Game { game, .. }) = &mut self.phase {
-                                if game.get_current_player_type() == user {
+                                if game.get_current_player_type() == &user {
                                     game.handle_message(ctx, message)?;
                                 }
                             }
@@ -197,6 +202,7 @@ impl JoinClient {
                                 self.parent_channel.clone(),
                                 *state,
                                 Some(self.connection.as_ref().unwrap().1),
+                                self.username.clone(),
                             ));
                         }
                     }

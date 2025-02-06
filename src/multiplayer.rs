@@ -9,7 +9,10 @@ use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use transport::message::server::User;
 
 use crate::{
-    game::{player::Player, Game},
+    game::{
+        player::{Player, PlayerType},
+        Game,
+    },
     game_client::{GameAction, GameClient, GameState},
     main_client::MainEvent,
     pos::GridPos,
@@ -40,14 +43,19 @@ impl<T> MultiplayerPhase<T> {
         users: Vec<User>,
         seed: u64,
         local_user: Option<IpAddr>,
+        local_username: String,
     ) -> MultiplayerPhase<T> {
         let mut library = Tile::default_library();
         library.shuffle(&mut StdRng::seed_from_u64(seed));
-        let mut game = Game::new_inner(library, local_user.into());
+        let mut game = Game::new_inner(
+            library,
+            PlayerType::from_details(local_username, local_user),
+        );
         for user in users {
+            let address = user.client_info.as_ref().map(|info| info.ip);
             game.players.insert(Player::new_inner(
                 user.color.unwrap(),
-                user.client_info.as_ref().map(|info| info.ip).into(),
+                PlayerType::from_details(user.username.clone(), address),
             ));
         }
         let (action_sender, action_channel) = channel();
@@ -71,8 +79,9 @@ impl<T> MultiplayerPhase<T> {
         parent_channel: Sender<MainEvent>,
         mut state: GameState,
         local_user: Option<IpAddr>,
+        local_username: String,
     ) -> MultiplayerPhase<T> {
-        state.game.local_player = local_user.into();
+        state.game.local_player = PlayerType::from_details(local_username, local_user);
         let (action_sender, action_channel) = channel();
         MultiplayerPhase::Game {
             game: GameClient::new_from_state(

@@ -32,10 +32,11 @@ enum MultiplayerMenuEvent {
 
 pub struct MultiplayerMenuClient {
     parent_channel: Sender<MainEvent>,
-    _shared: SharedResources,
+    shared: SharedResources,
     _event_sender: Sender<MultiplayerMenuEvent>,
     event_receiver: Receiver<MultiplayerMenuEvent>,
     ui: UIManager<MultiplayerMenuEvent, MultiplayerMenuEvent>,
+    username_input: Rc<RefCell<TextInput>>,
     ip_input: Rc<RefCell<TextInput>>,
     port_input: Rc<RefCell<TextInput>>,
     join_button: Rc<RefCell<Button<MultiplayerMenuEvent>>>,
@@ -44,14 +45,21 @@ pub struct MultiplayerMenuClient {
 }
 
 impl MultiplayerMenuClient {
-    pub fn new(parent_channel: Sender<MainEvent>, shared: SharedResources) -> MultiplayerMenuClient {
+    pub fn new(
+        parent_channel: Sender<MainEvent>,
+        shared: SharedResources,
+    ) -> MultiplayerMenuClient {
         let (event_sender, event_receiver) = channel();
         let (
             ui,
-            [UIElement::TextInput(ip_input), UIElement::TextInput(port_input), _, UIElement::Button(join_button), UIElement::Button(host_button)],
+            [UIElement::TextInput(username_input), UIElement::TextInput(ip_input), UIElement::TextInput(port_input), _, UIElement::Button(join_button), UIElement::Button(host_button)],
         ) = UIManager::new_and_rc_elements(
             event_sender.clone(),
             [
+                UIElement::TextInput(TextInput::new(Bounds {
+                    relative: Rect::new(0.5, 0.5, 0.0, 0.0),
+                    absolute: Rect::new(10.0, -52.0, 240.0, 24.0),
+                })),
                 UIElement::TextInput(TextInput::new(Bounds {
                     relative: Rect::new(0.5, 0.5, 0.0, 0.0),
                     absolute: Rect::new(10.0, -12.0, 240.0, 24.0),
@@ -91,24 +99,37 @@ impl MultiplayerMenuClient {
         };
         {
             let mut ip_input = ip_input.borrow_mut();
-            ip_input.text = shared.args.ip.map_or(String::new(), |ip| ip.to_string());
+            ip_input.text = shared
+                .persistent
+                .borrow()
+                .ip
+                .map_or(String::new(), |ip| ip.to_string());
             let mut port_input = port_input.borrow_mut();
             port_input.maxlen = Some(5);
-            port_input.text = shared.args.port.to_string();
+            port_input.text = shared.persistent.borrow().port.to_string();
         }
 
         MultiplayerMenuClient {
             parent_channel,
-            _shared: shared,
+            shared,
             _event_sender: event_sender,
             event_receiver,
             ui,
+            username_input,
             ip_input,
             port_input,
             join_button,
             host_button,
             error_message: None,
         }
+    }
+
+    fn parse_username(&self) -> Result<String, String> {
+        let username_input = self.username_input.borrow();
+        let text = username_input.text.trim();
+        (!text.is_empty())
+            .then_some(text.to_string())
+            .ok_or("Username cannot be empty".to_string())
     }
 
     fn parse_port(&self) -> Result<u16, String> {
@@ -135,10 +156,17 @@ impl MultiplayerMenuClient {
             }
             MultiplayerMenuEvent::JoinLobby => {
                 let result = try {
+                    let username = self.parse_username()?;
                     let ip = self.parse_ip()?;
                     let port = self.parse_port()?;
-                    self.parent_channel
-                        .send(MainEvent::MultiplayerJoin(SocketAddr::new(ip, port)))
+                    let mut persistent = self.shared.persistent.borrow_mut();
+                    persistent.username = username.clone();
+                    persistent.ip = Some(ip);
+                    persistent.port = port;
+                    self.parent_channel.send(MainEvent::MultiplayerJoin {
+                        username,
+                        socket: SocketAddr::new(ip, port),
+                    })
                 };
                 if let Err(errmsg) = result {
                     self.error_message = Some((errmsg, Instant::now()))
@@ -146,8 +174,13 @@ impl MultiplayerMenuClient {
             }
             MultiplayerMenuEvent::HostLobby => {
                 let result = try {
+                    let username = self.parse_username()?;
                     let port = self.parse_port()?;
-                    self.parent_channel.send(MainEvent::MultiplayerHost(port))
+                    let mut persistent = self.shared.persistent.borrow_mut();
+                    persistent.username = username.clone();
+                    persistent.port = port;
+                    self.parent_channel
+                        .send(MainEvent::MultiplayerHost { username, port })
                 };
                 if let Err(errmsg) = result {
                     self.error_message = Some((errmsg, Instant::now()))
