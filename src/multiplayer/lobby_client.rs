@@ -128,15 +128,14 @@ where
             .draw(canvas);
 
         for (i, user) in self.users.iter().enumerate() {
-            let text = if let Some(client_info) = &user.client_info {
-                let mut text = user.username.clone();
-                if let Some(latency) = client_info.latency {
-                    text += &format!(" {}ms", latency.as_millis());
-                }
-                text
-            } else {
-                "Host".to_string()
-            };
+            let mut text = user.username.clone();
+            if let Some(latency) = user
+                .client_info
+                .as_ref()
+                .and_then(|client_info| client_info.latency)
+            {
+                text += &format!(" {}ms", latency.as_millis());
+            }
             let client_row_position = player_list_pos + vec2(0.0, 32.0) * (i + 1) as f32;
             Text::new(text)
                 .size(32.0)

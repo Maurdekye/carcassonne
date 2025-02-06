@@ -280,6 +280,7 @@ impl HostClient {
                         }
                         ClientMessage::Username(username) => {
                             host_client.user.username = username;
+                            self.update_lobby_clients();
                         }
                     }
                 }

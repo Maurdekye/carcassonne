@@ -98,6 +98,8 @@ impl MultiplayerMenuClient {
             panic!()
         };
         {
+            let mut username_input = username_input.borrow_mut();
+            username_input.text = shared.persistent.borrow().username.clone();
             let mut ip_input = ip_input.borrow_mut();
             ip_input.text = shared
                 .persistent
@@ -227,6 +229,20 @@ impl SubEventHandler<GameError> for MultiplayerMenuClient {
                 ctx,
                 res * vec2(0.5, 0.0) + vec2(0.0, 20.0),
                 AnchorPoint::NorthCenter,
+            )?
+            .color(Color::BLACK)
+            .draw(canvas);
+
+        Text::new("Username:")
+            .anchored_by(
+                ctx,
+                self.username_input
+                    .borrow()
+                    .bounds
+                    .corrected_bounds(res)
+                    .parametric(vec2(0.0, 0.5))
+                    - vec2(6.0, 0.0),
+                AnchorPoint::CenterEast,
             )?
             .color(Color::BLACK)
             .draw(canvas);

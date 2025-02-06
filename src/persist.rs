@@ -4,11 +4,10 @@ use std::{
     fs::File,
     net::IpAddr,
     ops::{Deref, DerefMut},
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::{Path, PathBuf}, rc::Rc,
 };
 
-use log::{debug, error};
+use log::{debug, error, warn};
 use serde::{Deserialize, Serialize};
 
 use crate::Args;
@@ -65,7 +64,7 @@ impl Drop for DataMutGuard<'_> {
 
 #[derive(Debug, Clone)]
 pub struct PersistenceManager {
-    data: Arc<RefCell<PersistentData>>,
+    data: Rc<RefCell<PersistentData>>,
     save_path: PathBuf,
 }
 
@@ -79,12 +78,20 @@ impl PersistenceManager {
         let data = match result {
             Ok(data) => data,
             Err(err) => {
-                error!("Error loading persistent data: {err}");
-                error!("Loading defaults");
-                PersistentData::default()
+                warn!("Error loading persistent data: {err}");
+                warn!("Loading defaults");
+                let data = PersistentData::default();
+                let result: Result<(), Box<dyn Error>> = try {
+                    let mut file = File::create(&save_path)?;
+                    serde_json::to_writer(&mut file, &data)?;
+                };
+                if let Err(err) = result {
+                    error!("Error saving default config data: {err}");
+                }
+                data
             }
         };
-        let data = Arc::new(RefCell::new(data));
+        let data = Rc::new(RefCell::new(data));
         PersistenceManager { data, save_path }
     }
 
