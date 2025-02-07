@@ -19,7 +19,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
   -h, --help                           Print help
 ```
 
-### Controls
+### Default Controls
 
 * Right click to drag
 * WASD / Arrow keys to move
@@ -59,6 +59,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Return to lobby after game end instead of main menu~~
 * ~~Persistent host ip & port~~
 * ~~Usernames~~
+* ~~Key rebinding~~
 * Minecraft-style server browser
 * Highlight on most recently placed tile
 * More animations in general
