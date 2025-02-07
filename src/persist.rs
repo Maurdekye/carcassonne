@@ -2,54 +2,47 @@ use std::{
     cell::{Ref, RefCell, RefMut},
     error::Error,
     fs::File,
-    net::IpAddr,
     ops::{Deref, DerefMut},
-    path::{Path, PathBuf}, rc::Rc,
+    path::{Path, PathBuf},
+    rc::Rc,
 };
 
 use log::{debug, error, warn};
-use serde::{Deserialize, Serialize};
-
-use crate::Args;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct PersistentData {
-    pub ip: Option<IpAddr>,
-    pub port: u16,
-    pub username: String,
-}
-
-impl Default for PersistentData {
-    fn default() -> Self {
-        Self {
-            ip: None,
-            port: 11069,
-            username: String::new(),
-        }
-    }
-}
+use serde::{de::DeserializeOwned, Serialize};
 
 #[derive(Debug)]
-pub struct DataMutGuard<'a> {
-    data: RefMut<'a, PersistentData>,
+pub struct PersistentRefMut<'a, T>
+where
+    T: Serialize,
+{
+    data: RefMut<'a, T>,
     save_path: &'a Path,
 }
 
-impl Deref for DataMutGuard<'_> {
-    type Target = PersistentData;
+impl<T> Deref for PersistentRefMut<'_, T>
+where
+    T: Serialize,
+{
+    type Target = T;
 
     fn deref(&self) -> &Self::Target {
         &self.data
     }
 }
 
-impl DerefMut for DataMutGuard<'_> {
+impl<T> DerefMut for PersistentRefMut<'_, T>
+where
+    T: Serialize,
+{
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data
     }
 }
 
-impl Drop for DataMutGuard<'_> {
+impl<T> Drop for PersistentRefMut<'_, T>
+where
+    T: Serialize,
+{
     fn drop(&mut self) {
         debug!("saving to {}", self.save_path.display());
         let result: Result<(), Box<dyn Error>> = try {
@@ -63,16 +56,18 @@ impl Drop for DataMutGuard<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct PersistenceManager {
-    data: Rc<RefCell<PersistentData>>,
+pub struct PersistenceManager<T> {
+    data: Rc<RefCell<T>>,
     save_path: PathBuf,
 }
 
-impl PersistenceManager {
-    pub fn new(args: &Args) -> PersistenceManager {
-        let save_path = args.save_path.clone();
-        let result: Result<PersistentData, Box<dyn Error>> = try {
-            let mut file = File::open(&save_path)?;
+impl<T> PersistenceManager<T> {
+    pub fn new(save_path: &Path) -> PersistenceManager<T>
+    where
+        T: Default + Serialize + DeserializeOwned,
+    {
+        let result: Result<T, Box<dyn Error>> = try {
+            let mut file = File::open(save_path)?;
             serde_json::from_reader(&mut file)?
         };
         let data = match result {
@@ -80,9 +75,9 @@ impl PersistenceManager {
             Err(err) => {
                 warn!("Error loading persistent data: {err}");
                 warn!("Loading defaults");
-                let data = PersistentData::default();
+                let data = T::default();
                 let result: Result<(), Box<dyn Error>> = try {
-                    let mut file = File::create(&save_path)?;
+                    let mut file = File::create(save_path)?;
                     serde_json::to_writer(&mut file, &data)?;
                 };
                 if let Err(err) = result {
@@ -92,15 +87,19 @@ impl PersistenceManager {
             }
         };
         let data = Rc::new(RefCell::new(data));
+        let save_path = save_path.to_path_buf();
         PersistenceManager { data, save_path }
     }
 
-    pub fn borrow(&self) -> Ref<'_, PersistentData> {
+    pub fn borrow(&self) -> Ref<'_, T> {
         self.data.borrow()
     }
 
-    pub fn borrow_mut(&mut self) -> DataMutGuard<'_> {
-        DataMutGuard {
+    pub fn borrow_mut(&mut self) -> PersistentRefMut<'_, T>
+    where
+        T: Serialize,
+    {
+        PersistentRefMut {
             data: self.data.borrow_mut(),
             save_path: &self.save_path,
         }
