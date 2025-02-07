@@ -36,7 +36,6 @@ impl Logger {
     pub fn new(args: Args) -> Result<Logger, io::Error> {
         let file = args
             .save_logs
-            .clone()
             .flatten()
             .map(|mut path| {
                 let now = SystemTime::now();

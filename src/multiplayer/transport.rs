@@ -299,7 +299,7 @@ impl MessageClient {
                         let mut transport = transport.try_clone().unwrap();
                         let Ok(Message::YourSocket(my_socket_addr)) = transport.0.recv() else {
                             error!("Expected socket message from server");
-                            panic!();
+                            continue;
                         };
                         let _ = transport.0.send(&Message::YourSocket(socket));
                         event_sender
