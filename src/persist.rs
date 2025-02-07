@@ -78,10 +78,10 @@ impl<T> PersistenceManager<T> {
                 let data = T::default();
                 let result: Result<(), Box<dyn Error>> = try {
                     let mut file = File::create(save_path)?;
-                    serde_json::to_writer(&mut file, &data)?;
+                    serde_json::to_writer_pretty(&mut file, &data)?;
                 };
                 if let Err(err) = result {
-                    error!("Error saving default config data: {err}");
+                    error!("Error saving default persistent data: {err}");
                 }
                 data
             }
