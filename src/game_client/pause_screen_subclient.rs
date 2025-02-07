@@ -15,6 +15,7 @@ use std::{
 
 use crate::{
     game_client::GameEvent,
+    shared::SharedResources,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, TextExt},
@@ -38,12 +39,14 @@ pub struct PauseScreenSubclient {
     event_sender: Sender<PauseScreenEvent>,
     event_receiver: Receiver<PauseScreenEvent>,
     ui: UIManager<PauseScreenEvent, PauseScreenEvent>,
+    shared: SharedResources,
     pub can_end_game: Rc<Cell<bool>>,
     pub can_undo: Rc<Cell<bool>>,
 }
 
 impl PauseScreenSubclient {
     pub fn new(
+        shared: SharedResources,
         parent_channel: Sender<GameEvent>,
         can_end_game: bool,
         can_undo: bool,
@@ -55,12 +58,14 @@ impl PauseScreenSubclient {
         PauseScreenSubclient {
             parent_channel,
             scene: Box::new(MainPauseMenuSubclient::new(
+                shared.clone(),
                 event_sender.clone(),
                 can_end_game.clone(),
                 can_undo.clone(),
             )),
             event_sender,
             event_receiver,
+            shared,
             can_end_game,
             can_undo,
             ui: UIManager::new(
@@ -85,15 +90,24 @@ impl PauseScreenSubclient {
             GameEvent(event) => self.parent_channel.send(event).unwrap(),
             MainMenu => {
                 self.scene = Box::new(MainPauseMenuSubclient::new(
+                    self.shared.clone(),
                     self.event_sender.clone(),
                     self.can_end_game.clone(),
                     self.can_undo.clone(),
                 ))
             }
             Controls => {
-                self.scene = Box::new(ControlsMenuSubclient::new(self.event_sender.clone()))
+                self.scene = Box::new(ControlsMenuSubclient::new(
+                    self.shared.clone(),
+                    self.event_sender.clone(),
+                ))
             }
-            Rules => self.scene = Box::new(RulesMenuSubclient::new(self.event_sender.clone())),
+            Rules => {
+                self.scene = Box::new(RulesMenuSubclient::new(
+                    self.shared.clone(),
+                    self.event_sender.clone(),
+                ))
+            }
         }
         Ok(())
     }

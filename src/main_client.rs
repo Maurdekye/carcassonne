@@ -7,10 +7,7 @@ use std::{
 use ggez::{
     event::EventHandler,
     graphics::{Canvas, Color},
-    input::{
-        keyboard::KeyCode,
-        mouse::{set_cursor_type, CursorIcon},
-    },
+    input::mouse::{set_cursor_type, CursorIcon},
     Context, GameError,
 };
 use log::{info, trace};
@@ -137,13 +134,13 @@ impl MainClient {
     }
 }
 
-impl EventHandler<GameError> for MainClient {
+impl EventHandler<Context> for MainClient {
     fn mouse_wheel_event(&mut self, ctx: &mut Context, x: f32, y: f32) -> Result<(), GameError> {
         self.scene.mouse_wheel_event(ctx, x, y)
     }
 
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        set_cursor_type(ctx, CursorIcon::Arrow);
+        set_cursor_type(ctx, CursorIcon::Default);
         self.scene.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
@@ -163,11 +160,17 @@ impl EventHandler<GameError> for MainClient {
     }
 
     fn quit_event(&mut self, ctx: &mut Context) -> Result<bool, GameError> {
-        info!("Quitting");
-        match (self.quitting, ctx.keyboard.is_key_pressed(KeyCode::Escape)) {
-            (true, _) => Ok(false),
-            (_, true) => Ok(true),
-            _ => Ok(false),
+        let result = match (
+            self.quitting,
+            self.shared.persistent.borrow().keybinds.quit.pressed(ctx),
+        ) {
+            (true, _) => false,
+            (_, true) => true,
+            _ => false,
+        };
+        if !result {
+            info!("Quitting");
         }
+        Ok(result)
     }
 }

@@ -1,7 +1,6 @@
 use ggez::{
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
-    input::keyboard::KeyCode,
     Context, GameError,
 };
 use log::trace;
@@ -9,6 +8,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
     colors::PANEL_COLOR,
+    keybinds::Keybinds,
+    shared::SharedResources,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
@@ -26,12 +27,14 @@ pub struct ControlsMenuSubclient {
     event_sender: Sender<ControlsMenuEvent>,
     event_receiver: Receiver<ControlsMenuEvent>,
     ui: UIManager<ControlsMenuEvent, ControlsMenuEvent>,
+    keybinds: Keybinds,
 }
 
 impl ControlsMenuSubclient {
-    pub fn new(parent_channel: Sender<PauseScreenEvent>) -> Self {
+    pub fn new(shared: SharedResources, parent_channel: Sender<PauseScreenEvent>) -> Self {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
+        let keybinds = shared.persistent.borrow().keybinds.clone();
         Self {
             parent_channel,
             event_sender,
@@ -44,6 +47,7 @@ impl ControlsMenuSubclient {
                     ControlsMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu),
                 ))],
             ),
+            keybinds,
         }
     }
 
@@ -64,7 +68,7 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
 
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
+        if self.keybinds.pause.just_pressed(ctx) {
             self.event_sender
                 .send(ControlsMenuEvent::PauseScreenEvent(
                     PauseScreenEvent::MainMenu,
@@ -95,18 +99,43 @@ impl SubEventHandler<GameError> for ControlsMenuSubclient {
             .draw(canvas);
 
         {
-            Text::new(
+            Text::new(format!(
                 "\
-Left Mouse - Place tile or meeple
-Right Mouse / WASD / Arrow keys - Move camera
-Scroll - Zoom in and out
-R - Rotate tile 90° clockwise
-E - Rotate tile 90° counterclockwise
-Space - Skip meeples
-Tab - Detailed game stats
-Esc - Pause",
-            )
-            .draw_into_rect(ctx, canvas, Color::WHITE, 32.0, (panel_origin + vec2(10.0, 80.0)).to(panel.bottom_right() - vec2(10.0, 10.0)))?;
+{} - Place tile
+{} - Place meeple
+{} / {}{}{}{} / {}{}{}{} - Move camera
+Scroll / {} & {} - Zoom in and out
+{} - Rotate tile 90° clockwise
+{} - Rotate tile 90° counterclockwise
+{} - Skip meeples
+{} - Detailed game stats
+{} - Pause",
+                self.keybinds.place_tile,
+                self.keybinds.place_meeple,
+                self.keybinds.drag_camera,
+                self.keybinds.move_up,
+                self.keybinds.move_left,
+                self.keybinds.move_down,
+                self.keybinds.move_right,
+                self.keybinds.move_up_alternate,
+                self.keybinds.move_down_alternate,
+                self.keybinds.move_left_alternate,
+                self.keybinds.move_right_alternate,
+                self.keybinds.zoom_in,
+                self.keybinds.zoom_out,
+                self.keybinds.rotate_clockwise,
+                self.keybinds.rotate_counterclockwise,
+                self.keybinds.skip_meeples,
+                self.keybinds.detailed_view,
+                self.keybinds.pause
+            ))
+            .draw_into_rect(
+                ctx,
+                canvas,
+                Color::WHITE,
+                32.0,
+                (panel_origin + vec2(10.0, 80.0)).to(panel.bottom_right() - vec2(10.0, 10.0)),
+            )?;
         }
 
         self.ui.draw(ctx, canvas)?;

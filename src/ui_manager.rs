@@ -2,19 +2,18 @@ use std::{cell::RefCell, collections::HashSet, rc::Rc, sync::mpsc::Sender, time:
 
 use clipboard_rs::{Clipboard, ClipboardContext};
 use ggez::{
-    event::MouseButton,
     glam::{vec2, Vec2},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
-    input::{
-        keyboard::{KeyCode, KeyMods},
-        mouse::{set_cursor_type, CursorIcon},
+    input::mouse::{set_cursor_type, CursorIcon},
+    winit::{
+        event::MouseButton,
+        keyboard::{Key, NamedKey},
     },
     Context, GameError, GameResult,
 };
 
 use crate::{
     colors::{TEXTINPUT_BODY, TEXTINPUT_BORDER},
-    keycode::KeyCodeExt,
     sub_event_handler::SubEventHandler,
     util::{
         color_mul, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key, RectExt, TextExt,
@@ -241,7 +240,7 @@ pub struct UIManager<E, T> {
     pub cursor_override: Option<CursorIcon>,
     event_sender: Sender<T>,
     mouse_position: Vec2,
-    last_pressed_keys: HashSet<KeyCode>,
+    last_pressed_keys: HashSet<Key>,
 }
 
 impl<E, T> UIManager<E, T>
@@ -384,12 +383,12 @@ where
         let mouse_pressed = ctx.mouse.button_just_pressed(MouseButton::Left);
         let just_pressed_keys: HashSet<_> = ctx
             .keyboard
-            .pressed_keys()
+            .pressed_logical_keys
             .iter()
             .filter(|key| !self.last_pressed_keys.contains(key))
-            .copied()
+            .cloned()
             .collect();
-        self.last_pressed_keys = ctx.keyboard.pressed_keys().clone();
+        self.last_pressed_keys = ctx.keyboard.pressed_logical_keys.clone();
         for element in self.elements.iter() {
             match element {
                 UIElement::Button(button) => {
@@ -400,7 +399,7 @@ where
 
                     let bounds = button.bounds.corrected_bounds(res);
                     if bounds.contains(self.mouse_position) {
-                        self.cursor_override = Some(CursorIcon::Hand);
+                        self.cursor_override = Some(CursorIcon::Pointer);
                         if ctx.mouse.button_just_released(MouseButton::Left) {
                             self.event_sender.send(button.event.clone().into()).unwrap();
                         }
@@ -437,36 +436,43 @@ where
 
                     if text_input.focused {
                         let additional_keys = if ctx.keyboard.is_key_repeated() {
-                            ctx.keyboard.pressed_keys()
+                            &ctx.keyboard.pressed_logical_keys
                         } else {
                             &HashSet::new()
                         };
                         for key in just_pressed_keys.iter().chain(additional_keys) {
                             match key {
-                                KeyCode::Delete => text_input.delete_char(),
-                                KeyCode::Back => text_input.backspace_char(),
-                                KeyCode::Right => text_input.right(),
-                                KeyCode::Left => text_input.left(),
-                                KeyCode::V if ctx.keyboard.is_mod_active(KeyMods::CTRL) => {
-                                    let clipboard_contents = ClipboardContext::new()
-                                        .unwrap()
-                                        .get_text()
-                                        .unwrap_or_default();
-                                    for chr in clipboard_contents.chars() {
-                                        text_input.type_char(chr);
-                                    }
-                                }
-                                code => {
-                                    if let Some(ch) = code.chr() {
-                                        if ctx.keyboard.is_mod_active(KeyMods::SHIFT) {
-                                            for ch in ch.to_uppercase() {
-                                                text_input.type_char(ch);
-                                            }
-                                        } else {
-                                            text_input.type_char(ch);
+                                Key::Named(NamedKey::Delete) => text_input.delete_char(),
+                                Key::Named(NamedKey::Backspace) => text_input.backspace_char(),
+                                Key::Named(NamedKey::ArrowRight) => text_input.right(),
+                                Key::Named(NamedKey::ArrowLeft) => text_input.left(),
+                                Key::Character(ch) => {
+                                    if ch == "v"
+                                        && ctx
+                                            .keyboard
+                                            .is_logical_key_pressed(&Key::Named(NamedKey::Control))
+                                    {
+                                        let clipboard_contents = ClipboardContext::new()
+                                            .unwrap()
+                                            .get_text()
+                                            .unwrap_or_default();
+                                        for chr in clipboard_contents.chars() {
+                                            text_input.type_char(chr);
+                                        }
+                                    } else if ctx
+                                        .keyboard
+                                        .is_logical_key_pressed(&Key::Named(NamedKey::Shift))
+                                    {
+                                        for c in ch.to_uppercase().chars() {
+                                            text_input.type_char(c);
+                                        }
+                                    } else {
+                                        for c in ch.chars() {
+                                            text_input.type_char(c);
                                         }
                                     }
                                 }
+                                _ => {}
                             }
                         }
                     }

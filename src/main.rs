@@ -5,9 +5,9 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use clap::{ArgAction, Parser, ValueEnum};
+use clap::{crate_authors, crate_name, ArgAction, Parser, ValueEnum};
 use ggez::{
-    conf::{FullscreenType, WindowMode, WindowSetup},
+    conf::{FullscreenType, WindowMode},
     event, ContextBuilder, GameResult,
 };
 use log::debug;
@@ -19,7 +19,6 @@ use util::ResultExt;
 mod colors;
 mod game;
 mod game_client;
-mod keycode;
 mod line;
 mod logger;
 mod main_client;
@@ -32,6 +31,7 @@ mod sub_event_handler;
 mod tile;
 mod ui_manager;
 mod util;
+mod keybinds;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -162,13 +162,12 @@ fn main() -> GameResult {
     };
     debug!("window_mode = {window_mode:?}");
 
-    let (ctx, event_loop) = ContextBuilder::new("carcassonne", "maurdekye")
+    let (ctx, event_loop) = ContextBuilder::new(crate_name!(), crate_authors!())
         .window_mode(window_mode)
-        .window_setup(WindowSetup::default().title("Carcassonne"))
         .build()?;
 
     let client = MainClient::new(shared);
     debug!("initialized main client");
 
-    event::run(ctx, event_loop, client);
+    event::run(ctx, event_loop, client)
 }

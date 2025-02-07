@@ -1,7 +1,6 @@
 use ggez::{
     glam::{vec2, Vec2},
-    graphics::{Canvas, Color, DrawMode, Mesh, Rect, Text},
-    input::keyboard::KeyCode,
+    graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     Context, GameError,
 };
 use log::trace;
@@ -13,6 +12,8 @@ use std::{
 
 use crate::{
     colors::PANEL_COLOR,
+    keybinds::Keybinds,
+    shared::SharedResources,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
@@ -30,6 +31,7 @@ pub enum RulesMenuEvent {
 }
 
 pub struct RulesMenuSubclient {
+    _shared: SharedResources,
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<RulesMenuEvent>,
     event_receiver: Receiver<RulesMenuEvent>,
@@ -37,11 +39,13 @@ pub struct RulesMenuSubclient {
     prev_page: Rc<RefCell<Button<RulesMenuEvent>>>,
     next_page: Rc<RefCell<Button<RulesMenuEvent>>>,
     page: usize,
+    keybinds: Keybinds,
 }
 
 impl RulesMenuSubclient {
-    pub fn new(parent_channel: Sender<PauseScreenEvent>) -> Self {
+    pub fn new(shared: SharedResources, parent_channel: Sender<PauseScreenEvent>) -> Self {
         let (event_sender, event_receiver) = channel();
+        let keybinds = shared.persistent.borrow().keybinds.clone();
         let ui_sender = event_sender.clone();
         let (ui, [_, UIElement::Button(prev_page), UIElement::Button(next_page)]) =
             UIManager::new_and_rc_elements(
@@ -52,20 +56,24 @@ impl RulesMenuSubclient {
                         Text::new("<").size(24.0),
                         RulesMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu),
                     )),
-                    UIElement::Button(Button::new(
+                    UIElement::Button(Button::new_with_styling(
                         Bounds {
                             relative: Rect::new(0.5, 1.0, 0.0, 0.0),
                             absolute: Rect::new(-160.0, -80.0, 50.0, 30.0),
                         },
                         Text::new("<-"),
+                        DrawParam::default().color(Color::WHITE),
+                        Color::from_rgb(32, 32, 32),
                         RulesMenuEvent::PreviousPage,
                     )),
-                    UIElement::Button(Button::new(
+                    UIElement::Button(Button::new_with_styling(
                         Bounds {
                             relative: Rect::new(0.5, 1.0, 0.0, 0.0),
                             absolute: Rect::new(130.0, -80.0, 50.0, 30.0),
                         },
                         Text::new("->"),
+                        DrawParam::default().color(Color::WHITE),
+                        Color::from_rgb(32, 32, 32),
                         RulesMenuEvent::NextPage,
                     )),
                 ],
@@ -74,6 +82,7 @@ impl RulesMenuSubclient {
             panic!()
         };
         Self {
+            _shared: shared,
             parent_channel,
             event_sender,
             event_receiver,
@@ -81,6 +90,7 @@ impl RulesMenuSubclient {
             next_page,
             prev_page,
             page: 0,
+            keybinds,
         }
     }
 
@@ -89,9 +99,15 @@ impl RulesMenuSubclient {
         match event {
             RulesMenuEvent::PauseScreenEvent(event) => self.parent_channel.send(event).unwrap(),
             RulesMenuEvent::PreviousPage => {
-                self.page = ((self.page as i32 - 1) % NUM_PAGES as i32) as usize
+                if self.page > 0 {
+                    self.page -= 1;
+                }
             }
-            RulesMenuEvent::NextPage => self.page = (self.page + 1) % NUM_PAGES,
+            RulesMenuEvent::NextPage => {
+                if self.page < NUM_PAGES - 1 {
+                    self.page += 1;
+                }
+            }
         }
         Ok(())
     }
@@ -101,9 +117,23 @@ impl SubEventHandler<GameError> for RulesMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
 
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
+        if self.keybinds.pause.just_pressed(ctx) {
             self.event_sender
                 .send(RulesMenuEvent::PauseScreenEvent(PauseScreenEvent::MainMenu))
+                .unwrap();
+        }
+
+        if self.keybinds.move_right.just_pressed(ctx)
+            || self.keybinds.move_right_alternate.just_pressed(ctx)
+        {
+            self.event_sender.send(RulesMenuEvent::NextPage).unwrap();
+        }
+
+        if self.keybinds.move_left.just_pressed(ctx)
+            || self.keybinds.move_left_alternate.just_pressed(ctx)
+        {
+            self.event_sender
+                .send(RulesMenuEvent::PreviousPage)
                 .unwrap();
         }
 

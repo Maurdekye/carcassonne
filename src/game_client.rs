@@ -13,6 +13,7 @@ use crate::game::ShapeDetails;
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
 };
+use crate::keybinds::Keybinds;
 use crate::line::LineExt;
 use crate::main_client::MainEvent;
 use crate::multiplayer::transport::message::server::User;
@@ -27,10 +28,8 @@ use crate::util::{
 };
 use crate::{game_client, SharedResources};
 
-use ggez::input::keyboard::{KeyCode, KeyMods};
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
 use ggez::{
-    event,
     glam::{vec2, Vec2, Vec2Swizzles},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
     Context, GameError, GameResult,
@@ -46,6 +45,9 @@ const ZOOM_SPEED: f32 = 1.1;
 const MOVE_SPEED: f32 = 45.0;
 const MOVE_ACCEL: f32 = 0.1;
 const SPRINT_MOD: f32 = 2.0;
+
+const KEYBOARD_ZOOM_SPEED: f32 = 0.65;
+const KEYBOARD_ZOOM_ACEL: f32 = 0.1;
 
 const SCORE_EFFECT_LIFE: f32 = 2.5;
 const SCORE_EFFECT_DISTANCE: f32 = 0.4;
@@ -199,8 +201,10 @@ pub struct GameClient {
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent, GameEvent>,
     camera_movement: Vec2,
+    camera_zoom: f32,
     creation_time: SystemTime,
     shared: SharedResources,
+    keybinds: Keybinds,
 }
 
 impl GameClient {
@@ -263,6 +267,7 @@ impl GameClient {
     ) -> Self {
         let (event_sender, event_receiver) = channel();
         let is_local = matches!(state.game.local_player, PlayerType::Local);
+        let keybinds = shared.persistent.borrow().keybinds.clone();
         let ui_sender = event_sender.clone();
         let (
             ui,
@@ -275,7 +280,7 @@ impl GameClient {
                         relative: Rect::new(1.0, 0.0, 0.0, 0.0),
                         absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
                     },
-                    Text::new("Skip meeples (Space)"),
+                    Text::new(format!("Skip meeples ({})", keybinds.skip_meeples)),
                     DrawParam::default(),
                     Color::from_rgb(0, 128, 192),
                     GameEvent::SkipMeeples,
@@ -320,8 +325,10 @@ impl GameClient {
             return_to_main_menu_button,
             ui,
             camera_movement: Vec2::ZERO,
+            camera_zoom: 0.0,
             creation_time: SystemTime::now(),
             shared,
+            keybinds,
         };
         this.reset_camera(ctx);
         this
@@ -385,6 +392,7 @@ impl GameClient {
         self.scale = 0.1;
         self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
         self.camera_movement = Vec2::ZERO;
+        self.camera_zoom = 0.0;
     }
 
     fn reevaluate_selected_square(&mut self) {
@@ -1093,7 +1101,7 @@ impl GameClient {
     ) -> Result<(), GameError> {
         let is_endgame = matches!(self.state.turn_phase, TurnPhase::EndGame { .. });
         let current_player_ident = self.get_current_player();
-        if ctx.keyboard.is_key_pressed(KeyCode::Tab) || is_endgame {
+        if self.keybinds.detailed_view.pressed(ctx) || is_endgame {
             // draw player cards
             let mut card_location = vec2(20.0, 20.0);
             let mut cards_right_extent: f32 = 0.0;
@@ -1204,41 +1212,50 @@ impl GameClient {
         Ok(())
     }
 
-    fn keyboard_movement_update(&mut self, ctx: &mut Context) {
+    fn keyboard_movement_update(&mut self, ctx: &mut Context) -> GameResult<()> {
+        // sliding
         let mut movement_vector: Vec2 = [
-            (KeyCode::W, vec2(0.0, -1.0)),
-            (KeyCode::Up, vec2(0.0, -1.0)),
-            (KeyCode::D, vec2(1.0, 0.0)),
-            (KeyCode::Right, vec2(1.0, 0.0)),
-            (KeyCode::S, vec2(0.0, 1.0)),
-            (KeyCode::Down, vec2(0.0, 1.0)),
-            (KeyCode::A, vec2(-1.0, 0.0)),
-            (KeyCode::Left, vec2(-1.0, 0.0)),
+            (&self.keybinds.move_up, vec2(0.0, -1.0)),
+            (&self.keybinds.move_up_alternate, vec2(0.0, -1.0)),
+            (&self.keybinds.move_right, vec2(1.0, 0.0)),
+            (&self.keybinds.move_right_alternate, vec2(1.0, 0.0)),
+            (&self.keybinds.move_down, vec2(0.0, 1.0)),
+            (&self.keybinds.move_down_alternate, vec2(0.0, 1.0)),
+            (&self.keybinds.move_left, vec2(-1.0, 0.0)),
+            (&self.keybinds.move_left_alternate, vec2(-1.0, 0.0)),
         ]
         .into_iter()
-        .map(|(code, dir)| {
-            if ctx.keyboard.is_key_pressed(code) {
-                dir
-            } else {
-                Vec2::ZERO
-            }
-        })
+        .flat_map(|(binding, dir)| binding.pressed(ctx).then_some(dir))
         .sum();
         if movement_vector != Vec2::ZERO {
             movement_vector = movement_vector.normalize();
         }
         movement_vector = movement_vector * self.scale * MOVE_SPEED;
-        if ctx.keyboard.is_mod_active(KeyMods::SHIFT) {
+        if self.keybinds.move_faster.pressed(ctx) {
             movement_vector *= SPRINT_MOD;
         }
         self.camera_movement =
             self.camera_movement * (1.0 - MOVE_ACCEL) + movement_vector * MOVE_ACCEL;
         self.offset += self.camera_movement;
+
+        // zooming
+        let zoom_factor = match (
+            self.keybinds.zoom_in.pressed(ctx),
+            self.keybinds.zoom_out.pressed(ctx),
+        ) {
+            (true, false) => -KEYBOARD_ZOOM_SPEED,
+            (false, true) => KEYBOARD_ZOOM_SPEED,
+            _ => 0.0,
+        };
+        self.camera_zoom =
+            self.camera_zoom * (1.0 - KEYBOARD_ZOOM_ACEL) + zoom_factor * KEYBOARD_ZOOM_ACEL;
+        self.zoom(ctx, self.camera_zoom)
     }
 
     fn pause_menu_activation_update(&mut self, ctx: &mut Context) {
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
+        if self.keybinds.pause.just_pressed(ctx) {
             self.pause_menu = Some(PauseScreenSubclient::new(
+                self.shared.clone(),
                 self.event_sender.clone(),
                 self.is_endgame(),
                 !self.history.is_empty() && self.can_play(),
@@ -1278,23 +1295,21 @@ impl GameClient {
                 }
 
                 // rotate tile
-                if ctx.keyboard.is_key_just_pressed(KeyCode::R) {
+                if self.keybinds.rotate_clockwise.just_pressed(ctx) {
                     self.get_held_tile_mut().unwrap().rotate_clockwise();
                     self.reevaluate_selected_square();
                     self.update_preview();
                 }
 
                 // rotate tile counterclockwise (dont tell anyone it's actually just three clockwise rotations)
-                if ctx.keyboard.is_key_just_pressed(KeyCode::E) {
+                if self.keybinds.rotate_counterclockwise.just_pressed(ctx) {
                     self.get_held_tile_mut().unwrap().rotate_counterclockwise();
                     self.reevaluate_selected_square_counterclockwise();
                     self.update_preview();
                 }
 
                 // place tile
-                if ctx.mouse.button_just_pressed(event::MouseButton::Left)
-                    && self.placement_is_valid
-                {
+                if self.keybinds.place_tile.just_pressed(ctx) && self.placement_is_valid {
                     if let Some(selected_square) = self.selected_square {
                         let rotation = self.get_held_tile_mut().unwrap().rotation;
                         self.place_tile(ctx, selected_square)?;
@@ -1323,7 +1338,7 @@ impl GameClient {
 
                     *on_clickable = self.selected_segment_and_group.is_some();
 
-                    if ctx.mouse.button_just_pressed(event::MouseButton::Left) {
+                    if self.keybinds.place_meeple.just_pressed(ctx) {
                         if let Some((seg_ident, Some(group))) =
                             self.selected_segment_and_group
                                 .map(|(seg_ident, group_ident)| {
@@ -1345,7 +1360,7 @@ impl GameClient {
                     }
                 }
 
-                if ctx.keyboard.is_key_just_pressed(KeyCode::Space) {
+                if self.keybinds.skip_meeples.just_pressed(ctx) {
                     self.skip_meeples(ctx)?;
                     self.broadcast_action(GameMessage::SkipMeeples);
                 }
@@ -1389,7 +1404,7 @@ impl GameClient {
             ..
         } = self.grid_selection_info(ctx);
 
-        self.inspecting_groups = (ctx.keyboard.is_key_pressed(KeyCode::Tab) || self.is_endgame())
+        self.inspecting_groups = (self.keybinds.detailed_view.pressed(ctx) || self.is_endgame())
             .then(|| GroupInspection {
                 selected_group: self
                     .state
@@ -1458,23 +1473,27 @@ impl GameClient {
             self.update_preview();
         }
     }
-}
 
-impl SubEventHandler<GameError> for GameClient {
-    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
+    fn zoom(&mut self, ctx: &Context, factor: f32) -> GameResult<()> {
         if self.pause_menu.is_some() {
             return Ok(());
         }
 
         // zooming
         let prev_scale = self.scale;
-        self.scale *= ZOOM_SPEED.powf(y);
+        self.scale *= ZOOM_SPEED.powf(factor);
         self.scale = self.scale.clamp(0.01, 1.0);
         let scale_change = self.scale / prev_scale;
         let mouse: Vec2 = ctx.mouse.position().into();
         self.offset = (self.offset + mouse) * scale_change - mouse;
 
         Ok(())
+    }
+}
+
+impl SubEventHandler<GameError> for GameClient {
+    fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
+        self.zoom(ctx, y)
     }
 
     fn update(&mut self, ctx: &mut Context) -> GameResult {
@@ -1500,11 +1519,11 @@ impl SubEventHandler<GameError> for GameClient {
             ));
 
         // dragging
-        if ctx.mouse.button_pressed(event::MouseButton::Right) {
+        if self.keybinds.drag_camera.pressed(ctx) {
             self.offset -= Vec2::from(ctx.mouse.delta());
         }
 
-        self.keyboard_movement_update(ctx);
+        self.keyboard_movement_update(ctx)?;
 
         self.pause_menu_activation_update(ctx);
 
@@ -1522,7 +1541,7 @@ impl SubEventHandler<GameError> for GameClient {
         }
 
         if on_clickable {
-            set_cursor_type(ctx, CursorIcon::Hand);
+            set_cursor_type(ctx, CursorIcon::Pointer);
         }
 
         Ok(())

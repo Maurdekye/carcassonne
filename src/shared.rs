@@ -2,7 +2,7 @@ use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{persist::PersistenceManager, Args};
+use crate::{keybinds::Keybinds, persist::PersistenceManager, Args};
 
 #[derive(Clone, Debug)]
 pub struct SharedResources {
@@ -22,6 +22,7 @@ pub struct SaveData {
     pub ip: Option<IpAddr>,
     pub port: u16,
     pub username: String,
+    pub keybinds: Keybinds,
 }
 
 impl Default for SaveData {
@@ -30,6 +31,7 @@ impl Default for SaveData {
             ip: None,
             port: 11069,
             username: String::new(),
+            keybinds: Keybinds::default(),
         }
     }
 }

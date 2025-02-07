@@ -1,6 +1,5 @@
 use ggez::{
     graphics::{Canvas, Rect, Text},
-    input::keyboard::KeyCode,
     Context, GameError,
 };
 use log::trace;
@@ -13,6 +12,7 @@ use std::{
 use crate::{
     game_client::GameEvent,
     main_client::MainEvent,
+    shared::SharedResources,
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
 };
@@ -35,6 +35,7 @@ impl MainPauseMenuEvent {
 }
 
 pub struct MainPauseMenuSubclient {
+    shared: SharedResources,
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<MainPauseMenuEvent>,
     event_receiver: Receiver<MainPauseMenuEvent>,
@@ -47,6 +48,7 @@ pub struct MainPauseMenuSubclient {
 
 impl MainPauseMenuSubclient {
     pub fn new(
+        shared: SharedResources,
         parent_channel: Sender<PauseScreenEvent>,
         can_end_game: Rc<Cell<bool>>,
         can_undo: Rc<Cell<bool>>,
@@ -114,6 +116,7 @@ impl MainPauseMenuSubclient {
         end_game_button.borrow_mut().state = UIElementState::disabled_if(can_end_game.get());
         undo_button.borrow_mut().state = UIElementState::disabled_if(!can_undo.get());
         MainPauseMenuSubclient {
+            shared,
             parent_channel,
             event_sender,
             event_receiver,
@@ -146,7 +149,7 @@ impl SubEventHandler<GameError> for MainPauseMenuSubclient {
         self.undo_button.borrow_mut().state = UIElementState::disabled_if(!self.can_undo.get());
         self.ui.update(ctx)?;
 
-        if ctx.keyboard.is_key_just_pressed(KeyCode::Escape) {
+        if self.shared.persistent.borrow().keybinds.pause.just_pressed(ctx) {
             self.event_sender
                 .send(MainPauseMenuEvent::game_event(GameEvent::ClosePauseMenu))
                 .unwrap();
