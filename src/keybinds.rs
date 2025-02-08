@@ -26,7 +26,7 @@ macro_rules! define_keybinds {
     };
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Keybind {
     Mouse(MouseButton),
     Key(Key),

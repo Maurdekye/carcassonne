@@ -1127,9 +1127,18 @@ impl GameClient {
 
                 // draw controls cheatsheet
                 let res = ctx.res();
-                let cheatsheet_text = Text::new(
-                    "Left mouse - Place tile / meeple    Right mouse - Drag    R - Rotate",
-                )
+                let first_hint = if self.keybinds.place_tile == self.keybinds.place_meeple {
+                    format!("{} - Place tile / meeple", self.keybinds.place_tile)
+                } else {
+                    format!(
+                        "{} - Place tile    {} - Place meeple",
+                        self.keybinds.place_tile, self.keybinds.place_meeple
+                    )
+                };
+                let cheatsheet_text = Text::new(format!(
+                    "{}    {} - Drag    {} - Rotate",
+                    first_hint, self.keybinds.drag_camera, self.keybinds.rotate_clockwise
+                ))
                 .size(16.0);
                 let bounds: Vec2 = cheatsheet_text.measure(ctx)?.into();
                 let width = bounds.x + 12.0;
