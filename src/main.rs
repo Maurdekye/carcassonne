@@ -121,6 +121,10 @@ struct Args {
     #[arg(short, long)]
     load: Option<PathBuf>,
 
+    /// Load this save file when starting a multiplayer game
+    #[arg(short, long)]
+    multiplayer_load: Option<PathBuf>,
+
     /// Enables debug mode: increases log level to 'trace',
     /// enables saving log files, and enables saving game state
     #[arg(short, long, action = ArgAction::SetTrue)]

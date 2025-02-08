@@ -1,6 +1,8 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
+    error::Error,
+    fs::File,
     net::IpAddr,
     rc::Rc,
     sync::mpsc::{channel, Receiver, Sender},
@@ -16,7 +18,7 @@ use log::{debug, info, trace};
 
 use crate::{
     game::player::PlayerType,
-    game_client::GameAction,
+    game_client::{GameAction, GameState},
     main_client::MainEvent,
     multiplayer::transport::message::client::{self, ClientMessage},
     sub_event_handler::SubEventHandler,
@@ -313,17 +315,43 @@ impl HostClient {
 
     fn start_game(&mut self, ctx: &Context) {
         info!("Game Start!");
-        let game_seed = rand::random();
-        self.broadcast(ServerMessage::StartGame { game_seed });
-        self.phase = MultiplayerPhase::new_game(
-            ctx,
-            self.shared.clone(),
-            self.parent_channel.clone(),
-            self.users.values().map(|user| user.user.clone()).collect(),
-            game_seed,
-            None,
-            self.username.clone(),
-        );
+        let result: Result<Option<GameState>, Box<dyn Error>> = try {
+            if let Some(path) = &self.shared.args.multiplayer_load {
+                let file = File::open(path)?;
+                Some(bincode::deserialize_from(file)?)
+            } else {
+                None
+            }
+        };
+        match result {
+            Ok(Some(state)) => {
+                self.broadcast(ServerMessage::GameState(state.clone().into()));
+                self.phase = MultiplayerPhase::new_from_state(
+                    ctx,
+                    self.shared.clone(),
+                    self.parent_channel.clone(),
+                    state,
+                    None,
+                    self.username.clone(),
+                )
+            }
+            result => {
+                if let Err(err) = result {
+                    log::error!("Error loading multiplayer game: {err}");
+                }
+                let game_seed = rand::random();
+                self.broadcast(ServerMessage::StartGame { game_seed });
+                self.phase = MultiplayerPhase::new_game(
+                    ctx,
+                    self.shared.clone(),
+                    self.parent_channel.clone(),
+                    self.users.values().map(|user| user.user.clone()).collect(),
+                    game_seed,
+                    None,
+                    self.username.clone(),
+                );
+            }
+        }
     }
 
     fn ping_clients(&mut self) {

@@ -455,6 +455,7 @@ impl Game {
             });
         }
 
+        // update group scoring details
         let group = self.groups.get_mut(group_ident).unwrap();
         group.meeples.clear();
         group.scoring_details = Some(ScoringDetails {
@@ -464,6 +465,21 @@ impl Game {
                 .map(|id| (id, self.players.get(id).unwrap().color))
                 .collect(),
         });
+
+        // if scoring a city, invalidate the scoring details of all connected farms
+        if group.gtype == SegmentType::City {
+            for (pos, seg_index) in group.segments.clone() {
+                let tile = self.placed_tiles.get(&pos).unwrap();
+                for adj_seg_index in tile
+                    .adjacent_segments(seg_index)
+                    .filter_map(|(i, seg)| (seg.stype == SegmentType::Farm).then_some(i))
+                    .collect::<Vec<_>>()
+                {
+                    let farm_group = self.group_by_seg_ident_mut((pos, adj_seg_index)).unwrap();
+                    farm_group.scoring_details = None;
+                }
+            }
+        }
 
         scoring_result
     }

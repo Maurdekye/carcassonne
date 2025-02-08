@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::fs::{create_dir_all, File};
-use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -341,10 +340,8 @@ impl GameClient {
         action_channel: Option<Sender<GameAction>>,
         path: PathBuf,
     ) -> GameResult<Self> {
-        let mut file = File::open(path)?;
-        let mut file_contents = Vec::new();
-        file.read_to_end(&mut file_contents)?;
-        let mut state: GameState = bincode::deserialize(&file_contents).to_gameerror()?;
+        let file = File::open(path)?;
+        let mut state: GameState = bincode::deserialize_from(file).to_gameerror()?;
         for (_, player) in &mut state.game.players {
             player.ptype = PlayerType::Local;
         }
@@ -361,15 +358,10 @@ impl GameClient {
     fn save(&self, mut path: PathBuf) -> GameResult<()> {
         path.push(self.creation_time.strftime("%Y-%m-%d_%H-%M-%S"));
         let _ = create_dir_all(&path);
-        path.push(format!(
-            "{}.save",
-            SystemTime::now().strftime("%Y-%m-%d_%H-%M-%S%.3f")
-        ));
+        path.push(SystemTime::now().strftime("%Y-%m-%d_%H-%M-%S%.3f.save"));
         debug!("saving game state to {}", path.display());
-        let game_state: Vec<u8> = bincode::serialize(&self.state).to_gameerror()?;
         let mut file = File::create(path)?;
-        file.write_all(&game_state)?;
-        Ok(())
+        bincode::serialize_into(&mut file, &self.state).to_gameerror()
     }
 
     fn push_history(&mut self) -> GameResult<()> {
