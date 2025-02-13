@@ -15,10 +15,12 @@ use log::trace;
 
 use crate::{
     main_client::MainEvent,
-    sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, TextInput, UIElement, UIManager},
     util::{AnchorPoint, ContextExt, RectExt, TextExt},
     SharedResources,
+};
+use ggez_no_re::{
+    sub_event_handler::SubEventHandler,
+    ui_manager::{Bounds, Button, TextInput, UIElement, UIManager},
 };
 
 const ERROR_DISPLAY_PERIOD: Duration = Duration::from_secs(10);
@@ -193,7 +195,7 @@ impl MultiplayerMenuClient {
     }
 }
 
-impl SubEventHandler<GameError> for MultiplayerMenuClient {
+impl SubEventHandler for MultiplayerMenuClient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {

@@ -9,10 +9,9 @@ use std::{
     sync::mpsc::{channel, Receiver, Sender},
 };
 
-use crate::{
-    game_client::GameEvent,
-    main_client::MainEvent,
-    shared::SharedResources,
+use crate::{game_client::GameEvent, main_client::MainEvent, shared::SharedResources};
+
+use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
 };
@@ -142,14 +141,21 @@ impl MainPauseMenuSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for MainPauseMenuSubclient {
+impl SubEventHandler for MainPauseMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.end_game_button.borrow_mut().state =
             UIElementState::disabled_if(self.can_end_game.get());
         self.undo_button.borrow_mut().state = UIElementState::disabled_if(!self.can_undo.get());
         self.ui.update(ctx)?;
 
-        if self.shared.persistent.borrow().keybinds.pause.just_pressed(ctx) {
+        if self
+            .shared
+            .persistent
+            .borrow()
+            .keybinds
+            .pause
+            .just_pressed(ctx)
+        {
             self.event_sender
                 .send(MainPauseMenuEvent::game_event(GameEvent::ClosePauseMenu))
                 .unwrap();

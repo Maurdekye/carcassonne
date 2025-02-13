@@ -15,10 +15,13 @@ use log::{trace, warn};
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     main_client::MainEvent,
-    sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
     util::{AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt},
     SharedResources,
+};
+
+use ggez_no_re::{
+    sub_event_handler::SubEventHandler,
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
 };
 
 #[derive(Clone, Debug)]
@@ -186,7 +189,7 @@ impl MainMenuClient {
     }
 }
 
-impl SubEventHandler<GameError> for MainMenuClient {
+impl SubEventHandler for MainMenuClient {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
         self.color_selection_ui.update(ctx)?;

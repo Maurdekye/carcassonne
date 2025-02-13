@@ -5,8 +5,8 @@ use std::{
 
 use ggez::{graphics::Canvas, Context, GameError};
 use lobby_client::{LobbyClient, LobbyEvent};
+use message::server::User;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use transport::message::server::User;
 
 use crate::{
     game::{
@@ -16,16 +16,16 @@ use crate::{
     game_client::{GameAction, GameClient, GameState},
     main_client::MainEvent,
     pos::GridPos,
-    sub_event_handler::SubEventHandler,
     tile::{tile_definitions::STARTING_TILE, Tile},
     SharedResources,
 };
+use ggez_no_re::sub_event_handler::SubEventHandler;
 
 pub mod host_client;
 pub mod join_client;
 mod lobby_client;
+pub mod message;
 pub mod multiplayer_menu;
-pub mod transport;
 
 enum MultiplayerPhase<T> {
     Lobby(LobbyClient<T>),
@@ -96,7 +96,7 @@ impl<T> MultiplayerPhase<T> {
     }
 }
 
-impl<T> SubEventHandler<GameError> for MultiplayerPhase<T>
+impl<T> SubEventHandler for MultiplayerPhase<T>
 where
     T: From<LobbyEvent>,
 {

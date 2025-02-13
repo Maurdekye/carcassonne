@@ -1,8 +1,10 @@
 use std::net::IpAddr;
 
+use ggez::winit::{event::MouseButton, keyboard::NamedKey};
+use ggez_no_re::{keybinds, persist::PersistenceManager};
 use serde::{Deserialize, Serialize};
 
-use crate::{keybinds::Keybinds, persist::PersistenceManager, Args};
+use crate::Args;
 
 #[derive(Clone, Debug)]
 pub struct SharedResources {
@@ -14,6 +16,31 @@ impl SharedResources {
     pub fn new(args: Args) -> SharedResources {
         let persistent = PersistenceManager::new(&args.save_path);
         SharedResources { args, persistent }
+    }
+}
+
+keybinds! {
+    pub struct Keybinds {
+        place_tile: MouseButton::Left,
+        place_meeple: MouseButton::Left,
+        rotate_clockwise: "r",
+        rotate_counterclockwise: "e",
+        pause: NamedKey::Escape,
+        quit: NamedKey::Escape,
+        skip_meeples: NamedKey::Space,
+        detailed_view: NamedKey::Tab,
+        drag_camera: MouseButton::Right,
+        zoom_in: "-",
+        zoom_out: "=",
+        move_up: "w",
+        move_up_alternate: NamedKey::ArrowUp,
+        move_right: "d",
+        move_right_alternate: NamedKey::ArrowRight,
+        move_down: "s",
+        move_down_alternate: NamedKey::ArrowDown,
+        move_left: "a",
+        move_left_alternate: NamedKey::ArrowLeft,
+        move_faster: NamedKey::Shift,
     }
 }
 

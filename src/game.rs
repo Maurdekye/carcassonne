@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
-    line::Line,
     pos::GridPos,
     tile::{
         GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
@@ -19,6 +18,7 @@ use crate::{
     },
     util::{Bag, HashMapBag, MinByF32Key},
 };
+use ggez_no_re::line::Line;
 
 pub mod player {
     use std::{net::IpAddr, time::Duration};

@@ -12,20 +12,20 @@ use crate::game::ShapeDetails;
 use crate::game::{
     player::Player, Game, GroupIdentifier, PlayerIdentifier, ScoringResult, SegmentIdentifier,
 };
-use crate::keybinds::Keybinds;
-use crate::line::LineExt;
 use crate::main_client::MainEvent;
-use crate::multiplayer::transport::message::server::User;
-use crate::multiplayer::transport::message::{GameMessage, TilePreview};
+use crate::multiplayer::message::server::User;
+use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
-use crate::sub_event_handler::SubEventHandler;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
-use crate::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
-use crate::util::{
-    point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
-    ResultExt, SystemTimeExt, TextExt,
-};
 use crate::{game_client, SharedResources};
+use crate::shared::Keybinds;
+use ggez_no_re::line::LineExt;
+use ggez_no_re::sub_event_handler::SubEventHandler;
+use ggez_no_re::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
+use ggez_no_re::util::{
+    point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
+    ResultExtToGameError, SystemTimeExt, TextExt,
+};
 
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
 use ggez::{
@@ -1492,7 +1492,7 @@ impl GameClient {
     }
 }
 
-impl SubEventHandler<GameError> for GameClient {
+impl SubEventHandler for GameClient {
     fn mouse_wheel_event(&mut self, ctx: &mut Context, _x: f32, y: f32) -> Result<(), GameError> {
         self.zoom(ctx, y)
     }

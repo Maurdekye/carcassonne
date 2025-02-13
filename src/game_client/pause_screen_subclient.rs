@@ -16,9 +16,12 @@ use std::{
 use crate::{
     game_client::GameEvent,
     shared::SharedResources,
+    util::{AnchorPoint, DrawableWihParamsExt, TextExt},
+};
+
+use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIManager},
-    util::{AnchorPoint, DrawableWihParamsExt, TextExt},
 };
 
 mod controls_menu_subclient;
@@ -34,7 +37,7 @@ pub enum PauseScreenEvent {
 }
 
 pub struct PauseScreenSubclient {
-    scene: Box<dyn SubEventHandler<GameError>>,
+    scene: Box<dyn SubEventHandler>,
     parent_channel: Sender<GameEvent>,
     event_sender: Sender<PauseScreenEvent>,
     event_receiver: Receiver<PauseScreenEvent>,
@@ -113,7 +116,7 @@ impl PauseScreenSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for PauseScreenSubclient {
+impl SubEventHandler for PauseScreenSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.scene.update(ctx)?;
         self.ui.update(ctx)?;

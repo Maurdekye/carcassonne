@@ -8,11 +8,13 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crate::{
     colors::PANEL_COLOR,
-    keybinds::Keybinds,
+    shared::Keybinds,
     shared::SharedResources,
+    util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
+};
+use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIManager},
-    util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
 use super::PauseScreenEvent;
@@ -64,7 +66,7 @@ impl ControlsMenuSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for ControlsMenuSubclient {
+impl SubEventHandler for ControlsMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
 

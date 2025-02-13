@@ -10,28 +10,23 @@ use ggez::{
     conf::{FullscreenType, WindowMode},
     event, ContextBuilder, GameResult,
 };
+use ggez_no_re::{
+    logger::{LogLevel, Logger},
+    util::{self, ResultExtToGameError},
+};
 use log::debug;
-use logger::Logger;
 use main_client::MainClient;
 use shared::SharedResources;
-use util::ResultExt;
 
 mod colors;
 mod game;
 mod game_client;
-mod line;
-mod logger;
 mod main_client;
 mod main_menu_client;
 mod multiplayer;
-mod persist;
 mod pos;
 mod shared;
-mod sub_event_handler;
 mod tile;
-mod ui_manager;
-mod util;
-mod keybinds;
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -60,31 +55,6 @@ enum DebugGameConfiguration {
     MultiplePlayerOwnership,
     RotationTest,
     GroupCoallation,
-}
-
-#[derive(ValueEnum, Debug, Clone, Copy)]
-enum LogLevel {
-    Off,
-    Error,
-    Warn,
-    Info,
-    Debug,
-    Trace,
-    Full,
-}
-
-impl From<LogLevel> for log::LevelFilter {
-    fn from(value: LogLevel) -> Self {
-        use LogLevel::*;
-        match value {
-            Off => log::LevelFilter::Off,
-            Error => log::LevelFilter::Error,
-            Warn => log::LevelFilter::Warn,
-            Info => log::LevelFilter::Info,
-            Debug => log::LevelFilter::Debug,
-            Trace | Full => log::LevelFilter::Trace,
-        }
-    }
 }
 
 #[derive(Parser, Clone, Debug)]
@@ -143,10 +113,12 @@ fn main() -> GameResult {
         args.log_level = LogLevel::Trace;
     }
 
-    let logger = Logger::new(args.clone())?;
-    log::set_boxed_logger(Box::new(logger))
-        .map(|()| log::set_max_level(args.log_level.into()))
-        .to_gameerror()?;
+    Logger::install(
+        args.save_logs.clone().flatten(),
+        args.log_level,
+        crate_name!(),
+    )
+    .to_gameerror()?;
 
     debug!("Logger initialized");
     debug!("Arguments: {args:#?}");

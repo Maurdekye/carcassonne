@@ -20,21 +20,23 @@ use crate::{
     game::player::PlayerType,
     game_client::{GameAction, GameState},
     main_client::MainEvent,
-    multiplayer::transport::message::client::{self, ClientMessage},
-    sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+    multiplayer::{
+        lobby_client::{LobbyClient, LobbyEvent},
+        message::client::{self, ClientMessage},
+        message::server::{self, ClientInfo, LobbyState, ServerMessage, User},
+        MultiplayerPhase,
+    },
     util::{AnchorPoint, ContextExt, TextExt},
     SharedResources,
 };
 
-use super::{
-    lobby_client::{LobbyClient, LobbyEvent},
-    transport::{
-        message::server::{self, ClientInfo, LobbyState, ServerMessage, User},
-        MessageServer, NetworkEvent, ServerNetworkEvent, ServersideTransport,
-    },
-    MultiplayerPhase,
+use ggez_no_re::{
+    sub_event_handler::SubEventHandler,
+    transport::{MessageServer, NetworkEvent, ServerNetworkEvent, ServersideTransport},
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
 };
+
+use super::message::Message;
 
 #[derive(Clone, Debug)]
 enum UIEvent {
@@ -48,13 +50,13 @@ enum HostEvent {
     UIEvent(UIEvent),
     NetworkEvent {
         src_addr: IpAddr,
-        event: ServerNetworkEvent,
+        event: ServerNetworkEvent<Message>,
     },
     LobbyEvent(LobbyEvent),
 }
 
-impl From<(IpAddr, ServerNetworkEvent)> for HostEvent {
-    fn from((src_addr, event): (IpAddr, ServerNetworkEvent)) -> Self {
+impl From<(IpAddr, ServerNetworkEvent<Message>)> for HostEvent {
+    fn from((src_addr, event): (IpAddr, ServerNetworkEvent<Message>)) -> Self {
         HostEvent::NetworkEvent { src_addr, event }
     }
 }
@@ -131,7 +133,7 @@ impl HostClient {
             panic!()
         };
         start_game_button.borrow_mut().state = UIElementState::Disabled;
-        let message_server = MessageServer::start(event_sender.clone(), port);
+        let message_server = MessageServer::start::<Message>(event_sender.clone(), port);
         let mut this = HostClient {
             shared,
             parent_channel,
@@ -180,7 +182,7 @@ impl HostClient {
             })
             .filter_map(|user| user.client_info.as_mut())
         {
-            client_info.transport.blind_send(message.clone())
+            client_info.transport.blind_send::<Message>(message.clone())
         }
     }
 
@@ -205,7 +207,7 @@ impl HostClient {
 
     fn add_client(&mut self, mut transport: ServersideTransport, client_info: ClientInfo) {
         if let MultiplayerPhase::Game { game, .. } = &self.phase {
-            transport.blind_send(ServerMessage::GameState(game.state.clone().into()));
+            transport.blind_send::<Message>(ServerMessage::GameState(game.state.clone().into()));
         }
         let username = client_info.ip.to_string();
         self.users.insert(
@@ -245,7 +247,9 @@ impl HostClient {
                     let host_client_info = host_client.client_info.as_mut().unwrap();
                     match client_message {
                         ClientMessage::Ping => {
-                            host_client_info.transport.blind_send(ServerMessage::Pong);
+                            host_client_info
+                                .transport
+                                .blind_send::<Message>(ServerMessage::Pong);
                         }
                         ClientMessage::Pong => {
                             let last_ping = host_client_info.last_ping;
@@ -364,7 +368,7 @@ impl HostClient {
         {
             if now - client.last_ping > self.shared.args.ping_interval {
                 client.last_ping = now;
-                client.transport.blind_send(ServerMessage::Ping);
+                client.transport.blind_send::<Message>(ServerMessage::Ping);
                 updated_ping = true;
             }
         }
@@ -374,7 +378,7 @@ impl HostClient {
     }
 }
 
-impl SubEventHandler<GameError> for HostClient {
+impl SubEventHandler for HostClient {
     fn mouse_wheel_event(&mut self, ctx: &mut Context, x: f32, y: f32) -> Result<(), GameError> {
         self.phase.mouse_wheel_event(ctx, x, y)
     }

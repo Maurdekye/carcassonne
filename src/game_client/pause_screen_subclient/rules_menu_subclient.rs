@@ -12,11 +12,14 @@ use std::{
 
 use crate::{
     colors::PANEL_COLOR,
-    keybinds::Keybinds,
+    shared::Keybinds,
     shared::SharedResources,
+    util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
+};
+
+use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
-    util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
 use super::PauseScreenEvent;
@@ -113,7 +116,7 @@ impl RulesMenuSubclient {
     }
 }
 
-impl SubEventHandler<GameError> for RulesMenuSubclient {
+impl SubEventHandler for RulesMenuSubclient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
 

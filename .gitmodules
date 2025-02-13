@@ -1,0 +1,3 @@
+[submodule "ggez-no-re"]
+	path = ggez-no-re
+	url = git@github.com:Maurdekye/ggez-no-re.git

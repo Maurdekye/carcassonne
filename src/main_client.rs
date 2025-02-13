@@ -18,9 +18,10 @@ use crate::{
     multiplayer::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
     },
-    sub_event_handler::SubEventHandler,
     DebugGameConfiguration, SharedResources,
 };
+
+use ggez_no_re::sub_event_handler::SubEventHandler;
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
@@ -41,7 +42,7 @@ pub enum MainEvent {
 }
 
 pub struct MainClient {
-    scene: Box<dyn SubEventHandler<GameError>>,
+    scene: Box<dyn SubEventHandler>,
     event_sender: Sender<MainEvent>,
     event_receiver: Receiver<MainEvent>,
     quitting: bool,

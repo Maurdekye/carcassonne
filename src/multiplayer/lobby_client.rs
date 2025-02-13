@@ -9,12 +9,14 @@ use log::trace;
 
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
-    sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
     util::{AnchorPoint, ContextExt, TextExt},
 };
+use ggez_no_re::{
+    sub_event_handler::SubEventHandler,
+    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+};
 
-use super::transport::message::server::{LobbyMessage, User};
+use super::message::server::{LobbyMessage, User};
 
 #[derive(Clone, Debug)]
 pub enum LobbyEvent {
@@ -105,7 +107,7 @@ where
     }
 }
 
-impl<T> SubEventHandler<GameError> for LobbyClient<T>
+impl<T> SubEventHandler for LobbyClient<T>
 where
     T: From<LobbyEvent>,
 {

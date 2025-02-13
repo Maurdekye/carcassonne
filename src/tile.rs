@@ -19,10 +19,10 @@ use tile_definitions::{
 
 use crate::{
     game::SegmentIndex,
-    line::Line,
     pos::GridPos,
     util::{refit_to_rect, RotateExt},
 };
+use ggez_no_re::line::Line;
 
 #[cfg(test)]
 mod test;
