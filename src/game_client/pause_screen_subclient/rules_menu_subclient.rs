@@ -13,7 +13,7 @@ use std::{
 use crate::{
     colors::PANEL_COLOR,
     shared::Keybinds,
-    shared::SharedResources,
+    shared::Shared,
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 
@@ -34,7 +34,7 @@ pub enum RulesMenuEvent {
 }
 
 pub struct RulesMenuSubclient {
-    _shared: SharedResources,
+    _shared: Shared,
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<RulesMenuEvent>,
     event_receiver: Receiver<RulesMenuEvent>,
@@ -46,7 +46,7 @@ pub struct RulesMenuSubclient {
 }
 
 impl RulesMenuSubclient {
-    pub fn new(shared: SharedResources, parent_channel: Sender<PauseScreenEvent>) -> Self {
+    pub fn new(shared: Shared, parent_channel: Sender<PauseScreenEvent>) -> Self {
         let (event_sender, event_receiver) = channel();
         let keybinds = shared.persistent.borrow().keybinds.clone();
         let ui_sender = event_sender.clone();

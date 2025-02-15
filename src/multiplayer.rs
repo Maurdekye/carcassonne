@@ -17,7 +17,7 @@ use crate::{
     main_client::MainEvent,
     pos::GridPos,
     tile::{tile_definitions::STARTING_TILE, Tile},
-    SharedResources,
+    Shared,
 };
 use ggez_no_re::sub_event_handler::SubEventHandler;
 
@@ -38,7 +38,7 @@ enum MultiplayerPhase<T> {
 impl<T> MultiplayerPhase<T> {
     pub fn new_game(
         ctx: &Context,
-        args: SharedResources,
+        args: Shared,
         parent_channel: Sender<MainEvent>,
         users: Vec<User>,
         seed: u64,
@@ -75,7 +75,7 @@ impl<T> MultiplayerPhase<T> {
 
     pub fn new_from_state(
         ctx: &Context,
-        shared: SharedResources,
+        shared: Shared,
         parent_channel: Sender<MainEvent>,
         mut state: GameState,
         local_user: Option<IpAddr>,

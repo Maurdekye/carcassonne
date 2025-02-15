@@ -16,15 +16,15 @@ use crate::main_client::MainEvent;
 use crate::multiplayer::message::server::User;
 use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
-use crate::tile::{tile_definitions::STARTING_TILE, Tile};
-use crate::{game_client, SharedResources};
 use crate::shared::Keybinds;
+use crate::tile::{tile_definitions::STARTING_TILE, Tile};
+use crate::{game_client, Shared};
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
 use ggez_no_re::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
 use ggez_no_re::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
-    ResultExtToGameError, SystemTimeExt, TextExt,
+    ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
 };
 
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -202,14 +202,14 @@ pub struct GameClient {
     camera_movement: Vec2,
     camera_zoom: f32,
     creation_time: SystemTime,
-    shared: SharedResources,
+    shared: Shared,
     keybinds: Keybinds,
 }
 
 impl GameClient {
     pub fn new(
         ctx: &Context,
-        shared: SharedResources,
+        shared: Shared,
         players: Vec<Color>,
         parent_channel: Sender<MainEvent>,
     ) -> Self {
@@ -225,7 +225,7 @@ impl GameClient {
 
     pub fn new_with_game(
         ctx: &Context,
-        args: SharedResources,
+        args: Shared,
         game: Game,
         parent_channel: Sender<MainEvent>,
     ) -> Self {
@@ -234,7 +234,7 @@ impl GameClient {
 
     pub fn new_with_game_and_action_channel(
         ctx: &Context,
-        shared: SharedResources,
+        shared: Shared,
         mut game: Game,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameAction>>,
@@ -259,7 +259,7 @@ impl GameClient {
 
     pub fn new_from_state(
         ctx: &Context,
-        shared: SharedResources,
+        shared: Shared,
         state: GameState,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameAction>>,
@@ -305,6 +305,7 @@ impl GameClient {
         else {
             panic!()
         };
+
         let mut this = Self {
             parent_channel,
             action_channel,
@@ -330,12 +331,23 @@ impl GameClient {
             keybinds,
         };
         this.reset_camera(ctx);
+        if let Some(discord) = &mut this.shared.discord {
+            let activity = this.state.game.discord_presence();
+            discord.start_activity(activity).log_and_ignore();
+        }
         this
+    }
+
+    fn update_discord_presence(&mut self) {
+        if let Some(discord) = &mut self.shared.discord {
+            let activity = self.state.game.discord_presence();
+            discord.update_activity(activity).log_and_ignore();
+        }
     }
 
     pub fn load(
         ctx: &Context,
-        args: SharedResources,
+        args: Shared,
         parent_channel: Sender<MainEvent>,
         action_channel: Option<Sender<GameAction>>,
         path: PathBuf,
@@ -633,6 +645,8 @@ impl GameClient {
             }
             None => self.end_game(ctx),
         }
+
+        self.update_discord_presence();
     }
 
     fn end_game(&mut self, ctx: &Context) {
@@ -1583,5 +1597,13 @@ impl SubEventHandler for GameClient {
         }
 
         Ok(())
+    }
+}
+
+impl Drop for GameClient {
+    fn drop(&mut self) {
+        if let Some(discord) = &self.shared.discord {
+            discord.stop_activity().log_and_ignore();
+        }
     }
 }

@@ -1,5 +1,6 @@
-use std::{cell::RefCell, net::IpAddr, rc::Rc, sync::mpsc::Sender};
+use std::{cell::RefCell, net::IpAddr, num::NonZero, rc::Rc, sync::mpsc::Sender};
 
+use discord_sdk::activity::{self, ActivityBuilder, ActivityKind, Assets, PartyPrivacy};
 use ggez::{
     glam::vec2,
     graphics::{Color, Rect, Text},
@@ -9,11 +10,14 @@ use log::trace;
 
 use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
+    shared::Shared,
     util::{AnchorPoint, ContextExt, TextExt},
+    LATEST_RELEASE_LINK,
 };
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+    util::ResultExt,
 };
 
 use super::message::server::{LobbyMessage, User};
@@ -26,6 +30,7 @@ pub enum LobbyEvent {
 pub struct LobbyClient<T> {
     pub users: Vec<User>,
     me: Option<IpAddr>,
+    shared: Shared,
     _parent_channel: Sender<T>,
     color_choice_ui: UIManager<LobbyEvent, T>,
     color_choice_buttons: [Rc<RefCell<Button<LobbyEvent>>>; NUM_PLAYERS],
@@ -37,7 +42,12 @@ impl<T> LobbyClient<T>
 where
     T: From<LobbyEvent>,
 {
-    pub fn new(users: Vec<User>, me: Option<IpAddr>, parent_channel: Sender<T>) -> LobbyClient<T> {
+    pub fn new(
+        users: Vec<User>,
+        me: Option<IpAddr>,
+        shared: Shared,
+        parent_channel: Sender<T>,
+    ) -> LobbyClient<T> {
         let button_pos = Rect::new(0.6, 0.3, 0.0, 0.0);
         let mut i = 0;
         let (color_choice_ui, color_choice_buttons) = UIManager::new_and_rc_elements(
@@ -69,15 +79,39 @@ where
         };
         deselect_color_button.borrow_mut().state = UIElementState::Disabled;
         let color_choice_buttons = color_choice_buttons.map(UIElement::unwrap_button);
-        LobbyClient {
+        let mut this = LobbyClient {
             me,
+            shared,
             users,
             _parent_channel: parent_channel,
             color_choice_ui,
             color_choice_buttons,
             ui,
             deselect_color_button,
+        };
+        let activity = this.discord_presence();
+        if let Some(discord) = &mut this.shared.discord {
+            discord.start_activity(activity).log_and_ignore();
         }
+        this
+    }
+
+    fn discord_presence(&self) -> ActivityBuilder {
+        ActivityBuilder::new()
+            .state("In a multiplayer lobby")
+            .kind(ActivityKind::Playing)
+            .instance(true)
+            .party(
+                "null",
+                Some(NonZero::<u32>::try_from(self.users.len().max(1) as u32).unwrap()),
+                Some(NonZero::<u32>::try_from(NUM_PLAYERS as u32).unwrap()),
+                PartyPrivacy::Private,
+            )
+            .assets(Assets::default().large("starting-tile", None::<String>))
+            .button(activity::Button {
+                label: "Download".into(),
+                url: LATEST_RELEASE_LINK.into(),
+            })
     }
 
     pub fn handle_message(&mut self, message: LobbyMessage) -> Result<(), GameError> {
@@ -85,6 +119,7 @@ where
         #[allow(clippy::single_match)]
         match message {
             LobbyMessage::LobbyState(state) => {
+                let changed_user_count = self.users.len() != state.users.len();
                 self.users = state.users;
                 let selected_colors: Vec<_> =
                     self.users.iter().filter_map(|user| user.color).collect();
@@ -100,6 +135,13 @@ where
                     .unwrap();
                 self.deselect_color_button.borrow_mut().state =
                     UIElementState::disabled_if(me.color.is_none());
+
+                if changed_user_count {
+                    let activity = self.discord_presence();
+                    if let Some(discord) = &mut self.shared.discord {
+                        discord.update_activity(activity).log_and_ignore();
+                    }
+                }
             }
         }
 
@@ -163,5 +205,13 @@ where
         self.ui.draw(ctx, canvas)?;
 
         Ok(())
+    }
+}
+
+impl<T> Drop for LobbyClient<T> {
+    fn drop(&mut self) {
+        if let Some(discord) = &self.shared.discord {
+            discord.stop_activity().log_and_ignore();
+        }
     }
 }

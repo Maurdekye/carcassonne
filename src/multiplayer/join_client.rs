@@ -27,7 +27,7 @@ use crate::{
         MultiplayerPhase,
     },
     util::{AnchorPoint, ContextExt, TextExt},
-    SharedResources,
+    Shared,
 };
 
 use ggez_no_re::{
@@ -73,7 +73,7 @@ pub struct JoinClient {
     parent_channel: Sender<MainEvent>,
     event_sender: Sender<JoinEvent>,
     event_receiver: Receiver<JoinEvent>,
-    shared: SharedResources,
+    shared: Shared,
     ui: UIManager<UIEvent, JoinEvent>,
     _message_client: MessageClient,
     connection: Option<(ClientsideTransport, IpAddr)>,
@@ -89,7 +89,7 @@ pub struct JoinClient {
 impl JoinClient {
     pub fn new(
         parent_channel: Sender<MainEvent>,
-        shared: SharedResources,
+        shared: Shared,
         username: String,
         socket: SocketAddr,
     ) -> Self {
@@ -149,6 +149,7 @@ impl JoinClient {
                     self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         Some(my_socket_addr.ip()),
+                        self.shared.clone(),
                         self.event_sender.clone(),
                     )));
                     self.connection = Some((transport, my_socket_addr.ip()));
@@ -161,9 +162,8 @@ impl JoinClient {
                             let now = Instant::now();
                             self.latency = Some(now - self.last_ping);
                         }
-                        ServerMessage::Ping => {
-                            LazyCell::force_mut(&mut server).blind_send::<Message>(ClientMessage::Pong)
-                        }
+                        ServerMessage::Ping => LazyCell::force_mut(&mut server)
+                            .blind_send::<Message>(ClientMessage::Pong),
                         ServerMessage::Lobby(lobby_message) => {
                             match &lobby_message {
                                 server::LobbyMessage::LobbyState(lobby_state) => {
@@ -220,9 +220,9 @@ impl JoinClient {
             },
             JoinEvent::LobbyEvent(LobbyEvent::ChooseColor(color)) => {
                 if let Some((connection, _)) = &mut self.connection {
-                    connection.blind_send::<Message>(ClientMessage::Lobby(client::LobbyMessage::ChooseColor(
-                        color,
-                    )));
+                    connection.blind_send::<Message>(ClientMessage::Lobby(
+                        client::LobbyMessage::ChooseColor(color),
+                    ));
                 }
             }
         }
@@ -272,6 +272,7 @@ impl SubEventHandler for JoinClient {
                             self.phase = Some(MultiplayerPhase::Lobby(LobbyClient::new(
                                 self.users.clone().unwrap_or_default(),
                                 Some(*my_ip),
+                                self.shared.clone(),
                                 self.event_sender.clone(),
                             )));
                             break;

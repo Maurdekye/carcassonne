@@ -27,7 +27,7 @@ use crate::{
         MultiplayerPhase,
     },
     util::{AnchorPoint, ContextExt, TextExt},
-    SharedResources,
+    Shared,
 };
 
 use ggez_no_re::{
@@ -90,7 +90,7 @@ pub enum IpOrHost {
 }
 
 pub struct HostClient {
-    shared: SharedResources,
+    shared: Shared,
     parent_channel: Sender<MainEvent>,
     event_sender: Sender<HostEvent>,
     event_receiver: Receiver<HostEvent>,
@@ -106,7 +106,7 @@ pub struct HostClient {
 impl HostClient {
     pub fn new(
         parent_channel: Sender<MainEvent>,
-        shared: SharedResources,
+        shared: Shared,
         username: String,
         port: u16,
     ) -> HostClient {
@@ -135,7 +135,6 @@ impl HostClient {
         start_game_button.borrow_mut().state = UIElementState::Disabled;
         let message_server = MessageServer::start::<Message>(event_sender.clone(), port);
         let mut this = HostClient {
-            shared,
             parent_channel,
             ui,
             _message_server: message_server,
@@ -153,8 +152,10 @@ impl HostClient {
             phase: MultiplayerPhase::Lobby(LobbyClient::new(
                 Vec::new(),
                 None,
+                shared.clone(),
                 event_sender.clone(),
             )),
+            shared,
             event_sender,
             event_receiver,
             start_game_button,
@@ -412,6 +413,7 @@ impl SubEventHandler for HostClient {
                     self.phase = MultiplayerPhase::Lobby(LobbyClient::new(
                         Vec::new(),
                         None,
+                        self.shared.clone(),
                         self.event_sender.clone(),
                     ));
                     self.update_lobby_clients();

@@ -1,7 +1,9 @@
+#![allow(incomplete_features)]
 #![feature(iter_map_windows)]
 #![feature(try_blocks)]
 #![feature(duration_millis_float)]
 #![feature(lazy_get)]
+#![feature(generic_const_exprs)]
 
 use std::{path::PathBuf, time::Duration};
 
@@ -11,12 +13,12 @@ use ggez::{
     event, ContextBuilder, GameResult,
 };
 use ggez_no_re::{
-    logger::{LogLevel, Logger},
+    logger::{LogLevel, LoggerBuilder},
     util::{self, ResultExtToGameError},
 };
 use log::debug;
 use main_client::MainClient;
-use shared::SharedResources;
+use shared::Shared;
 
 mod colors;
 mod game;
@@ -27,6 +29,8 @@ mod multiplayer;
 mod pos;
 mod shared;
 mod tile;
+
+const LATEST_RELEASE_LINK: &str = "https://github.com/Maurdekye/carcassonne/releases/latest";
 
 fn fullscreen_value_parser(x: &str) -> Result<(usize, usize), &'static str> {
     let parts: Vec<&str> = x.split('x').collect();
@@ -113,19 +117,18 @@ fn main() -> GameResult {
         args.log_level = LogLevel::Trace;
     }
 
-    Logger::new(
-        args.save_logs.clone().flatten(),
-        args.log_level,
-        module_path!(),
-    )
-    .to_gameerror()?
-    .install()
-    .to_gameerror()?;
+    LoggerBuilder::new()
+        .path_option(args.save_logs.clone().flatten())
+        .level(args.log_level)
+        .prefix(module_path!())
+        .prefix("ggez_no_re")
+        .install()
+        .to_gameerror()?;
 
     debug!("Logger initialized");
     debug!("Arguments: {args:#?}");
 
-    let shared = SharedResources::new(args);
+    let shared = Shared::new(args);
 
     let window_mode = if let Some(fullscreen_res) = shared.args.fullscreen {
         let (w, h) = fullscreen_res.unwrap();

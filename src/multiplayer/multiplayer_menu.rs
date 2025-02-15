@@ -16,7 +16,7 @@ use log::trace;
 use crate::{
     main_client::MainEvent,
     util::{AnchorPoint, ContextExt, RectExt, TextExt},
-    SharedResources,
+    Shared,
 };
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
@@ -34,7 +34,7 @@ enum MultiplayerMenuEvent {
 
 pub struct MultiplayerMenuClient {
     parent_channel: Sender<MainEvent>,
-    shared: SharedResources,
+    shared: Shared,
     _event_sender: Sender<MultiplayerMenuEvent>,
     event_receiver: Receiver<MultiplayerMenuEvent>,
     ui: UIManager<MultiplayerMenuEvent, MultiplayerMenuEvent>,
@@ -49,7 +49,7 @@ pub struct MultiplayerMenuClient {
 impl MultiplayerMenuClient {
     pub fn new(
         parent_channel: Sender<MainEvent>,
-        shared: SharedResources,
+        shared: Shared,
     ) -> MultiplayerMenuClient {
         let (event_sender, event_receiver) = channel();
         let (

@@ -1,5 +1,9 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::{
+    collections::{HashMap, HashSet, VecDeque},
+    num::NonZero,
+};
 
+use discord_sdk::activity::{ActivityBuilder, ActivityKind, Assets, Button, PartyPrivacy};
 use ggez::{
     glam::{vec2, Vec2},
     graphics::Color,
@@ -11,12 +15,14 @@ use serde::{Deserialize, Serialize};
 use slotmap::{DefaultKey, SlotMap};
 
 use crate::{
+    game_client::NUM_PLAYERS,
     pos::GridPos,
     tile::{
         GridBorderCoordinate, Opposite, Orientation, Segment, SegmentAttribute, SegmentBorderPiece,
         SegmentType, Tile,
     },
     util::{Bag, HashMapBag, MinByF32Key},
+    LATEST_RELEASE_LINK,
 };
 use ggez_no_re::line::Line;
 
@@ -910,6 +916,29 @@ impl Game {
             }
         }
         None
+    }
+
+    pub fn discord_presence(&self) -> ActivityBuilder {
+        ActivityBuilder::new()
+            .details(format!("{} tiles remaining", self.library.len()))
+            .state(if matches!(self.local_player, PlayerType::Local) {
+                "In a local game"
+            } else {
+                "In an online game"
+            })
+            .kind(ActivityKind::Playing)
+            .instance(true)
+            .party(
+                "null",
+                Some(NonZero::<u32>::try_from(self.players.len() as u32).unwrap()),
+                Some(NonZero::<u32>::try_from(NUM_PLAYERS as u32).unwrap()),
+                PartyPrivacy::Private,
+            )
+            .assets(Assets::default().large("starting-tile", None::<String>))
+            .button(Button {
+                label: "Download".into(),
+                url: LATEST_RELEASE_LINK.into(),
+            })
     }
 }
 

@@ -16,7 +16,7 @@ use crate::{
     game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
     main_client::MainEvent,
     util::{AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt},
-    SharedResources,
+    Shared,
 };
 
 use ggez_no_re::{
@@ -41,7 +41,7 @@ pub struct MainMenuClient {
     parent_channel: Sender<MainEvent>,
     _event_sender: Sender<MainMenuEvent>,
     event_receiver: Receiver<MainMenuEvent>,
-    _args: SharedResources,
+    _args: Shared,
     ui: UIManager<MainMenuEvent, MainMenuEvent>,
     color_selection_ui: UIManager<Color, MainMenuEvent>,
     color_selection_buttons: [Rc<RefCell<Button<Color>>>; NUM_PLAYERS],
@@ -62,7 +62,7 @@ impl MainMenuClient {
     };
     const DESELECTED_COLOR: Color = BUTTON_COLOR;
 
-    pub fn new(parent_channel: Sender<MainEvent>, args: SharedResources) -> MainMenuClient {
+    pub fn new(parent_channel: Sender<MainEvent>, args: Shared) -> MainMenuClient {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let (ui, [UIElement::Button(start_game_button), ..]) = UIManager::new_and_rc_elements(

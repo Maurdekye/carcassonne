@@ -15,7 +15,7 @@ use std::{
 
 use crate::{
     game_client::GameEvent,
-    shared::SharedResources,
+    shared::Shared,
     util::{AnchorPoint, DrawableWihParamsExt, TextExt},
 };
 
@@ -42,14 +42,14 @@ pub struct PauseScreenSubclient {
     event_sender: Sender<PauseScreenEvent>,
     event_receiver: Receiver<PauseScreenEvent>,
     ui: UIManager<PauseScreenEvent, PauseScreenEvent>,
-    shared: SharedResources,
+    shared: Shared,
     pub can_end_game: Rc<Cell<bool>>,
     pub can_undo: Rc<Cell<bool>>,
 }
 
 impl PauseScreenSubclient {
     pub fn new(
-        shared: SharedResources,
+        shared: Shared,
         parent_channel: Sender<GameEvent>,
         can_end_game: bool,
         can_undo: bool,

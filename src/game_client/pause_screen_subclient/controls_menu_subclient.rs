@@ -9,7 +9,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::{
     colors::PANEL_COLOR,
     shared::Keybinds,
-    shared::SharedResources,
+    shared::Shared,
     util::{AnchorPoint, DrawableWihParamsExt, RectExt, TextExt, Vec2ToRectExt},
 };
 use ggez_no_re::{
@@ -33,7 +33,7 @@ pub struct ControlsMenuSubclient {
 }
 
 impl ControlsMenuSubclient {
-    pub fn new(shared: SharedResources, parent_channel: Sender<PauseScreenEvent>) -> Self {
+    pub fn new(shared: Shared, parent_channel: Sender<PauseScreenEvent>) -> Self {
         let (event_sender, event_receiver) = channel();
         let ui_sender = event_sender.clone();
         let keybinds = shared.persistent.borrow().keybinds.clone();

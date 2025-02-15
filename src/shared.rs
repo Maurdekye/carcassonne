@@ -1,21 +1,31 @@
 use std::net::IpAddr;
 
 use ggez::winit::{event::MouseButton, keyboard::NamedKey};
-use ggez_no_re::{keybinds, persist::PersistenceManager};
+use ggez_no_re::{
+    discord::DiscordPresence, keybinds, persist::PersistenceManager, util::ResultExt,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::Args;
 
-#[derive(Clone, Debug)]
-pub struct SharedResources {
+const DISCORD_APP_ID: &'static str = include_str!("../discord-app-id.txt");
+
+#[derive(Clone)]
+pub struct Shared {
     pub args: Args,
     pub persistent: PersistenceManager<SaveData>,
+    pub discord: Option<DiscordPresence>,
 }
 
-impl SharedResources {
-    pub fn new(args: Args) -> SharedResources {
+impl Shared {
+    pub fn new(args: Args) -> Shared {
         let persistent = PersistenceManager::new(&args.save_path);
-        SharedResources { args, persistent }
+        let discord = DiscordPresence::try_from(DISCORD_APP_ID).log_and_ok();
+        Shared {
+            args,
+            persistent,
+            discord,
+        }
     }
 }
 

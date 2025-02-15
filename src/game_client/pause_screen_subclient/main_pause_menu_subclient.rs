@@ -9,7 +9,7 @@ use std::{
     sync::mpsc::{channel, Receiver, Sender},
 };
 
-use crate::{game_client::GameEvent, main_client::MainEvent, shared::SharedResources};
+use crate::{game_client::GameEvent, main_client::MainEvent, shared::Shared};
 
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
@@ -34,7 +34,7 @@ impl MainPauseMenuEvent {
 }
 
 pub struct MainPauseMenuSubclient {
-    shared: SharedResources,
+    shared: Shared,
     parent_channel: Sender<PauseScreenEvent>,
     event_sender: Sender<MainPauseMenuEvent>,
     event_receiver: Receiver<MainPauseMenuEvent>,
@@ -47,7 +47,7 @@ pub struct MainPauseMenuSubclient {
 
 impl MainPauseMenuSubclient {
     pub fn new(
-        shared: SharedResources,
+        shared: Shared,
         parent_channel: Sender<PauseScreenEvent>,
         can_end_game: Rc<Cell<bool>>,
         can_undo: Rc<Cell<bool>>,

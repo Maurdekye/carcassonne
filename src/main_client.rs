@@ -18,7 +18,7 @@ use crate::{
     multiplayer::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
     },
-    DebugGameConfiguration, SharedResources,
+    DebugGameConfiguration, Shared,
 };
 
 use ggez_no_re::sub_event_handler::SubEventHandler;
@@ -46,11 +46,11 @@ pub struct MainClient {
     event_sender: Sender<MainEvent>,
     event_receiver: Receiver<MainEvent>,
     quitting: bool,
-    shared: SharedResources,
+    shared: Shared,
 }
 
 impl MainClient {
-    pub fn new(shared: SharedResources) -> MainClient {
+    pub fn new(shared: Shared) -> MainClient {
         let (event_sender, event_receiver) = channel();
         if let Some(load_path) = &shared.args.load {
             event_sender

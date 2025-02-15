@@ -441,7 +441,7 @@ dependencies = [
 
 [[package]]
 name = "carcassone"
-version = "1.3.2"
+version = "1.4.0"
 dependencies = [
  "bincode",
  "chrono",
@@ -457,6 +457,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slotmap",
+ "tokio",
 ]
 
 [[package]]
@@ -1117,7 +1118,7 @@ dependencies = [
 
 [[package]]
 name = "ggez-no-re"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "bincode",
  "chrono",
@@ -1125,10 +1126,12 @@ dependencies = [
  "clipboard-rs",
  "crevice",
  "csv",
+ "discord-sdk",
  "ggez",
  "log",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
