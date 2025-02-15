@@ -20,7 +20,7 @@ impl SharedResources {
 }
 
 keybinds! {
-    pub struct Keybinds {
+    struct Keybinds {
         place_tile: MouseButton::Left,
         place_meeple: MouseButton::Left,
         rotate_clockwise: "r",

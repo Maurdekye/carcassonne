@@ -113,11 +113,13 @@ fn main() -> GameResult {
         args.log_level = LogLevel::Trace;
     }
 
-    Logger::install(
+    Logger::new(
         args.save_logs.clone().flatten(),
         args.log_level,
-        crate_name!(),
+        module_path!(),
     )
+    .to_gameerror()?
+    .install()
     .to_gameerror()?;
 
     debug!("Logger initialized");
