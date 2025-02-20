@@ -14,6 +14,151 @@ use SegmentDefinition::*;
 use SegmentType::*;
 use TileEdgeSpan::*;
 
+pub mod rivers_1 {
+    use std::vec;
+
+    use ggez::glam::vec2;
+    use lazy_static::lazy_static;
+
+    use crate::tile::{
+        Orientation, SegmentBorderPiece, SegmentDefinition, SegmentType, Tile, TileAttribute,
+        TileEdgeSpan,
+    };
+
+    use Orientation::*;
+    use SegmentBorderPiece::*;
+    use SegmentDefinition::*;
+    use SegmentType::*;
+    use TileEdgeSpan::*;
+
+    lazy_static! {
+        pub static ref MONASTARY_POND: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.7, 0.1),
+                vec2(0.65, 0.15),
+                vec2(0.65, 0.25),
+                vec2(0.95, 0.3),
+                vec2(0.95, 0.5),
+                vec2(0.75, 0.55),
+                vec2(0.55, 0.55),
+                vec2(0.45, 0.6),
+                vec2(0.4, 0.7),
+                vec2(0.4, 0.75),
+                vec2(0.45, 0.8),
+                vec2(0.45, 0.9),
+                vec2(0.4, 0.95),
+                vec2(0.3, 0.95),
+                vec2(0.15, 0.9),
+                vec2(0.15, 0.75),
+                vec2(0.1, 0.7),
+                vec2(0.1, 0.6),
+                vec2(0.25, 0.55),
+                vec2(0.25, 0.5),
+                vec2(0.15, 0.45),
+                vec2(0.2, 0.35),
+                vec2(0.15, 0.3),
+                vec2(0.15, 0.25),
+                vec2(0.2, 0.15),
+                vec2(0.5, 0.15),
+                vec2(0.5, 0.1),
+                vec2(0.35, 0.05),
+                vec2(0.9, 0.95),
+                vec2(0.6, 0.95),
+                vec2(0.6, 0.75),
+                vec2(0.75, 0.6),
+                vec2(0.9, 0.75),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: vec![
+                        Edge((Middle, North)),
+                        Vert(0),
+                        Vert(1),
+                        Vert(2),
+                        Vert(3),
+                        Vert(4),
+                        Vert(5),
+                        Vert(6),
+                        Vert(7),
+                        Vert(8),
+                        Vert(9),
+                        Vert(10),
+                        Vert(11),
+                        Vert(12),
+                        Vert(13),
+                        Vert(14),
+                        Vert(15),
+                        Vert(16),
+                        Vert(17),
+                        Vert(18),
+                        Vert(19),
+                        Vert(20),
+                        Vert(21),
+                        Vert(22),
+                        Vert(23),
+                        Vert(24),
+                        Vert(25),
+                        Vert(26),
+                        Vert(27),
+                    ]
+                },
+                Segment {
+                    stype: Monastary,
+                    edges: vec![Vert(28), Vert(29), Vert(30), Vert(31), Vert(32)]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, North)),
+                        Edge((Full, East)),
+                        Break,
+                        Vert(32),
+                        Vert(31),
+                        Vert(30),
+                        Vert(29),
+                        Vert(28),
+                        Vert(32),
+                        Break,
+                        Edge((Full, South)),
+                        Edge((Full, West)),
+                        Edge((Beginning, North)),
+                        Vert(27),
+                        Vert(26),
+                        Vert(25),
+                        Vert(24),
+                        Vert(23),
+                        Vert(22),
+                        Vert(21),
+                        Vert(20),
+                        Vert(19),
+                        Vert(18),
+                        Vert(17),
+                        Vert(16),
+                        Vert(15),
+                        Vert(14),
+                        Vert(13),
+                        Vert(12),
+                        Vert(11),
+                        Vert(10),
+                        Vert(9),
+                        Vert(8),
+                        Vert(7),
+                        Vert(6),
+                        Vert(5),
+                        Vert(4),
+                        Vert(3),
+                        Vert(2),
+                        Vert(1),
+                        Vert(0),
+                    ]
+                }
+            ],
+            vec![TileAttribute::MiddleSegmentWidth(North, 0.3)]
+        );
+    }
+}
+
 lazy_static! {
     pub static ref STARTING_TILE: Tile = Tile::new(
         vec![vec2(0.35, 0.3), vec2(0.65, 0.3)],

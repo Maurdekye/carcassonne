@@ -13,12 +13,9 @@ use ggez::{
 use log::{info, trace};
 
 use crate::{
-    game_client::GameClient,
-    main_menu_client::MainMenuClient,
-    multiplayer::{
+    game::debug_game_configs::DebugGameConfiguration, game_client::GameClient, main_menu_client::MainMenuClient, multiplayer::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
-    },
-    DebugGameConfiguration, Shared,
+    }, Shared
 };
 
 use ggez_no_re::sub_event_handler::SubEventHandler;

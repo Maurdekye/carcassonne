@@ -123,13 +123,13 @@ pub type EdgeIdentifier = (GridPos, Orientation);
 pub type PlayerIdentifier = DefaultKey;
 pub type PlacedMeeple = (SegmentIdentifier, PlayerIdentifier);
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScoringDetails {
     pub score: usize,
     pub owners: Vec<(PlayerIdentifier, Color)>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ShapeDetails {
     pub outline: Vec<Line>,
     pub popup_location: Vec2,
@@ -149,7 +149,7 @@ impl From<Vec<Line>> for ShapeDetails {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SegmentGroup {
     pub gtype: SegmentType,
     pub segments: Vec<SegmentIdentifier>,
@@ -553,7 +553,7 @@ impl Game {
                     .count()
                     + 1
             }
-            SegmentType::Village => 0,
+            SegmentType::Village | SegmentType::River => 0,
         }
     }
 
@@ -697,7 +697,7 @@ impl Game {
                         let start = LinePiece::BorderCoordinate(
                             GridBorderCoordinate::from_tile_edge_vertex(
                                 tile_pos,
-                                (span.start(), orientation),
+                                tile.encode_edge_vertex(span.start(), orientation),
                             ),
                         );
                         // sdgb!(&start);
@@ -717,7 +717,7 @@ impl Game {
                         let end = LinePiece::BorderCoordinate(
                             GridBorderCoordinate::from_tile_edge_vertex(
                                 tile_pos,
-                                (span.end(), orientation),
+                                tile.encode_edge_vertex(span.end(), orientation),
                             ),
                         );
                         // sdgb!(&end);
@@ -947,10 +947,13 @@ mod test {
     use ggez::{graphics::Color, GameResult};
 
     use crate::{
-        game::Game,
+        game::{debug_game_configs::river_test, Game},
         pos::GridPos,
         tile::{
-            tile_definitions::{CROSSROADS, CURVE_ROAD, MONASTARY, STARTING_TILE, STRAIGHT_ROAD},
+            tile_definitions::{
+                rivers_1::MONASTARY_POND, CROSSROADS, CURVE_ROAD, MONASTARY, STARTING_TILE,
+                STRAIGHT_ROAD,
+            },
             SegmentType,
         },
     };
@@ -1052,6 +1055,21 @@ mod test {
         let mut game = Game::new_with_library(vec![CROSSROADS.clone(), CROSSROADS.clone()]);
         game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
         assert!(!game.is_valid_tile_position(&STARTING_TILE, GridPos(0, -1)));
+        Ok(())
+    }
+
+    #[test]
+    pub fn test_river_outline_generation() -> GameResult {
+        use crate::tile::SegmentType;
+        let mut game = river_test()?;
+        game.place_tile(MONASTARY_POND.clone().rotated(), GridPos(0, 1))?;
+        let group = game
+            .groups
+            .values()
+            .find(|group| group.gtype == SegmentType::Farm && group.segments.len() == 2)
+            .unwrap();
+        let outline = game.compute_group_outline(group);
+        dbg!(outline);
         Ok(())
     }
 }

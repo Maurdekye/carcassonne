@@ -27,6 +27,8 @@ use ggez_no_re::line::Line;
 #[cfg(test)]
 mod test;
 
+const DEFAULT_MIDDLE_SECTION_WIDTH: f32 = 0.1;
+
 const MOUNTS_PER_SIDE: usize = 3;
 
 pub type Mount = [usize; MOUNTS_PER_SIDE];
@@ -94,6 +96,7 @@ pub enum SegmentType {
     Road,
     Monastary,
     Village,
+    River,
 }
 
 impl SegmentType {
@@ -105,6 +108,7 @@ impl SegmentType {
             Road => Color::from_rgb(207, 194, 149),
             Monastary => Color::from_rgb(183, 222, 235),
             Village => Color::from_rgb(227, 204, 166),
+            River => Color::from_rgb(84, 118, 218),
         }
     }
 
@@ -116,11 +120,12 @@ impl SegmentType {
             Road => "Road",
             Monastary => "Monastary",
             Village => "Village",
+            River => "River",
         }
     }
 
     pub fn placeable(&self) -> bool {
-        !matches!(self, SegmentType::Village)
+        !matches!(self, SegmentType::Village | SegmentType::River)
     }
 }
 
@@ -185,28 +190,58 @@ pub struct Segment {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum TileAttribute {}
+pub enum TileAttribute {
+    MiddleSegmentWidth(Orientation, f32),
+}
 
 pub trait Opposite {
     fn opposite(self) -> Self;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, std::hash::Hash)]
-pub enum TileEdgeSpanPosition {
+pub enum TileEdgeSpanPositionKind {
     Start,
     LowerMiddle,
     UpperMiddle,
     End,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct TileEdgeSpanPosition {
+    kind: TileEdgeSpanPositionKind,
+    middle_section_width: f32,
+}
+
+impl PartialEq for TileEdgeSpanPosition {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+impl Eq for TileEdgeSpanPosition {}
+
+impl std::hash::Hash for TileEdgeSpanPosition {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.kind.hash(state);
+    }
+}
+
 impl Opposite for TileEdgeSpanPosition {
     fn opposite(self) -> Self {
-        use TileEdgeSpanPosition::*;
-        match self {
+        use TileEdgeSpanPositionKind::*;
+        let TileEdgeSpanPosition {
+            kind,
+            middle_section_width,
+        } = self;
+        let kind = match kind {
             Start => End,
             LowerMiddle => UpperMiddle,
             UpperMiddle => LowerMiddle,
             End => Start,
+        };
+        TileEdgeSpanPosition {
+            kind,
+            middle_section_width,
         }
     }
 }
@@ -221,7 +256,7 @@ impl Opposite for TileEdgeVertex {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GridBorderCoordinateOffset {
+pub enum GridBorderCoordinateOffsetKind {
     None,
     LowMiddleSouth,
     HighMiddleSouth,
@@ -229,43 +264,77 @@ pub enum GridBorderCoordinateOffset {
     HighMiddleEast,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct GridBorderCoordinateOffset {
+    kind: GridBorderCoordinateOffsetKind,
+    middle_section_width: f32,
+}
+
+impl PartialEq for GridBorderCoordinateOffset {
+    fn eq(&self, other: &Self) -> bool {
+        self.kind == other.kind
+    }
+}
+
+impl Eq for GridBorderCoordinateOffset {}
+
 impl GridBorderCoordinateOffset {
     pub fn to_position_offset(self) -> Vec2 {
-        use GridBorderCoordinateOffset::*;
-        match self {
+        use GridBorderCoordinateOffsetKind::*;
+        let GridBorderCoordinateOffset {
+            kind,
+            middle_section_width,
+        } = self;
+        match kind {
             None => Vec2::ZERO,
-            LowMiddleSouth => vec2(0.0, 0.45),
-            HighMiddleSouth => vec2(0.0, 0.55),
-            LowMiddleEast => vec2(0.45, 0.0),
-            HighMiddleEast => vec2(0.55, 0.0),
+            LowMiddleSouth => vec2(0.0, 0.5 - middle_section_width / 2.0),
+            HighMiddleSouth => vec2(0.0, 0.5 + middle_section_width / 2.0),
+            LowMiddleEast => vec2(0.5 - middle_section_width / 2.0, 0.0),
+            HighMiddleEast => vec2(0.5 + middle_section_width / 2.0, 0.0),
         }
     }
 
     pub fn from_south_edge(position: TileEdgeSpanPosition) -> Self {
-        use GridBorderCoordinateOffset::*;
-        use TileEdgeSpanPosition::*;
-        match position {
+        use GridBorderCoordinateOffsetKind::*;
+        use TileEdgeSpanPositionKind::*;
+        let TileEdgeSpanPosition {
+            kind,
+            middle_section_width,
+        } = position;
+        let kind = match kind {
             Start => None,
             LowerMiddle => LowMiddleSouth,
             UpperMiddle => HighMiddleSouth,
             End => None,
+        };
+        GridBorderCoordinateOffset {
+            kind,
+            middle_section_width,
         }
     }
 
     pub fn from_east_edge(position: TileEdgeSpanPosition) -> Self {
-        use GridBorderCoordinateOffset::*;
-        use TileEdgeSpanPosition::*;
-        match position {
+        use GridBorderCoordinateOffsetKind::*;
+        use TileEdgeSpanPositionKind::*;
+        let TileEdgeSpanPosition {
+            kind,
+            middle_section_width,
+        } = position;
+        let kind = match kind {
             Start => None,
             LowerMiddle => LowMiddleEast,
             UpperMiddle => HighMiddleEast,
             End => None,
+        };
+        GridBorderCoordinateOffset {
+            kind,
+            middle_section_width,
         }
     }
 
     pub fn from_tile_edge_vertex(vertex: TileEdgeVertex) -> (GridPos, Self) {
         use Orientation::*;
-        use TileEdgeSpanPosition::*;
+        use TileEdgeSpanPositionKind::*;
         let (span, orientation) = vertex;
         let offset = match orientation {
             North => Self::from_east_edge(span),
@@ -273,7 +342,7 @@ impl GridBorderCoordinateOffset {
             South => Self::from_east_edge(span).opposite(),
             West => Self::from_south_edge(span).opposite(),
         };
-        let grid_offset = match (orientation, span) {
+        let grid_offset = match (orientation, span.kind) {
             (East, End) | (South, Start) => GridPos(1, 1),
             (East, _) | (North, End) => GridPos(1, 0),
             (South, _) | (West, Start) => GridPos(0, 1),
@@ -285,13 +354,21 @@ impl GridBorderCoordinateOffset {
 
 impl Opposite for GridBorderCoordinateOffset {
     fn opposite(self) -> Self {
-        use GridBorderCoordinateOffset::*;
-        match self {
+        use GridBorderCoordinateOffsetKind::*;
+        let GridBorderCoordinateOffset {
+            kind,
+            middle_section_width,
+        } = self;
+        let kind = match kind {
             None => None,
             LowMiddleSouth => HighMiddleSouth,
             HighMiddleSouth => LowMiddleSouth,
             LowMiddleEast => HighMiddleEast,
             HighMiddleEast => LowMiddleEast,
+        };
+        GridBorderCoordinateOffset {
+            kind,
+            middle_section_width,
         }
     }
 }
@@ -314,8 +391,8 @@ impl GridBorderCoordinate {
     pub fn get_adjacent_gridposes(&self) -> impl Iterator<Item = GridPos> {
         let GridBorderCoordinate { grid_pos, offset } = self;
         let GridPos(x, y) = *grid_pos;
-        use GridBorderCoordinateOffset::*;
-        match offset {
+        use GridBorderCoordinateOffsetKind::*;
+        match offset.kind {
             None => vec![
                 GridPos(x - 1, y - 1),
                 GridPos(x, y - 1),
@@ -341,16 +418,21 @@ impl From<GridBorderCoordinate> for Vec2 {
 impl std::fmt::Debug for GridBorderCoordinate {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let GridPos(x, y) = self.grid_pos;
-        use GridBorderCoordinateOffset::*;
+        use GridBorderCoordinateOffsetKind::*;
         write!(
             f,
-            "{{{x}, {y}, {}}}",
-            match self.offset {
+            "{{{x}, {y}, {}{}}}",
+            match self.offset.kind {
                 None => "*",
                 LowMiddleSouth => "v",
                 HighMiddleSouth => "vv",
                 LowMiddleEast => ">",
                 HighMiddleEast => ">>",
+            },
+            if self.offset.middle_section_width != 0.1 {
+                format!(", {}", self.offset.middle_section_width)
+            } else {
+                String::new()
             }
         )
     }
@@ -365,9 +447,9 @@ pub enum TileEdgeSpan {
 }
 
 impl TileEdgeSpan {
-    pub fn start(self) -> TileEdgeSpanPosition {
+    pub fn start(self) -> TileEdgeSpanPositionKind {
         use TileEdgeSpan::*;
-        use TileEdgeSpanPosition::*;
+        use TileEdgeSpanPositionKind::*;
         match self {
             Beginning => Start,
             Middle => LowerMiddle,
@@ -376,14 +458,14 @@ impl TileEdgeSpan {
         }
     }
 
-    pub fn end(self) -> TileEdgeSpanPosition {
+    pub fn end(self) -> TileEdgeSpanPositionKind {
         use TileEdgeSpan::*;
-        use TileEdgeSpanPosition::*;
+        use TileEdgeSpanPositionKind::*;
         match self {
             Beginning => LowerMiddle,
             Middle => UpperMiddle,
-            TileEdgeSpan::End => TileEdgeSpanPosition::End,
-            Full => TileEdgeSpanPosition::End,
+            TileEdgeSpan::End => TileEdgeSpanPositionKind::End,
+            Full => TileEdgeSpanPositionKind::End,
         }
     }
 }
@@ -510,6 +592,8 @@ impl Tile {
             west: [0, 0, 0],
         };
 
+        let tile_attributes = &attributes;
+
         for (i, segment_definition) in segment_definitions.into_iter().enumerate() {
             let mut poly = Vec::new();
             let (stype, edges, attributes) = match segment_definition {
@@ -540,36 +624,39 @@ impl Tile {
                             Full => *mount = [i; MOUNTS_PER_SIDE],
                         }
 
-                        const LM: f32 = 0.45; // low middle
-                        const HM: f32 = 0.55; // high middle
-                        const XB: Vec2 = Vec2::ZERO;
-                        const XLM: Vec2 = vec2(LM, 0.0); // x beginning
-                        const XHM: Vec2 = vec2(HM, 0.0); // x middle
-                        const XE: Vec2 = Vec2::X; // x end
-                        const YB: Vec2 = Vec2::ZERO; // y beginning
-                        const YLM: Vec2 = vec2(0.0, LM); // y beginning
-                        const YHM: Vec2 = vec2(0.0, HM); // y middle
-                        const YE: Vec2 = Vec2::Y; // y end
+                        let middle_section_width =
+                            Tile::get_middle_section_width(&tile_attributes, orientation);
+
+                        let lm: f32 = 0.5 - middle_section_width / 2.0; // low middle
+                        let hm: f32 = 0.5 + middle_section_width / 2.0; // high middle
+                        let xb: Vec2 = Vec2::ZERO;
+                        let xlm: Vec2 = vec2(lm, 0.0); // x beginning
+                        let xhm: Vec2 = vec2(hm, 0.0); // x middle
+                        let xe: Vec2 = Vec2::X; // x end
+                        let yb: Vec2 = Vec2::ZERO; // y beginning
+                        let ylm: Vec2 = vec2(0.0, lm); // y beginning
+                        let yhm: Vec2 = vec2(0.0, hm); // y middle
+                        let ye: Vec2 = Vec2::Y; // y end
                         let [start_vert, end_vert] = match border_piece {
-                            (Beginning, North) => [XB + YB, XLM + YB],
-                            (Middle, North) => [XLM + YB, XHM + YB],
-                            (End, North) => [XHM + YB, XE + YB],
-                            (Full, North) => [XB + YB, XE + YB],
+                            (Beginning, North) => [xb + yb, xlm + yb],
+                            (Middle, North) => [xlm + yb, xhm + yb],
+                            (End, North) => [xhm + yb, xe + yb],
+                            (Full, North) => [xb + yb, xe + yb],
 
-                            (Beginning, East) => [XE + YB, XE + YLM],
-                            (Middle, East) => [XE + YLM, XE + YHM],
-                            (End, East) => [XE + YHM, XE + YE],
-                            (Full, East) => [XE + YB, XE + YE],
+                            (Beginning, East) => [xe + yb, xe + ylm],
+                            (Middle, East) => [xe + ylm, xe + yhm],
+                            (End, East) => [xe + yhm, xe + ye],
+                            (Full, East) => [xe + yb, xe + ye],
 
-                            (Beginning, South) => [XE + YE, XHM + YE],
-                            (Middle, South) => [XHM + YE, XLM + YE],
-                            (End, South) => [XLM + YE, XB + YE],
-                            (Full, South) => [XE + YE, XB + YE],
+                            (Beginning, South) => [xe + ye, xhm + ye],
+                            (Middle, South) => [xhm + ye, xlm + ye],
+                            (End, South) => [xlm + ye, xb + ye],
+                            (Full, South) => [xe + ye, xb + ye],
 
-                            (Beginning, West) => [XB + YE, XB + YHM],
-                            (Middle, West) => [XB + YHM, XB + YLM],
-                            (End, West) => [XB + YLM, XB + YB],
-                            (Full, West) => [XB + YE, XB + YB],
+                            (Beginning, West) => [xb + ye, xb + yhm],
+                            (Middle, West) => [xb + yhm, xb + ylm],
+                            (End, West) => [xb + ylm, xb + yb],
+                            (Full, West) => [xb + ye, xb + yb],
                         };
 
                         let mut poly_indicies = [0, 0];
@@ -646,7 +733,7 @@ impl Tile {
             segment_adjacency,
             attributes,
             edge_verts_map,
-            rotation: 0
+            rotation: 0,
         }
     }
 
@@ -754,6 +841,13 @@ impl Tile {
             .map(|((p, orientation), v)| ((*p, orientation.rotate()), *v))
             .collect();
 
+        for mut attribute in &mut self.attributes {
+            #[allow(irrefutable_let_patterns)]
+            if let TileAttribute::MiddleSegmentWidth(orientation, _) = &mut attribute {
+                *orientation = orientation.rotate();
+            }
+        }
+
         self.mounts = self.mounts.clone().rotate();
         self.rotation = (self.rotation + 1) % 4;
     }
@@ -810,5 +904,30 @@ impl Tile {
             .iter()
             .enumerate()
             .filter_map(|(i, a)| a.then_some((i, &self.segments[i])))
+    }
+
+    fn get_middle_section_width(attributes: &Vec<TileAttribute>, orientation: Orientation) -> f32 {
+        attributes
+            .iter()
+            .find_map(|attr| match attr {
+                TileAttribute::MiddleSegmentWidth(or, width) if *or == orientation => Some(*width),
+                _ => None,
+            })
+            .unwrap_or(DEFAULT_MIDDLE_SECTION_WIDTH)
+    }
+
+    pub fn encode_edge_vertex(
+        &self,
+        span_position_kind: TileEdgeSpanPositionKind,
+        orientation: Orientation,
+    ) -> TileEdgeVertex {
+        let middle_section_width = Tile::get_middle_section_width(&self.attributes, orientation);
+        (
+            TileEdgeSpanPosition {
+                kind: span_position_kind,
+                middle_section_width,
+            },
+            orientation,
+        )
     }
 }

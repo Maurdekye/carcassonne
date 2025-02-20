@@ -1,4 +1,5 @@
 use super::{player::Player, Game};
+use clap::ValueEnum;
 use ggez::{graphics::Color, GameError, GameResult};
 
 use crate::{
@@ -6,14 +7,24 @@ use crate::{
     pos::GridPos,
     tile::{
         tile_definitions::{
-            ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
-            FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY, FOUR_WAY_CROSSROADS,
-            OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE, STRAIGHT_ROAD, THREE_QUARTER_CITY,
+            rivers_1::MONASTARY_POND, ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS,
+            CURVE_ROAD, FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY,
+            FOUR_WAY_CROSSROADS, OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE,
+            STRAIGHT_ROAD, THREE_QUARTER_CITY,
         },
         Tile,
     },
-    DebugGameConfiguration,
 };
+
+#[derive(ValueEnum, Clone, Debug)]
+pub enum DebugGameConfiguration {
+    MeeplePlacement,
+    MultipleSegmentsPerTileScoring,
+    MultiplePlayerOwnership,
+    RotationTest,
+    GroupCoallation,
+    RiverTest,
+}
 
 impl DebugGameConfiguration {
     pub fn get_game(&self) -> Result<Game, GameError> {
@@ -24,6 +35,7 @@ impl DebugGameConfiguration {
             MultiplePlayerOwnership => multiple_player_ownership(),
             RotationTest => rotation_test(),
             GroupCoallation => group_coallation(),
+            RiverTest => river_test(),
         }
     }
 }
@@ -210,6 +222,15 @@ fn group_coallation() -> GameResult<Game> {
         CURVE_ROAD.clone().rotated().rotated().rotated(),
         GridPos(0, -1),
     )?;
+
+    Ok(this)
+}
+
+pub fn river_test() -> GameResult<Game> {
+    let mut this = Game::new_with_library(vec![MONASTARY_POND.clone()]);
+    this.players.insert(Player::new(Color::BLUE));
+
+    this.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
 
     Ok(this)
 }

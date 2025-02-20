@@ -7,7 +7,8 @@
 
 use std::{path::PathBuf, time::Duration};
 
-use clap::{crate_authors, crate_name, ArgAction, Parser, ValueEnum};
+use clap::{crate_authors, crate_name, ArgAction, Parser};
+use game::debug_game_configs::DebugGameConfiguration;
 use ggez::{
     conf::{FullscreenType, WindowMode},
     event, ContextBuilder, GameResult,
@@ -50,15 +51,6 @@ fn duration_value_parser(x: &str) -> Result<Duration, &'static str> {
     } else {
         Err("Invalid duration format")
     }
-}
-
-#[derive(ValueEnum, Clone, Debug)]
-enum DebugGameConfiguration {
-    MeeplePlacement,
-    MultipleSegmentsPerTileScoring,
-    MultiplePlayerOwnership,
-    RotationTest,
-    GroupCoallation,
 }
 
 #[derive(Parser, Clone, Debug)]
