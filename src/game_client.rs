@@ -19,6 +19,7 @@ use crate::pos::GridPos;
 use crate::shared::Keybinds;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::{game_client, Shared};
+use discord_sdk::activity::ActivityBuilder;
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
 use ggez_no_re::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
@@ -123,248 +124,64 @@ struct GroupInspection {
     selected_group: Option<GroupIdentifier>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
-pub struct GameState {
-    pub game: Game,
-    turn_phase: TurnPhase,
-    turn_order: VecDeque<PlayerIdentifier>,
+pub enum GameContext {
+    Pregame(PregameContext),
+    Playing(PlayingContext),
 }
 
-impl std::fmt::Debug for GameState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        #[allow(unused)]
-        #[derive(Debug)]
-        struct Game<'a> {
-            tiles: usize,
-            players: Vec<&'a Player>,
+impl GameContext {
+    pub fn discord_presence(&self) -> ActivityBuilder {
+        match &self {
+            GameContext::Pregame(context) => context.state.discord_presence(),
+            GameContext::Playing(context) => context.state.game.discord_presence(),
         }
-        #[derive(Debug)]
-        enum TurnPhase {
-            MeeplePlacement,
-            TilePlacement,
-            EndGame,
-        }
-        f.debug_struct("GameState")
-            .field(
-                "game",
-                &Game {
-                    tiles: self.game.placed_tiles.len(),
-                    players: self
-                        .turn_order
-                        .iter()
-                        .map(|p| self.game.players.get(*p).unwrap())
-                        .collect(),
-                },
-            )
-            .field(
-                "turn_phase",
-                &match &self.turn_phase {
-                    game_client::TurnPhase::TilePlacement { .. } => TurnPhase::TilePlacement,
-                    game_client::TurnPhase::MeeplePlacement { .. } => TurnPhase::MeeplePlacement,
-                    game_client::TurnPhase::EndGame { .. } => TurnPhase::EndGame,
-                },
-            )
-            .finish()
     }
 }
 
-#[derive(PartialEq, Eq, Debug)]
-enum PlacementValidity {
-    Invalid,
-    ValidWithDifferentRotation,
-    Valid,
+impl From<GameState> for GameContext {
+    fn from(value: GameState) -> Self {
+        match value.inner {
+            GameStateInner::Pregame(state) => GameContext::Pregame(PregameContext::new(state)),
+            GameStateInner::Playing(state) => GameContext::Playing(PlayingContext::new(state)),
+        }
+    }
 }
 
-struct GridSelectionInfo {
-    gameboard_pos: Vec2,
-    focused_pos: GridPos,
-    subgrid_pos: Vec2,
+pub struct PregameContext {
+    state: PregameState,
 }
 
-pub struct GameClient {
-    parent_channel: Sender<MainEvent>,
-    action_channel: Option<Sender<GameAction>>,
-    event_sender: Sender<GameEvent>,
-    event_receiver: Receiver<GameEvent>,
-    pause_menu: Option<PauseScreenSubclient>,
+impl PregameContext {
+    pub fn new(state: PregameState) -> Self {
+        Self { state }
+    }
+}
+
+pub struct PlayingContext {
     selected_square: Option<GridPos>,
     selected_segment_and_group: Option<(SegmentIdentifier, GroupIdentifier)>,
     placement_is_valid: bool,
-    offset: Vec2,
-    scale: f32,
     scoring_effects: Vec<ScoringEffect>,
-    history: Vec<GameState>,
-    skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
-    return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
-    pub state: GameState,
+    pub state: PlayingState,
     inspecting_groups: Option<GroupInspection>,
-    ui: UIManager<GameEvent, GameEvent>,
-    camera_movement: Vec2,
-    camera_zoom: f32,
+    history: Vec<PlayingState>,
     creation_time: SystemTime,
     shared: Shared,
-    keybinds: Keybinds,
 }
 
-impl GameClient {
-    pub fn new(
-        ctx: &Context,
-        shared: Shared,
-        players: Vec<Color>,
-        parent_channel: Sender<MainEvent>,
-    ) -> Self {
-        let mut game = Game::new();
-        game.library.shuffle(&mut thread_rng());
-        for color in players {
-            game.players.insert(Player::new(color));
-        }
-        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
-            .unwrap();
-        Self::new_with_game(ctx, shared, game, parent_channel)
-    }
-
-    pub fn new_with_game(
-        ctx: &Context,
-        args: Shared,
-        game: Game,
-        parent_channel: Sender<MainEvent>,
-    ) -> Self {
-        GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, None)
-    }
-
-    pub fn new_with_game_and_action_channel(
-        ctx: &Context,
-        shared: Shared,
-        mut game: Game,
-        parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameAction>>,
-    ) -> Self {
-        let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
-        GameClient::new_from_state(
-            ctx,
-            shared,
-            GameState {
-                turn_phase: TurnPhase::TilePlacement {
-                    tile: first_tile,
-                    placeable_positions,
-                    preview_location: None,
-                },
-                turn_order: game.players.keys().collect(),
-                game,
-            },
-            parent_channel,
-            action_channel,
-        )
-    }
-
-    pub fn new_from_state(
-        ctx: &Context,
-        shared: Shared,
-        state: GameState,
-        parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameAction>>,
-    ) -> Self {
-        let (event_sender, event_receiver) = channel();
-        let is_local = matches!(state.game.local_player, PlayerType::Local);
-        let keybinds = shared.persistent.borrow().keybinds.clone();
-        let ui_sender = event_sender.clone();
-        let (
-            ui,
-            [UIElement::Button(skip_meeples_button), UIElement::Button(return_to_main_menu_button)],
-        ) = UIManager::new_and_rc_elements(
-            ui_sender,
-            [
-                UIElement::Button(Button::new_with_styling(
-                    Bounds {
-                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
-                        absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
-                    },
-                    Text::new(format!("Skip meeples ({})", keybinds.skip_meeples)),
-                    DrawParam::default(),
-                    Color::from_rgb(0, 128, 192),
-                    GameEvent::SkipMeeples,
-                )),
-                UIElement::Button(Button::new(
-                    Bounds {
-                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
-                        absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
-                    },
-                    Text::new(if is_local {
-                        "Return to Main Menu"
-                    } else {
-                        "Return to Lobby"
-                    }),
-                    if is_local {
-                        GameEvent::MainEvent(MainEvent::MainMenu)
-                    } else {
-                        GameEvent::ReturnToLobby
-                    },
-                )),
-            ],
-        )
-        else {
-            panic!()
-        };
-
-        let mut this = Self {
-            parent_channel,
-            action_channel,
-            event_sender,
-            event_receiver,
-            pause_menu: None,
+impl PlayingContext {
+    pub fn new(state: PlayingState, shared: Shared) -> Self {
+        Self {
             selected_square: None,
             selected_segment_and_group: None,
             placement_is_valid: false,
-            offset: Vec2::ZERO,
-            scale: 1.0,
             scoring_effects: Vec::new(),
             history: Vec::new(),
             state,
             inspecting_groups: None,
-            skip_meeples_button,
-            return_to_main_menu_button,
-            ui,
-            camera_movement: Vec2::ZERO,
-            camera_zoom: 0.0,
             creation_time: SystemTime::now(),
             shared,
-            keybinds,
-        };
-        this.reset_camera(ctx);
-        if let Some(discord) = &mut this.shared.discord {
-            let activity = this.state.game.discord_presence();
-            discord.start_activity(activity).log_and_ignore();
         }
-        this
-    }
-
-    fn update_discord_presence(&mut self) {
-        if let Some(discord) = &mut self.shared.discord {
-            let activity = self.state.game.discord_presence();
-            discord.update_activity(activity).log_and_ignore();
-        }
-    }
-
-    pub fn load(
-        ctx: &Context,
-        args: Shared,
-        parent_channel: Sender<MainEvent>,
-        action_channel: Option<Sender<GameAction>>,
-        path: PathBuf,
-    ) -> GameResult<Self> {
-        let file = File::open(path)?;
-        let mut state: GameState = bincode::deserialize_from(file).to_gameerror()?;
-        for (_, player) in &mut state.game.players {
-            player.ptype = PlayerType::Local;
-        }
-        state.game.local_player = PlayerType::Local;
-        Ok(Self::new_from_state(
-            ctx,
-            args,
-            state,
-            parent_channel,
-            action_channel,
-        ))
     }
 
     fn save(&self, mut path: PathBuf) -> GameResult<()> {
@@ -391,40 +208,12 @@ impl GameClient {
         }
     }
 
-    fn reset_camera(&mut self, ctx: &Context) {
-        debug!("camera reset");
-        self.scale = 0.1;
-        self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
-        self.camera_movement = Vec2::ZERO;
-        self.camera_zoom = 0.0;
-    }
-
     fn reevaluate_selected_square(&mut self) {
         self.reevaluate_selected_square_inner(true);
     }
 
     fn reevaluate_selected_square_counterclockwise(&mut self) {
         self.reevaluate_selected_square_inner(false);
-    }
-
-    fn is_placement_valid(&self, pos: GridPos) -> PlacementValidity {
-        use PlacementValidity::*;
-        if self.state.game.placed_tiles.contains_key(&pos) {
-            return Invalid;
-        }
-
-        let TurnPhase::TilePlacement {
-            tile: held_tile, ..
-        } = &self.state.turn_phase
-        else {
-            return Invalid;
-        };
-
-        if self.state.game.is_valid_tile_position(held_tile, pos) {
-            Valid
-        } else {
-            ValidWithDifferentRotation
-        }
     }
 
     fn reevaluate_selected_square_inner(&mut self, clockwise: bool) {
@@ -435,7 +224,7 @@ impl GameClient {
             return;
         };
 
-        let mut placement_validity = self.is_placement_valid(selected_square);
+        let mut placement_validity = self.state.is_placement_valid(selected_square);
         if self.shared.args.snap_placement {
             for _ in 0..4 {
                 if placement_validity != ValidWithDifferentRotation {
@@ -445,66 +234,11 @@ impl GameClient {
                 } else {
                     self.get_held_tile_mut().unwrap().rotate_counterclockwise();
                 }
-                placement_validity = self.is_placement_valid(selected_square);
+                placement_validity = self.state.is_placement_valid(selected_square);
             }
         }
 
         self.placement_is_valid = placement_validity == Valid
-    }
-
-    #[inline]
-    pub fn norm(&self, ctx: &Context) -> Vec2 {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
-        ((res / res.yx()).max(Vec2::ONE) / res) / self.scale
-    }
-
-    pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
-        (screen_pos + self.offset) * self.norm(ctx)
-    }
-
-    pub fn to_screen_pos(&self, game_pos: Vec2, ctx: &Context) -> Vec2 {
-        (game_pos / self.norm(ctx)) - self.offset
-    }
-
-    pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
-        let res: Vec2 = ctx.gfx.drawable_size().into();
-        let dims = (res * self.scale) / (res / res.yx()).max(Vec2::ONE);
-        let near_corner = self.to_screen_pos((*pos).into(), ctx);
-        Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
-    }
-
-    pub fn draw_meeple(
-        ctx: &Context,
-        canvas: &mut Canvas,
-        pos: Vec2,
-        color: Color,
-        scale: f32,
-    ) -> GameResult<()> {
-        const MEEPLE_SIZE: f32 = 200.0;
-        const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
-        const MEEPLE_POINTS: [Vec2; 13] = [
-            vec2(0.025, 1.0),
-            vec2(0.425, 1.0),
-            vec2(0.5, 0.85),
-            vec2(0.575, 1.0),
-            vec2(0.975, 1.0),
-            vec2(0.75, 0.575),
-            vec2(1.0, 0.475),
-            vec2(1.0, 0.35),
-            vec2(0.675, 0.3),
-            vec2(0.325, 0.3),
-            vec2(0.0, 0.35),
-            vec2(0.0, 0.475),
-            vec2(0.25, 0.575),
-        ];
-        const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
-        let scale = scale * MEEPLE_SIZE;
-        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * scale + pos);
-        let head_point = (HEAD_POINT - MEEPLE_CENTER) * scale + pos;
-        Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?.draw(canvas);
-        Mesh::new_circle(ctx, DrawMode::fill(), head_point, scale * 0.175, 1.0, color)?
-            .draw(canvas);
-        Ok(())
     }
 
     fn get_held_tile_mut(&mut self) -> Option<&mut Tile> {
@@ -522,6 +256,74 @@ impl GameClient {
         self.get_current_player_type() == &self.state.game.local_player && !self.is_endgame()
     }
 
+    fn end_game(&mut self, ctx: &Context) {
+        self.state.turn_phase = TurnPhase::EndGame {
+            next_tick: Some(ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_DELAY),
+        };
+    }
+
+    fn skip_meeples(&mut self, ctx: &Context) -> GameResult<()> {
+        debug!("skipping meeple placement");
+        if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.state.turn_phase {
+            let groups_to_close = closed_groups.clone();
+            self.push_history()?;
+            self.end_turn(ctx, groups_to_close);
+        }
+        Ok(())
+    }
+
+    fn end_game_immediately(&mut self, ctx: &Context) -> GameResult<()> {
+        self.push_history()?;
+        self.end_game(ctx);
+        Ok(())
+    }
+
+    fn get_current_player(&self) -> PlayerIdentifier {
+        *self.state.turn_order.front().unwrap()
+    }
+
+    pub fn get_current_player_type(&self) -> &PlayerType {
+        &self
+            .state
+            .game
+            .players
+            .get(self.get_current_player())
+            .unwrap()
+            .ptype
+    }
+
+    fn end_turn(&mut self, ctx: &Context, groups_to_close: Vec<GroupIdentifier>) {
+        for group_ident in groups_to_close {
+            use crate::tile::SegmentType::*;
+            let group = self.state.game.groups.get(group_ident).unwrap();
+            match group.gtype {
+                City | Road | Monastary => {
+                    let scored_meeples = self.state.game.score_group(group_ident);
+                    self.scoring_effects.extend(
+                        scored_meeples.into_iter().map(|score_result| {
+                            ScoringEffect::from_scoring_result(ctx, score_result)
+                        }),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        let player_ident = self.state.turn_order.pop_front().unwrap();
+        self.state.turn_order.push_back(player_ident);
+
+        match self.state.game.draw_placeable_tile() {
+            Some((tile, placeable_positions)) => {
+                self.state.turn_phase = TurnPhase::TilePlacement {
+                    tile,
+                    placeable_positions,
+                    preview_location: None,
+                }
+            }
+            None => self.end_game(ctx),
+        }
+    } 
+    
     fn draw_player_card(
         &self,
         ctx: &Context,
@@ -615,86 +417,380 @@ impl GameClient {
         Ok(card_rect)
     }
 
-    fn end_turn(&mut self, ctx: &Context, groups_to_close: Vec<GroupIdentifier>) {
-        for group_ident in groups_to_close {
-            use crate::tile::SegmentType::*;
-            let group = self.state.game.groups.get(group_ident).unwrap();
-            match group.gtype {
-                City | Road | Monastary => {
-                    let scored_meeples = self.state.game.score_group(group_ident);
-                    self.scoring_effects.extend(
-                        scored_meeples.into_iter().map(|score_result| {
-                            ScoringEffect::from_scoring_result(ctx, score_result)
-                        }),
-                    );
-                }
-                _ => {}
-            }
-        }
+}
 
-        let player_ident = self.state.turn_order.pop_front().unwrap();
-        self.state.turn_order.push_back(player_ident);
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GameState {
+    inner: GameStateInner,
+    local_player: PlayerType,
+}
 
-        match self.state.game.draw_placeable_tile() {
-            Some((tile, placeable_positions)) => {
-                self.state.turn_phase = TurnPhase::TilePlacement {
-                    tile,
-                    placeable_positions,
-                    preview_location: None,
-                }
-            }
-            None => self.end_game(ctx),
-        }
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum GameStateInner {
+    Pregame(PregameState),
+    Playing(PlayingState),
+}
 
-        self.update_discord_presence();
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PregameState {}
+
+impl PregameState {
+    pub fn discord_presence(&self) -> ActivityBuilder {
+        todo!()
     }
+}
 
-    fn end_game(&mut self, ctx: &Context) {
-        self.state.turn_phase = TurnPhase::EndGame {
-            next_tick: Some(ctx.time.time_since_start().as_secs_f32() + END_GAME_SCORE_DELAY),
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PlayingState {
+    pub game: Game,
+    turn_phase: TurnPhase,
+    turn_order: VecDeque<PlayerIdentifier>,
+}
+
+impl PlayingState {
+    fn is_placement_valid(&self, pos: GridPos) -> PlacementValidity {
+        use PlacementValidity::*;
+        if self.game.placed_tiles.contains_key(&pos) {
+            return Invalid;
+        }
+
+        let TurnPhase::TilePlacement {
+            tile: held_tile, ..
+        } = &self.turn_phase
+        else {
+            return Invalid;
         };
-    }
 
-    fn skip_meeples(&mut self, ctx: &Context) -> GameResult<()> {
-        debug!("skipping meeple placement");
-        if let TurnPhase::MeeplePlacement { closed_groups, .. } = &self.state.turn_phase {
-            let groups_to_close = closed_groups.clone();
-            self.push_history()?;
-            self.end_turn(ctx, groups_to_close);
+        if self.game.is_valid_tile_position(held_tile, pos) {
+            Valid
+        } else {
+            ValidWithDifferentRotation
         }
+    }
+}
+
+impl std::fmt::Debug for PlayingState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        #[allow(unused)]
+        #[derive(Debug)]
+        struct Game<'a> {
+            tiles: usize,
+            players: Vec<&'a Player>,
+        }
+        #[derive(Debug)]
+        enum TurnPhase {
+            MeeplePlacement,
+            TilePlacement,
+            EndGame,
+        }
+        f.debug_struct("GameState")
+            .field(
+                "game",
+                &Game {
+                    tiles: self.game.placed_tiles.len(),
+                    players: self
+                        .turn_order
+                        .iter()
+                        .map(|p| self.game.players.get(*p).unwrap())
+                        .collect(),
+                },
+            )
+            .field(
+                "turn_phase",
+                &match &self.turn_phase {
+                    game_client::TurnPhase::TilePlacement { .. } => TurnPhase::TilePlacement,
+                    game_client::TurnPhase::MeeplePlacement { .. } => TurnPhase::MeeplePlacement,
+                    game_client::TurnPhase::EndGame { .. } => TurnPhase::EndGame,
+                },
+            )
+            .finish()
+    }
+}
+
+#[derive(PartialEq, Eq, Debug)]
+enum PlacementValidity {
+    Invalid,
+    ValidWithDifferentRotation,
+    Valid,
+}
+
+struct GridSelectionInfo {
+    gameboard_pos: Vec2,
+    focused_pos: GridPos,
+    subgrid_pos: Vec2,
+}
+
+pub struct GameClient {
+    parent_channel: Sender<MainEvent>,
+    action_channel: Option<Sender<GameAction>>,
+    event_sender: Sender<GameEvent>,
+    event_receiver: Receiver<GameEvent>,
+    pause_menu: Option<PauseScreenSubclient>,
+    offset: Vec2,
+    scale: f32,
+    skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
+    return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
+    pub context: GameContext,
+    ui: UIManager<GameEvent, GameEvent>,
+    camera_movement: Vec2,
+    camera_zoom: f32,
+    shared: Shared,
+    keybinds: Keybinds,
+}
+
+impl GameClient {
+    pub fn new(
+        ctx: &Context,
+        shared: Shared,
+        players: Vec<Color>,
+        parent_channel: Sender<MainEvent>,
+    ) -> Self {
+        let mut game = Game::new();
+        game.library.shuffle(&mut thread_rng());
+        for color in players {
+            game.players.insert(Player::new(color));
+        }
+        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
+            .unwrap();
+        Self::new_with_game(ctx, shared, game, parent_channel)
+    }
+
+    pub fn new_with_game(
+        ctx: &Context,
+        args: Shared,
+        game: Game,
+        parent_channel: Sender<MainEvent>,
+    ) -> Self {
+        GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, None)
+    }
+
+    pub fn new_with_game_and_action_channel(
+        ctx: &Context,
+        shared: Shared,
+        mut game: Game,
+        parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameAction>>,
+    ) -> Self {
+        let (first_tile, placeable_positions) = game.draw_placeable_tile().unwrap();
+        GameClient::new_from_state(
+            ctx,
+            shared,
+            GameState {
+                local_player: game.local_player.clone(),
+                inner: GameStateInner::Playing(PlayingState {
+                    turn_phase: TurnPhase::TilePlacement {
+                        tile: first_tile,
+                        placeable_positions,
+                        preview_location: None,
+                    },
+                    turn_order: game.players.keys().collect(),
+                    game,
+                }),
+            },
+            parent_channel,
+            action_channel,
+        )
+    }
+
+    pub fn new_from_state(
+        ctx: &Context,
+        shared: Shared,
+        state: GameState,
+        parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameAction>>,
+    ) -> Self {
+        let (event_sender, event_receiver) = channel();
+        let is_local = matches!(state.local_player, PlayerType::Local);
+        let keybinds = shared.persistent.borrow().keybinds.clone();
+        let ui_sender = event_sender.clone();
+        let (
+            ui,
+            [UIElement::Button(skip_meeples_button), UIElement::Button(return_to_main_menu_button)],
+        ) = UIManager::new_and_rc_elements(
+            ui_sender,
+            [
+                UIElement::Button(Button::new_with_styling(
+                    Bounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-220.0, 20.0, 200.0, 40.0),
+                    },
+                    Text::new(format!("Skip meeples ({})", keybinds.skip_meeples)),
+                    DrawParam::default(),
+                    Color::from_rgb(0, 128, 192),
+                    GameEvent::SkipMeeples,
+                )),
+                UIElement::Button(Button::new(
+                    Bounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
+                    },
+                    Text::new(if is_local {
+                        "Return to Main Menu"
+                    } else {
+                        "Return to Lobby"
+                    }),
+                    if is_local {
+                        GameEvent::MainEvent(MainEvent::MainMenu)
+                    } else {
+                        GameEvent::ReturnToLobby
+                    },
+                )),
+            ],
+        )
+        else {
+            panic!()
+        };
+
+        let mut this = Self {
+            parent_channel,
+            action_channel,
+            event_sender,
+            event_receiver,
+            pause_menu: None,
+            offset: Vec2::ZERO,
+            scale: 1.0,
+            context: GameContext::from(state),
+            skip_meeples_button,
+            return_to_main_menu_button,
+            ui,
+            camera_movement: Vec2::ZERO,
+            camera_zoom: 0.0,
+            shared,
+            keybinds,
+        };
+        this.reset_camera(ctx);
+        if let Some(discord) = &mut this.shared.discord {
+            let activity = this.context.discord_presence();
+            discord.start_activity(activity).log_and_ignore();
+        }
+        this
+    }
+
+    fn update_discord_presence(&mut self) {
+        if let Some(discord) = &mut self.shared.discord {
+            let activity = self.context.discord_presence();
+            discord.update_activity(activity).log_and_ignore();
+        }
+    }
+
+    pub fn load(
+        ctx: &Context,
+        args: Shared,
+        parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameAction>>,
+        path: PathBuf,
+    ) -> GameResult<Self> {
+        let file = File::open(path)?;
+        let mut state: GameState = bincode::deserialize_from(file).to_gameerror()?;
+        if let GameStateInner::Playing(state) = &mut state.inner {
+            for (_, player) in &mut state.game.players {
+                player.ptype = PlayerType::Local;
+            }
+            state.game.local_player = PlayerType::Local;
+        }
+        Ok(Self::new_from_state(
+            ctx,
+            args,
+            state,
+            parent_channel,
+            action_channel,
+        ))
+    }
+
+    fn reset_camera(&mut self, ctx: &Context) {
+        debug!("camera reset");
+        self.scale = 0.1;
+        self.offset = -Vec2::from(ctx.gfx.drawable_size()) * Vec2::splat(0.5 - self.scale / 2.0);
+        self.camera_movement = Vec2::ZERO;
+        self.camera_zoom = 0.0;
+    }
+
+    #[inline]
+    pub fn norm(&self, ctx: &Context) -> Vec2 {
+        let res: Vec2 = ctx.gfx.drawable_size().into();
+        ((res / res.yx()).max(Vec2::ONE) / res) / self.scale
+    }
+
+    pub fn to_game_pos(&self, screen_pos: Vec2, ctx: &Context) -> Vec2 {
+        (screen_pos + self.offset) * self.norm(ctx)
+    }
+
+    pub fn to_screen_pos(&self, game_pos: Vec2, ctx: &Context) -> Vec2 {
+        (game_pos / self.norm(ctx)) - self.offset
+    }
+
+    pub fn grid_pos_rect(&self, pos: &GridPos, ctx: &Context) -> Rect {
+        let res: Vec2 = ctx.gfx.drawable_size().into();
+        let dims = (res * self.scale) / (res / res.yx()).max(Vec2::ONE);
+        let near_corner = self.to_screen_pos((*pos).into(), ctx);
+        Rect::new(near_corner.x, near_corner.y, dims.x, dims.y)
+    }
+
+    pub fn draw_meeple(
+        ctx: &Context,
+        canvas: &mut Canvas,
+        pos: Vec2,
+        color: Color,
+        scale: f32,
+    ) -> GameResult<()> {
+        const MEEPLE_SIZE: f32 = 200.0;
+        const MEEPLE_CENTER: Vec2 = vec2(0.5, 0.6);
+        const MEEPLE_POINTS: [Vec2; 13] = [
+            vec2(0.025, 1.0),
+            vec2(0.425, 1.0),
+            vec2(0.5, 0.85),
+            vec2(0.575, 1.0),
+            vec2(0.975, 1.0),
+            vec2(0.75, 0.575),
+            vec2(1.0, 0.475),
+            vec2(1.0, 0.35),
+            vec2(0.675, 0.3),
+            vec2(0.325, 0.3),
+            vec2(0.0, 0.35),
+            vec2(0.0, 0.475),
+            vec2(0.25, 0.575),
+        ];
+        const HEAD_POINT: Vec2 = vec2(0.5, 0.3);
+        let scale = scale * MEEPLE_SIZE;
+        let meeple_points = MEEPLE_POINTS.map(|p| (p - MEEPLE_CENTER) * scale + pos);
+        let head_point = (HEAD_POINT - MEEPLE_CENTER) * scale + pos;
+        Mesh::new_polygon(ctx, DrawMode::fill(), &meeple_points, color)?.draw(canvas);
+        Mesh::new_circle(ctx, DrawMode::fill(), head_point, scale * 0.175, 1.0, color)?
+            .draw(canvas);
         Ok(())
     }
 
-    fn end_game_immediately(&mut self, ctx: &Context) -> GameResult<()> {
-        self.push_history()?;
-        self.end_game(ctx);
-        Ok(())
-    }
-
+   
     fn handle_event(&mut self, ctx: &mut Context, event: GameEvent) -> Result<(), GameError> {
         trace!("event = {event:?}");
         match event {
             GameEvent::MainEvent(event) => self.parent_channel.send(event).unwrap(),
             GameEvent::SkipMeeples => {
-                self.skip_meeples(ctx)?;
-                self.broadcast_action(GameMessage::SkipMeeples);
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    playing_context.skip_meeples(ctx)?;
+                    self.broadcast_action(GameMessage::SkipMeeples);
+                }
             }
             GameEvent::ClosePauseMenu => self.pause_menu = None,
             GameEvent::EndGame => {
                 self.pause_menu = None;
-                self.end_game_immediately(ctx)?;
-                self.broadcast_action(GameMessage::EndGame);
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    playing_context.end_game_immediately(ctx)?;
+                    self.broadcast_action(GameMessage::EndGame);
+                }
             }
             GameEvent::ResetCamera => {
                 self.pause_menu = None;
                 self.reset_camera(ctx)
             }
             GameEvent::Undo => {
-                if self.can_play() {
-                    self.pause_menu = None;
-                    self.pop_history();
-                    self.reevaluate_selected_square();
-                    self.broadcast_action(GameMessage::Undo);
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    if playing_context.can_play() {
+                        self.pause_menu = None;
+                        playing_context.pop_history();
+                        playing_context.reevaluate_selected_square();
+                        self.broadcast_action(GameMessage::Undo);
+                    }
                 }
             }
             GameEvent::ReturnToLobby => {
@@ -713,41 +809,60 @@ impl GameClient {
                 selected_square,
                 rotation,
             } => {
-                if let TurnPhase::TilePlacement { tile, .. } = &mut self.state.turn_phase {
-                    tile.rotate_to(rotation);
-                    self.place_tile(ctx, selected_square)?;
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    if let TurnPhase::TilePlacement { tile, .. } =
+                        &mut playing_context.state.turn_phase
+                    {
+                        tile.rotate_to(rotation);
+                        playing_context.place_tile(ctx, selected_square)?;
+                    }
                 }
             }
             GameMessage::PlaceMeeple { seg_ident } => {
-                if let TurnPhase::MeeplePlacement { closed_groups, .. } = &mut self.state.turn_phase
-                {
-                    let closed_groups = closed_groups.clone();
-                    let player_ident = self.state.turn_order.front().unwrap();
-                    self.place_meeple(ctx, closed_groups, seg_ident, *player_ident)?;
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    if let TurnPhase::MeeplePlacement { closed_groups, .. } =
+                        &mut playing_context.state.turn_phase
+                    {
+                        let closed_groups = closed_groups.clone();
+                        let player_ident = playing_context.state.turn_order.front().unwrap();
+                        self.place_meeple(ctx, closed_groups, seg_ident, *player_ident)?;
+                    }
                 }
             }
-            GameMessage::SkipMeeples => self.skip_meeples(ctx)?,
-            GameMessage::EndGame => self.end_game_immediately(ctx)?,
+            GameMessage::SkipMeeples => {
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    playing_context.skip_meeples(ctx)?
+                }
+            }
+            GameMessage::EndGame => {
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    playing_context.end_game_immediately(ctx)?
+                }
+            }
             GameMessage::Undo => {
-                self.pop_history();
-                self.reevaluate_selected_square();
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    playing_context.pop_history();
+                    playing_context.reevaluate_selected_square();
+                }
             }
             GameMessage::PreviewTile(tile_preview) => {
-                if let TurnPhase::TilePlacement {
-                    preview_location,
-                    tile,
-                    ..
-                } = &mut self.state.turn_phase
-                {
-                    if let Some(TilePreview {
-                        selected_square,
-                        rotation,
-                    }) = tile_preview
+                if let GameContext::Playing(playing_context) = &mut self.context {
+                    if let TurnPhase::TilePlacement {
+                        preview_location,
+                        tile,
+                        ..
+                    } = &mut playing_context.state.turn_phase
                     {
-                        *preview_location = Some(selected_square);
-                        tile.rotate_to(rotation);
-                    } else {
-                        *preview_location = None;
+                        if let Some(TilePreview {
+                            selected_square,
+                            rotation,
+                        }) = tile_preview
+                        {
+                            *preview_location = Some(selected_square);
+                            tile.rotate_to(rotation);
+                        } else {
+                            *preview_location = None;
+                        }
                     }
                 }
             }
@@ -756,6 +871,7 @@ impl GameClient {
     }
 
     pub fn update_pings(&mut self, users: Vec<User>) -> GameResult<()> {
+        
         for player in self.state.game.players.values_mut() {
             let user_data = users.iter().find_map(|user| {
                 user.client_info.as_ref().and_then(|client_info| {
@@ -864,21 +980,6 @@ impl GameClient {
         }
         None
     }
-
-    fn get_current_player(&self) -> PlayerIdentifier {
-        *self.state.turn_order.front().unwrap()
-    }
-
-    pub fn get_current_player_type(&self) -> &PlayerType {
-        &self
-            .state
-            .game
-            .players
-            .get(self.get_current_player())
-            .unwrap()
-            .ptype
-    }
-
     fn update_preview(&mut self) {
         if let TurnPhase::TilePlacement {
             tile: Tile { rotation, .. },

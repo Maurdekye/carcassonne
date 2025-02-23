@@ -21,6 +21,7 @@ use log::debug;
 use main_client::MainClient;
 use shared::Shared;
 
+// mod board_view_client;
 mod colors;
 mod game;
 mod game_client;
