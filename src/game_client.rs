@@ -1,5 +1,5 @@
 use std::cell::RefCell;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs::{create_dir_all, File};
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -18,13 +18,14 @@ use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
+use crate::tile::{Orientation, SegmentType};
 use crate::{game_client, Shared};
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
 use ggez_no_re::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
 use ggez_no_re::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
-    ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
+    RectExt, ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
 };
 
 use ggez::input::mouse::{set_cursor_type, CursorIcon};
@@ -69,6 +70,7 @@ pub const PLAYER_COLORS: [Color; NUM_PLAYERS] = [
 #[derive(Debug, Clone)]
 enum GameEvent {
     MainEvent(MainEvent),
+    BeginGame,
     SkipMeeples,
     ClosePauseMenu,
     EndGame,
@@ -86,6 +88,11 @@ pub enum GameAction {
 #[allow(clippy::large_enum_variant)]
 #[derive(Clone, Serialize, Deserialize)]
 enum TurnPhase {
+    Pregame {
+        tiles: HashMap<GridPos, Tile>,
+        held: Option<Tile>,
+        open_edges: Vec<(GridPos, Orientation)>,
+    },
     TilePlacement {
         tile: Tile,
         placeable_positions: Vec<GridPos>,
@@ -140,6 +147,7 @@ impl std::fmt::Debug for GameState {
         }
         #[derive(Debug)]
         enum TurnPhase {
+            Pregame,
             MeeplePlacement,
             TilePlacement,
             EndGame,
@@ -159,6 +167,7 @@ impl std::fmt::Debug for GameState {
             .field(
                 "turn_phase",
                 &match &self.turn_phase {
+                    game_client::TurnPhase::Pregame { .. } => TurnPhase::Pregame,
                     game_client::TurnPhase::TilePlacement { .. } => TurnPhase::TilePlacement,
                     game_client::TurnPhase::MeeplePlacement { .. } => TurnPhase::MeeplePlacement,
                     game_client::TurnPhase::EndGame { .. } => TurnPhase::EndGame,
@@ -196,6 +205,7 @@ pub struct GameClient {
     history: Vec<GameState>,
     skip_meeples_button: Rc<RefCell<Button<GameEvent>>>,
     return_to_main_menu_button: Rc<RefCell<Button<GameEvent>>>,
+    begin_game_button: Rc<RefCell<Button<GameEvent>>>,
     pub state: GameState,
     inspecting_groups: Option<GroupInspection>,
     ui: UIManager<GameEvent, GameEvent>,
@@ -270,7 +280,7 @@ impl GameClient {
         let ui_sender = event_sender.clone();
         let (
             ui,
-            [UIElement::Button(skip_meeples_button), UIElement::Button(return_to_main_menu_button)],
+            [UIElement::Button(skip_meeples_button), UIElement::Button(return_to_main_menu_button), UIElement::Button(begin_game_button)],
         ) = UIManager::new_and_rc_elements(
             ui_sender,
             [
@@ -300,6 +310,14 @@ impl GameClient {
                         GameEvent::ReturnToLobby
                     },
                 )),
+                UIElement::Button(Button::new(
+                    Bounds {
+                        relative: Rect::new(1.0, 0.0, 0.0, 0.0),
+                        absolute: Rect::new(-260.0, 20.0, 240.0, 40.0),
+                    },
+                    Text::new("Begin game"),
+                    GameEvent::BeginGame,
+                )),
             ],
         )
         else {
@@ -323,6 +341,7 @@ impl GameClient {
             inspecting_groups: None,
             skip_meeples_button,
             return_to_main_menu_button,
+            begin_game_button,
             ui,
             camera_movement: Vec2::ZERO,
             camera_zoom: 0.0,
@@ -702,6 +721,28 @@ impl GameClient {
                     let _ = action_channel.send(GameAction::ReturnToLobby);
                 }
             }
+            GameEvent::BeginGame => {
+                if let TurnPhase::Pregame {
+                    tiles,
+                    held,
+                    open_edges,
+                } = &mut self.state.turn_phase
+                {
+                    if open_edges.is_empty() && held.is_none() {
+                        for (pos, tile) in tiles.drain() {
+                            self.state.game.place_tile(tile, pos)?;
+                        }
+                        let (tile, placeable_positions) =
+                            self.state.game.draw_placeable_tile().unwrap();
+                        self.state.turn_phase = TurnPhase::TilePlacement {
+                            tile,
+                            placeable_positions,
+                            preview_location: None,
+                        };
+                        self.broadcast_action(GameMessage::BeginGame);
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -748,6 +789,27 @@ impl GameClient {
                         tile.rotate_to(rotation);
                     } else {
                         *preview_location = None;
+                    }
+                }
+            }
+            GameMessage::BeginGame => {
+                if let TurnPhase::Pregame {
+                    tiles,
+                    held,
+                    open_edges,
+                } = &mut self.state.turn_phase
+                {
+                    if open_edges.is_empty() && held.is_none() {
+                        for (pos, tile) in tiles.drain() {
+                            self.state.game.place_tile(tile, pos)?;
+                        }
+                        let (tile, placeable_positions) =
+                            self.state.game.draw_placeable_tile().unwrap();
+                        self.state.turn_phase = TurnPhase::TilePlacement {
+                            tile,
+                            placeable_positions,
+                            preview_location: None,
+                        };
                     }
                 }
             }
@@ -1030,6 +1092,39 @@ impl GameClient {
 
     fn draw_turn_phase(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> GameResult<()> {
         match &self.state.turn_phase {
+            TurnPhase::Pregame {
+                tiles,
+                held,
+                open_edges,
+            } => {
+                for (pos, tile) in tiles {
+                    tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
+                }
+                for (pos, orientation) in open_edges {
+                    use Orientation::*;
+                    let rect = self.grid_pos_rect(pos, ctx);
+                    let start = match orientation {
+                        North | West => rect.parametric(vec2(0.0, 0.0)),
+                        South | East => rect.parametric(vec2(1.0, 1.0)),
+                    };
+                    let end = match orientation {
+                        West | South => rect.parametric(vec2(0.0, 1.0)),
+                        North | East => rect.parametric(vec2(1.0, 0.0)),
+                    };
+                    Mesh::new_line(ctx, &[start, end], 2.0, Color::BLUE)?.draw(canvas);
+                }
+                if let (Some(tile), Some(pos)) = (held, self.selected_square) {
+                    let cursor_color = if tiles.contains_key(&pos) {
+                        Color::RED
+                    } else {
+                        Color::CYAN
+                    };
+                    let rect = self.grid_pos_rect(&pos, ctx);
+                    tile.render(ctx, canvas, rect)?;
+                    Mesh::new_rectangle(ctx, DrawMode::stroke(2.0), rect, cursor_color)?
+                        .draw(canvas);
+                }
+            }
             TurnPhase::TilePlacement { .. } => {
                 if let Some(pos) = self.selected_square {
                     self.draw_held_tile_at_pos(ctx, canvas, pos)?;
@@ -1287,6 +1382,78 @@ impl GameClient {
         } = self.grid_selection_info(ctx);
 
         match &self.state.turn_phase {
+            TurnPhase::Pregame { .. } => {
+                if !can_play {
+                    self.set_selected_square(None);
+                    return Ok(());
+                }
+
+                let TurnPhase::Pregame {
+                    tiles,
+                    held,
+                    open_edges,
+                } = &mut self.state.turn_phase
+                else {
+                    panic!();
+                };
+
+                fn recalculate_open_edges(
+                    tiles: &HashMap<GridPos, Tile>,
+                ) -> Vec<(GridPos, Orientation)> {
+                    tiles
+                        .keys()
+                        .cloned()
+                        .flat_map(|pos| {
+                            Orientation::iter_with_offsets().flat_map(
+                                move |(orientation, offset)| {
+                                    let tile = &tiles[&pos];
+                                    let middle_segment_id =
+                                        tile.mounts.by_orientation(orientation)[1];
+                                    let is_river = tile.segments[middle_segment_id].stype
+                                        == SegmentType::River;
+                                    if let Some(opposing_tile) = tiles.get(&(pos + offset)) {
+                                        if tile
+                                            .validate_mounting(opposing_tile, orientation)
+                                            .is_none()
+                                        {
+                                            return Some((pos, orientation));
+                                        }
+                                    } else if is_river {
+                                        return Some((pos, orientation));
+                                    }
+                                    None
+                                },
+                            )
+                        })
+                        .collect()
+                }
+
+                if let Some(pos) = self.selected_square {
+                    if let Some(tile) = held.as_mut() {
+                        if self.keybinds.rotate_clockwise.just_pressed(ctx) {
+                            tile.rotate_clockwise();
+                        }
+
+                        if self.keybinds.rotate_counterclockwise.just_pressed(ctx) {
+                            tile.rotate_counterclockwise();
+                        }
+
+                        if self.keybinds.place_tile.just_pressed(ctx) {
+                            if !tiles.contains_key(&pos) {
+                                tiles.insert(pos, held.take().unwrap());
+                                *open_edges = recalculate_open_edges(tiles);
+                            }
+                        }
+                    } else {
+                        if self.keybinds.place_tile.just_pressed(ctx) {
+                            if let Some(tile) = tiles.remove(&pos) {
+                                *held = Some(tile);
+                                *open_edges = recalculate_open_edges(tiles);
+                            }
+                        }
+                    }
+                }
+            }
             TurnPhase::TilePlacement {
                 placeable_positions,
                 ..
@@ -1532,6 +1699,12 @@ impl SubEventHandler for GameClient {
                 self.state.turn_phase,
                 TurnPhase::EndGame { next_tick: None }
             ));
+        self.begin_game_button.borrow_mut().state = match &self.state.turn_phase {
+            TurnPhase::Pregame {
+                open_edges, held, ..
+            } => UIElementState::disabled_if(!(open_edges.is_empty() && held.is_none())),
+            _ => UIElementState::Invisible,
+        };
 
         // dragging
         if self.keybinds.drag_camera.pressed(ctx) {

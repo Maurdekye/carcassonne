@@ -56,6 +56,7 @@ impl TryFrom<Message> for ServerMessage {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GameMessage {
+    BeginGame,
     PlaceTile {
         selected_square: GridPos,
         rotation: usize,
