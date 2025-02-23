@@ -690,6 +690,32 @@ impl GameClient {
         Ok(())
     }
 
+    fn begin_game(&mut self, broadcast: bool) -> GameResult<()> {
+        if let TurnPhase::Pregame {
+            tiles,
+            held,
+            open_edges,
+        } = &mut self.state.turn_phase
+        {
+            if open_edges.is_empty() && held.is_none() {
+                for (pos, tile) in tiles.drain() {
+                    self.state.game.place_tile(tile, pos)?;
+                }
+                let (tile, placeable_positions) =
+                    self.state.game.draw_placeable_tile().unwrap();
+                self.state.turn_phase = TurnPhase::TilePlacement {
+                    tile,
+                    placeable_positions,
+                    preview_location: None,
+                };
+                if broadcast {
+                    self.broadcast_action(GameMessage::BeginGame);
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn handle_event(&mut self, ctx: &mut Context, event: GameEvent) -> Result<(), GameError> {
         trace!("event = {event:?}");
         match event {
@@ -722,26 +748,7 @@ impl GameClient {
                 }
             }
             GameEvent::BeginGame => {
-                if let TurnPhase::Pregame {
-                    tiles,
-                    held,
-                    open_edges,
-                } = &mut self.state.turn_phase
-                {
-                    if open_edges.is_empty() && held.is_none() {
-                        for (pos, tile) in tiles.drain() {
-                            self.state.game.place_tile(tile, pos)?;
-                        }
-                        let (tile, placeable_positions) =
-                            self.state.game.draw_placeable_tile().unwrap();
-                        self.state.turn_phase = TurnPhase::TilePlacement {
-                            tile,
-                            placeable_positions,
-                            preview_location: None,
-                        };
-                        self.broadcast_action(GameMessage::BeginGame);
-                    }
-                }
+                self.begin_game(true)?;
             }
         }
         Ok(())
@@ -793,25 +800,7 @@ impl GameClient {
                 }
             }
             GameMessage::BeginGame => {
-                if let TurnPhase::Pregame {
-                    tiles,
-                    held,
-                    open_edges,
-                } = &mut self.state.turn_phase
-                {
-                    if open_edges.is_empty() && held.is_none() {
-                        for (pos, tile) in tiles.drain() {
-                            self.state.game.place_tile(tile, pos)?;
-                        }
-                        let (tile, placeable_positions) =
-                            self.state.game.draw_placeable_tile().unwrap();
-                        self.state.turn_phase = TurnPhase::TilePlacement {
-                            tile,
-                            placeable_positions,
-                            preview_location: None,
-                        };
-                    }
-                }
+                self.begin_game(false)?;
             }
         }
         Ok(())
