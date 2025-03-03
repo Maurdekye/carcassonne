@@ -21,7 +21,7 @@ use crate::{
 
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIManager},
+    ui_manager::{Bounds, button::Button, UIElement, UIManager},
 };
 
 mod controls_menu_subclient;

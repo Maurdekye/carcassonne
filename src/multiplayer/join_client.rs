@@ -14,15 +14,13 @@ use ggez::{
 use log::{debug, info, trace};
 
 use crate::{
-    game_client::GameAction,
+    game_client::{GameAction, GameExpansions},
     main_client::MainEvent,
     multiplayer::{
         lobby_client::{LobbyClient, LobbyEvent},
         message::{
-            client,
-            client::ClientMessage,
-            server::User,
-            server::{self, LobbyState, ServerMessage},
+            client::{self, ClientMessage},
+            server::{self, LobbyState, ServerMessage, User},
         },
         MultiplayerPhase,
     },
@@ -33,7 +31,7 @@ use crate::{
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     transport::{ClientNetworkEvent, ClientsideTransport, MessageClient, NetworkEvent},
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+    ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager},
 };
 
 use super::message::Message;
@@ -123,7 +121,13 @@ impl JoinClient {
         }
     }
 
-    fn start_game(&mut self, ctx: &Context, users: Vec<User>, seed: u64) {
+    fn start_game(
+        &mut self,
+        ctx: &Context,
+        users: Vec<User>,
+        seed: u64,
+        expansions: GameExpansions,
+    ) {
         info!("Game start!");
         self.phase = Some(MultiplayerPhase::new_game(
             ctx,
@@ -133,6 +137,7 @@ impl JoinClient {
             seed,
             Some(self.connection.as_ref().unwrap().1),
             self.username.clone(),
+            expansions,
         ));
     }
 
@@ -183,9 +188,9 @@ impl JoinClient {
                                 _ => {}
                             }
                         }
-                        ServerMessage::StartGame { game_seed } => {
+                        ServerMessage::StartGame { game_seed, expansions } => {
                             if let Some(users) = &self.users {
-                                self.start_game(ctx, users.clone(), game_seed);
+                                self.start_game(ctx, users.clone(), game_seed, expansions);
                             }
                         }
                         ServerMessage::Game { message, user } => {

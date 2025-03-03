@@ -49,3 +49,15 @@ impl From<Vec2> for GridPos {
         GridPos(x.floor() as i32, y.floor() as i32)
     }
 }
+
+impl From<GridPos> for (i32, i32) {
+    fn from(GridPos(x, y): GridPos) -> Self {
+        (x, y)
+    }
+}
+
+impl From<(i32, i32)> for GridPos {
+    fn from((x, y): (i32, i32)) -> Self {
+        GridPos(x, y)
+    }
+}

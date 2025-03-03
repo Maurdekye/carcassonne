@@ -13,7 +13,7 @@ use crate::{game_client::GameEvent, main_client::MainEvent, shared::Shared};
 
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+    ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager},
 };
 
 use super::PauseScreenEvent;

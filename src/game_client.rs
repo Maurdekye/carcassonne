@@ -17,12 +17,14 @@ use crate::multiplayer::message::server::User;
 use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
+use crate::tile::tile_definitions::rivers_1::MONASTARY_POND;
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::tile::{Orientation, SegmentType};
 use crate::{game_client, Shared};
+use ggez_no_re::checker_spiral::CheckerSpiral;
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
-use ggez_no_re::ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager};
+use ggez_no_re::ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager};
 use ggez_no_re::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
     RectExt, ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
@@ -36,7 +38,9 @@ use ggez::{
 };
 use log::{debug, trace};
 use pause_screen_subclient::PauseScreenSubclient;
-use rand::{seq::SliceRandom, thread_rng};
+use rand::rngs::StdRng;
+use rand::seq::SliceRandom;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 mod pause_screen_subclient;
@@ -66,6 +70,37 @@ pub const PLAYER_COLORS: [Color; NUM_PLAYERS] = [
     Color::GREEN,
     Color::BLACK,
 ];
+
+fn recalculate_open_edges(
+    tiles: &HashMap<GridPos, Tile>,
+) -> Vec<(GridPos, Orientation)> {
+    tiles
+        .keys()
+        .cloned()
+        .flat_map(|pos| {
+            Orientation::iter_with_offsets().flat_map(
+                move |(orientation, offset)| {
+                    let tile = &tiles[&pos];
+                    let middle_segment_id =
+                        tile.mounts.by_orientation(orientation)[1];
+                    let is_river = tile.segments[middle_segment_id].stype
+                        == SegmentType::River;
+                    if let Some(opposing_tile) = tiles.get(&(pos + offset)) {
+                        if tile
+                            .validate_mounting(opposing_tile, orientation)
+                            .is_none()
+                        {
+                            return Some((pos, orientation));
+                        }
+                    } else if is_river {
+                        return Some((pos, orientation));
+                    }
+                    None
+                },
+            )
+        })
+        .collect()
+}
 
 #[derive(Debug, Clone)]
 enum GameEvent {
@@ -190,6 +225,46 @@ struct GridSelectionInfo {
     subgrid_pos: Vec2,
 }
 
+#[derive(Clone, Debug)]
+pub struct GameClientConfiguration {
+    pub seed: u64,
+    pub players: PlayerConfiguration,
+    pub expansions: GameExpansions,
+}
+
+#[derive(Clone, Debug)]
+pub enum PlayerConfiguration {
+    Local(Vec<Color>),
+    Multiplayer {
+        local_player: PlayerType,
+        players: Vec<(Color, PlayerType)>,
+    },
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct GameExpansions {
+    pub rivers_1: bool,
+}
+
+impl GameExpansions {
+    pub fn rivers(&self) -> Option<Vec<Tile>> {
+        let mut rivers = Vec::new();
+        if self.rivers_1 {
+            rivers.extend([
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+                MONASTARY_POND.clone(),
+            ]);
+        }
+        (!rivers.is_empty()).then_some(rivers)
+    }
+}
+
 pub struct GameClient {
     parent_channel: Sender<MainEvent>,
     action_channel: Option<Sender<GameAction>>,
@@ -220,29 +295,67 @@ impl GameClient {
     pub fn new(
         ctx: &Context,
         shared: Shared,
-        players: Vec<Color>,
         parent_channel: Sender<MainEvent>,
+        action_channel: Option<Sender<GameAction>>,
+        config: GameClientConfiguration,
     ) -> Self {
-        let mut game = Game::new();
-        game.library.shuffle(&mut thread_rng());
-        for color in players {
-            game.players.insert(Player::new(color));
-        }
-        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
-            .unwrap();
-        Self::new_with_game(ctx, shared, game, parent_channel)
+        let mut library = Tile::default_library();
+        let mut rng = StdRng::seed_from_u64(config.seed);
+        library.shuffle(&mut rng);
+        let mut game = match config.players {
+            PlayerConfiguration::Local(colors) => {
+                let mut game = Game::new_with_library(library);
+                for color in colors {
+                    game.players.insert(Player::new(color));
+                }
+                game
+            }
+            PlayerConfiguration::Multiplayer {
+                local_player,
+                players,
+            } => {
+                let mut game = Game::new_inner(library, local_player);
+                for (color, ptype) in players {
+                    game.players.insert(Player::new_inner(color, ptype));
+                }
+                game
+            }
+        };
+        let turn_phase = if let Some(river_tiles) = config.expansions.rivers() {
+            let tiles: HashMap<GridPos, Tile> = CheckerSpiral::new()
+                .map(GridPos::from)
+                .zip(river_tiles)
+                .collect();
+            let open_edges = recalculate_open_edges(&tiles);
+            TurnPhase::Pregame {
+                tiles,
+                held: None,
+                open_edges,
+            }
+        } else {
+            game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
+                .unwrap();
+            let (tile, placeable_positions) = game.draw_placeable_tile().unwrap();
+            TurnPhase::TilePlacement {
+                tile,
+                placeable_positions,
+                preview_location: None,
+            }
+        };
+        GameClient::new_from_state(
+            ctx,
+            shared,
+            GameState {
+                turn_phase,
+                turn_order: game.players.keys().collect(),
+                game,
+            },
+            parent_channel,
+            action_channel,
+        )
     }
 
     pub fn new_with_game(
-        ctx: &Context,
-        args: Shared,
-        game: Game,
-        parent_channel: Sender<MainEvent>,
-    ) -> Self {
-        GameClient::new_with_game_and_action_channel(ctx, args, game, parent_channel, None)
-    }
-
-    pub fn new_with_game_and_action_channel(
         ctx: &Context,
         shared: Shared,
         mut game: Game,
@@ -701,8 +814,7 @@ impl GameClient {
                 for (pos, tile) in tiles.drain() {
                     self.state.game.place_tile(tile, pos)?;
                 }
-                let (tile, placeable_positions) =
-                    self.state.game.draw_placeable_tile().unwrap();
+                let (tile, placeable_positions) = self.state.game.draw_placeable_tile().unwrap();
                 self.state.turn_phase = TurnPhase::TilePlacement {
                     tile,
                     placeable_positions,
@@ -1376,6 +1488,8 @@ impl GameClient {
                     self.set_selected_square(None);
                     return Ok(());
                 }
+                
+                self.set_selected_square(Some(focused_pos));
 
                 let TurnPhase::Pregame {
                     tiles,
@@ -1385,37 +1499,6 @@ impl GameClient {
                 else {
                     panic!();
                 };
-
-                fn recalculate_open_edges(
-                    tiles: &HashMap<GridPos, Tile>,
-                ) -> Vec<(GridPos, Orientation)> {
-                    tiles
-                        .keys()
-                        .cloned()
-                        .flat_map(|pos| {
-                            Orientation::iter_with_offsets().flat_map(
-                                move |(orientation, offset)| {
-                                    let tile = &tiles[&pos];
-                                    let middle_segment_id =
-                                        tile.mounts.by_orientation(orientation)[1];
-                                    let is_river = tile.segments[middle_segment_id].stype
-                                        == SegmentType::River;
-                                    if let Some(opposing_tile) = tiles.get(&(pos + offset)) {
-                                        if tile
-                                            .validate_mounting(opposing_tile, orientation)
-                                            .is_none()
-                                        {
-                                            return Some((pos, orientation));
-                                        }
-                                    } else if is_river {
-                                        return Some((pos, orientation));
-                                    }
-                                    None
-                                },
-                            )
-                        })
-                        .collect()
-                }
 
                 if let Some(pos) = self.selected_square {
                     if let Some(tile) = held.as_mut() {

@@ -200,6 +200,7 @@ pub struct Game {
 }
 
 impl Game {
+    #[allow(unused)]
     pub fn new() -> Game {
         Game::new_with_library(Tile::default_library())
     }

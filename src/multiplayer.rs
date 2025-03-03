@@ -6,17 +6,14 @@ use std::{
 use ggez::{graphics::Canvas, Context, GameError};
 use lobby_client::{LobbyClient, LobbyEvent};
 use message::server::User;
-use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 
 use crate::{
-    game::{
-        player::{Player, PlayerType},
-        Game,
+    game::player::PlayerType,
+    game_client::{
+        GameAction, GameClient, GameClientConfiguration, GameExpansions, GameState,
+        PlayerConfiguration,
     },
-    game_client::{GameAction, GameClient, GameState},
     main_client::MainEvent,
-    pos::GridPos,
-    tile::{tile_definitions::STARTING_TILE, Tile},
     Shared,
 };
 use ggez_no_re::sub_event_handler::SubEventHandler;
@@ -38,36 +35,40 @@ enum MultiplayerPhase<T> {
 impl<T> MultiplayerPhase<T> {
     pub fn new_game(
         ctx: &Context,
-        args: Shared,
+        shared: Shared,
         parent_channel: Sender<MainEvent>,
         users: Vec<User>,
         seed: u64,
         local_user: Option<IpAddr>,
         local_username: String,
+        expansions: GameExpansions,
     ) -> MultiplayerPhase<T> {
-        let mut library = Tile::default_library();
-        library.shuffle(&mut StdRng::seed_from_u64(seed));
-        let mut game = Game::new_inner(
-            library,
-            PlayerType::from_details(local_username, local_user),
-        );
-        for user in users {
-            let address = user.client_info.as_ref().map(|info| info.ip);
-            game.players.insert(Player::new_inner(
-                user.color.unwrap(),
-                PlayerType::from_details(user.username.clone(), address),
-            ));
-        }
         let (action_sender, action_channel) = channel();
-        game.place_tile(STARTING_TILE.clone(), GridPos(0, 0))
-            .unwrap();
+        let local_player = PlayerType::from_details(local_username, local_user);
+        let players = users
+            .iter()
+            .map(|user| {
+                let address = user.client_info.as_ref().map(|info| info.ip);
+                (
+                    user.color.unwrap(),
+                    PlayerType::from_details(user.username.clone(), address),
+                )
+            })
+            .collect();
         MultiplayerPhase::Game {
-            game: GameClient::new_with_game_and_action_channel(
+            game: GameClient::new(
                 ctx,
-                args,
-                game,
+                shared,
                 parent_channel,
                 Some(action_sender),
+                GameClientConfiguration {
+                    seed,
+                    expansions,
+                    players: PlayerConfiguration::Multiplayer {
+                        local_player,
+                        players,
+                    },
+                },
             ),
             action_channel,
         }

@@ -19,11 +19,14 @@ use log::{debug, info, trace};
 use crate::{
     game::player::PlayerType,
     game_client::{GameAction, GameState},
+    game_expansions_selector::GameExpansionsSelector,
     main_client::MainEvent,
     multiplayer::{
         lobby_client::{LobbyClient, LobbyEvent},
-        message::client::{self, ClientMessage},
-        message::server::{self, ClientInfo, LobbyState, ServerMessage, User},
+        message::{
+            client::{self, ClientMessage},
+            server::{self, ClientInfo, LobbyState, ServerMessage, User},
+        },
         MultiplayerPhase,
     },
     util::{AnchorPoint, ContextExt, TextExt},
@@ -33,7 +36,7 @@ use crate::{
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     transport::{MessageServer, NetworkEvent, ServerNetworkEvent, ServersideTransport},
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager},
+    ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager},
 };
 
 use super::message::Message;
@@ -95,6 +98,7 @@ pub struct HostClient {
     event_sender: Sender<HostEvent>,
     event_receiver: Receiver<HostEvent>,
     ui: UIManager<UIEvent, HostEvent>,
+    expansions_selector: GameExpansionsSelector,
     _message_server: MessageServer,
     users: HashMap<IpOrHost, HostUser>,
     phase: MultiplayerPhase<HostEvent>,
@@ -132,11 +136,16 @@ impl HostClient {
         ) else {
             panic!()
         };
+        let expansions_selector = GameExpansionsSelector::new(Bounds {
+            relative: Rect::new(0.6, 0.3, 0.0, 0.0),
+            absolute: Rect::new(0.0, 100.0, 0.0, 0.0),
+        });
         start_game_button.borrow_mut().state = UIElementState::Disabled;
         let message_server = MessageServer::start::<Message>(event_sender.clone(), port);
         let mut this = HostClient {
             parent_channel,
             ui,
+            expansions_selector,
             _message_server: message_server,
             users: HashMap::from([(
                 IpOrHost::Host,
@@ -345,7 +354,14 @@ impl HostClient {
                     log::error!("Error loading multiplayer game: {err}");
                 }
                 let game_seed = rand::random();
-                self.broadcast(ServerMessage::StartGame { game_seed });
+                let expansions = self.expansions_selector.get_selected_expansions();
+                {
+                    let expansions = expansions.clone();
+                    self.broadcast(ServerMessage::StartGame {
+                        game_seed,
+                        expansions,
+                    });
+                }
                 self.phase = MultiplayerPhase::new_game(
                     ctx,
                     self.shared.clone(),
@@ -354,6 +370,7 @@ impl HostClient {
                     game_seed,
                     None,
                     self.username.clone(),
+                    expansions,
                 );
             }
         }
@@ -387,6 +404,7 @@ impl SubEventHandler for HostClient {
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
         if let MultiplayerPhase::Lobby(_) = &self.phase {
             self.ui.update(ctx)?;
+            self.expansions_selector.update(ctx)?;
         }
 
         while let Ok(event) = self.event_receiver.try_recv() {
@@ -444,6 +462,7 @@ impl SubEventHandler for HostClient {
 
         if let MultiplayerPhase::Lobby(_) = &self.phase {
             self.ui.draw(ctx, canvas)?;
+            self.expansions_selector.draw(ctx, canvas)?;
         }
 
         Ok(())

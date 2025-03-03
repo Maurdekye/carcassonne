@@ -13,7 +13,7 @@ use ggez::{
 use log::{info, trace};
 
 use crate::{
-    game::debug_game_configs::DebugGameConfiguration, game_client::GameClient, main_menu_client::MainMenuClient, multiplayer::{
+    game::debug_game_configs::DebugGameConfiguration, game_client::{GameClient, GameClientConfiguration}, main_menu_client::MainMenuClient, multiplayer::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
     }, Shared
 };
@@ -22,7 +22,7 @@ use ggez_no_re::sub_event_handler::SubEventHandler;
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
-    StartGame(Vec<Color>),
+    StartGame(GameClientConfiguration),
     LoadGame(PathBuf),
     StartDebugGame(DebugGameConfiguration),
     MainMenu,
@@ -70,12 +70,13 @@ impl MainClient {
     fn handle_event(&mut self, ctx: &mut Context, event: MainEvent) -> Result<(), GameError> {
         trace!("event = {event:?}");
         match event {
-            MainEvent::StartGame(player_colors) => {
+            MainEvent::StartGame(config) => {
                 self.scene = Box::new(GameClient::new(
                     ctx,
                     self.shared.clone(),
-                    player_colors,
                     self.event_sender.clone(),
+                    None,
+                    config,
                 ))
             }
             MainEvent::MainMenu => {
@@ -103,6 +104,7 @@ impl MainClient {
                     self.shared.clone(),
                     config.get_game()?,
                     self.event_sender.clone(),
+                    None,
                 ));
             }
             MainEvent::MultiplayerHost { username, port } => {

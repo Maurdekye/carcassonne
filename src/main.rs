@@ -21,6 +21,7 @@ use log::debug;
 use main_client::MainClient;
 use shared::Shared;
 
+mod game_expansions_selector;
 mod colors;
 mod game;
 mod game_client;

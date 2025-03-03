@@ -13,7 +13,10 @@ use ggez::{
 use log::{trace, warn};
 
 use crate::{
-    game_client::{GameClient, NUM_PLAYERS, PLAYER_COLORS},
+    game_client::{
+        GameClient, GameClientConfiguration, PlayerConfiguration, NUM_PLAYERS, PLAYER_COLORS,
+    },
+    game_expansions_selector::GameExpansionsSelector,
     main_client::MainEvent,
     util::{AnchorPoint, ContextExt, DrawableWihParamsExt, TextExt},
     Shared,
@@ -21,7 +24,7 @@ use crate::{
 
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
+    ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager, BUTTON_COLOR},
 };
 
 #[derive(Clone, Debug)]
@@ -43,6 +46,7 @@ pub struct MainMenuClient {
     event_receiver: Receiver<MainMenuEvent>,
     _args: Shared,
     ui: UIManager<MainMenuEvent, MainMenuEvent>,
+    expansion_selector: GameExpansionsSelector,
     color_selection_ui: UIManager<Color, MainMenuEvent>,
     color_selection_buttons: [Rc<RefCell<Button<Color>>>; NUM_PLAYERS],
     selected_colors: Vec<Color>,
@@ -134,6 +138,8 @@ impl MainMenuClient {
                 }),
             )
         };
+        let expansion_selector =
+            GameExpansionsSelector::new(Bounds::relative(Rect::new(0.05, 0.5, 0.0, 0.0)));
         let color_selection_buttons = color_selection_buttons.map(UIElement::unwrap_button);
         MainMenuClient {
             parent_channel,
@@ -143,6 +149,7 @@ impl MainMenuClient {
             color_selection_ui,
             color_selection_buttons,
             selected_colors: Vec::new(),
+            expansion_selector,
             start_game_button,
             ui,
         }
@@ -180,7 +187,11 @@ impl MainMenuClient {
                     warn!("Can't start a game with less than two players!");
                 } else {
                     self.parent_channel
-                        .send(MainEvent::StartGame(self.selected_colors.clone()))
+                        .send(MainEvent::StartGame(GameClientConfiguration {
+                            seed: rand::random(),
+                            players: PlayerConfiguration::Local(self.selected_colors.clone()),
+                            expansions: self.expansion_selector.get_selected_expansions(),
+                        }))
                         .unwrap()
                 }
             }
@@ -192,6 +203,7 @@ impl MainMenuClient {
 impl SubEventHandler for MainMenuClient {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         self.ui.update(ctx)?;
+        self.expansion_selector.update(ctx)?;
         self.color_selection_ui.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(event)?;
@@ -223,6 +235,7 @@ impl SubEventHandler for MainMenuClient {
 
         // render ui
         self.ui.draw(ctx, canvas)?;
+        self.expansion_selector.draw(ctx, canvas)?;
 
         // render player choice buttons
         self.color_selection_ui.draw(ctx, canvas)?;

@@ -20,7 +20,7 @@ use crate::{
 };
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, Button, TextInput, UIElement, UIManager},
+    ui_manager::{Bounds, button::Button, text_input::TextInput, UIElement, UIManager},
 };
 
 const ERROR_DISPLAY_PERIOD: Duration = Duration::from_secs(10);
