@@ -17,14 +17,14 @@ use crate::multiplayer::message::server::User;
 use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
-use crate::tile::tile_definitions::rivers_1::MONASTARY_POND;
+use crate::tile::tile_definitions::rivers_1::{MONASTARY_POND, RIVER_CROSSING};
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::tile::{Orientation, SegmentType};
 use crate::{game_client, Shared};
 use ggez_no_re::checker_spiral::CheckerSpiral;
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
-use ggez_no_re::ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager};
+use ggez_no_re::ui_manager::{button::Button, Bounds, UIElement, UIElementState, UIManager};
 use ggez_no_re::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
     RectExt, ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
@@ -71,33 +71,24 @@ pub const PLAYER_COLORS: [Color; NUM_PLAYERS] = [
     Color::BLACK,
 ];
 
-fn recalculate_open_edges(
-    tiles: &HashMap<GridPos, Tile>,
-) -> Vec<(GridPos, Orientation)> {
+fn recalculate_open_edges(tiles: &HashMap<GridPos, Tile>) -> Vec<(GridPos, Orientation)> {
     tiles
         .keys()
         .cloned()
         .flat_map(|pos| {
-            Orientation::iter_with_offsets().flat_map(
-                move |(orientation, offset)| {
-                    let tile = &tiles[&pos];
-                    let middle_segment_id =
-                        tile.mounts.by_orientation(orientation)[1];
-                    let is_river = tile.segments[middle_segment_id].stype
-                        == SegmentType::River;
-                    if let Some(opposing_tile) = tiles.get(&(pos + offset)) {
-                        if tile
-                            .validate_mounting(opposing_tile, orientation)
-                            .is_none()
-                        {
-                            return Some((pos, orientation));
-                        }
-                    } else if is_river {
+            Orientation::iter_with_offsets().flat_map(move |(orientation, offset)| {
+                let tile = &tiles[&pos];
+                let middle_segment_id = tile.mounts.by_orientation(orientation)[1];
+                let is_river = tile.segments[middle_segment_id].stype == SegmentType::River;
+                if let Some(opposing_tile) = tiles.get(&(pos + offset)) {
+                    if tile.validate_mounting(opposing_tile, orientation).is_none() {
                         return Some((pos, orientation));
                     }
-                    None
-                },
-            )
+                } else if is_river {
+                    return Some((pos, orientation));
+                }
+                None
+            })
         })
         .collect()
 }
@@ -250,16 +241,7 @@ impl GameExpansions {
     pub fn rivers(&self) -> Option<Vec<Tile>> {
         let mut rivers = Vec::new();
         if self.rivers_1 {
-            rivers.extend([
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-                MONASTARY_POND.clone(),
-            ]);
+            rivers.extend([MONASTARY_POND.clone(), RIVER_CROSSING.clone()]);
         }
         (!rivers.is_empty()).then_some(rivers)
     }
@@ -1488,7 +1470,7 @@ impl GameClient {
                     self.set_selected_square(None);
                     return Ok(());
                 }
-                
+
                 self.set_selected_square(Some(focused_pos));
 
                 let TurnPhase::Pregame {
