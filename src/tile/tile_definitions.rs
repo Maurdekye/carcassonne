@@ -15,7 +15,7 @@ use SegmentType::*;
 use TileEdgeSpan::*;
 
 pub mod rivers_1 {
-    use std::vec;
+    use std::{iter::empty, vec};
 
     use ggez::glam::vec2;
     use lazy_static::lazy_static;
@@ -71,87 +71,28 @@ pub mod rivers_1 {
             vec![
                 Segment {
                     stype: River,
-                    edges: vec![
-                        Edge((Middle, North)),
-                        Vert(0),
-                        Vert(1),
-                        Vert(2),
-                        Vert(3),
-                        Vert(4),
-                        Vert(5),
-                        Vert(6),
-                        Vert(7),
-                        Vert(8),
-                        Vert(9),
-                        Vert(10),
-                        Vert(11),
-                        Vert(12),
-                        Vert(13),
-                        Vert(14),
-                        Vert(15),
-                        Vert(16),
-                        Vert(17),
-                        Vert(18),
-                        Vert(19),
-                        Vert(20),
-                        Vert(21),
-                        Vert(22),
-                        Vert(23),
-                        Vert(24),
-                        Vert(25),
-                        Vert(26),
-                        Vert(27),
-                    ]
+                    edges: empty()
+                        .chain([Edge((Middle, North))])
+                        .chain((0..=27).map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Monastary,
-                    edges: vec![Vert(28), Vert(29), Vert(30), Vert(31), Vert(32)]
+                    edges: (28..=32).map(Vert).collect()
                 },
                 Segment {
                     stype: Farm,
-                    edges: vec![
-                        Edge((End, North)),
-                        Edge((Full, East)),
-                        Break,
-                        Vert(32),
-                        Vert(31),
-                        Vert(30),
-                        Vert(29),
-                        Vert(28),
-                        Vert(32),
-                        Break,
-                        Edge((Full, South)),
-                        Edge((Full, West)),
-                        Edge((Beginning, North)),
-                        Vert(27),
-                        Vert(26),
-                        Vert(25),
-                        Vert(24),
-                        Vert(23),
-                        Vert(22),
-                        Vert(21),
-                        Vert(20),
-                        Vert(19),
-                        Vert(18),
-                        Vert(17),
-                        Vert(16),
-                        Vert(15),
-                        Vert(14),
-                        Vert(13),
-                        Vert(12),
-                        Vert(11),
-                        Vert(10),
-                        Vert(9),
-                        Vert(8),
-                        Vert(7),
-                        Vert(6),
-                        Vert(5),
-                        Vert(4),
-                        Vert(3),
-                        Vert(2),
-                        Vert(1),
-                        Vert(0),
-                    ]
+                    edges: empty()
+                        .chain([Edge((End, North)), Edge((Full, East)), Break])
+                        .chain((28..=32).rev().chain([32]).map(Vert))
+                        .chain([
+                            Break,
+                            Edge((Full, South)),
+                            Edge((Full, West)),
+                            Edge((Beginning, North)),
+                        ])
+                        .chain((0..=27).rev().map(Vert))
+                        .collect()
                 }
             ],
             vec![TileAttribute::MiddleSegmentWidth(North, 0.2)]
@@ -204,133 +145,103 @@ pub mod rivers_1 {
             vec![
                 Segment {
                     stype: River,
-                    edges: vec![
-                        Edge((Middle, South)),
-                        Vert(0),
-                        Vert(1),
-                        Vert(2),
-                        Vert(3),
-                        Vert(4),
-                        Vert(5),
-                        Vert(6),
-                        Vert(7),
-                        Vert(8),
-                        Vert(9),
-                        Vert(10),
-                        Vert(11),
-                        Edge((Middle, North)),
-                        Vert(13),
-                        Vert(14),
-                        Vert(15),
-                        Vert(16),
-                        Vert(17),
-                        Vert(18),
-                        Vert(19),
-                        Vert(20),
-                        Vert(21),
-                        Vert(22),
-                        Vert(23),
-                        Vert(24),
-                    ]
+                    edges: empty()
+                        .chain([Edge((Middle, South))])
+                        .chain((0..=11).map(Vert))
+                        .chain([Edge((Middle, North))])
+                        .chain((13..=24).map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Road,
-                    edges: vec![
-                        Edge((Middle, West)),
-                        Vert(25),
-                        Vert(26),
-                        Vert(27),
-                        Vert(28),
-                        Vert(6),
-                        Vert(29),
-                        Vert(17),
-                        Vert(30),
-                        Vert(31),
-                        Vert(32),
-                        Vert(33),
-                        Edge((Middle, East)),
-                        Vert(34),
-                        Vert(35),
-                        Vert(36),
-                        Vert(37),
-                        Vert(38),
-                        Vert(18),
-                        Vert(39),
-                        Vert(5),
-                        Vert(40),
-                        Vert(41),
-                    ]
+                    edges: empty()
+                        .chain([Edge((Middle, West))])
+                        .chain((25..=28).chain([6, 29, 17]).chain(30..=33).map(Vert))
+                        .chain([Edge((Middle, East))])
+                        .chain((34..=38).chain([18, 39, 5]).chain(40..=41).map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Farm,
-                    edges: vec![
-                        Edge((End, South)),
-                        Edge((Beginning, West)),
-                        Vert(41),
-                        Vert(40),
-                        Vert(5),
-                        Vert(4),
-                        Vert(3),
-                        Vert(2),
-                        Vert(1),
-                        Vert(0),
-                    ]
+                    edges: empty()
+                        .chain([Edge((End, South)), Edge((Beginning, West))])
+                        .chain((0..=5).chain(40..=41).rev().map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Farm,
-                    edges: vec![
-                        Edge((End, West)),
-                        Edge((Beginning, North)),
-                        Vert(11),
-                        Vert(10),
-                        Vert(9),
-                        Vert(8),
-                        Vert(7),
-                        Vert(6),
-                        Vert(28),
-                        Vert(27),
-                        Vert(26),
-                        Vert(25),
-                    ]
+                    edges: empty()
+                        .chain([Edge((End, West)), Edge((Beginning, North))])
+                        .chain((25..=28).chain(6..=11).rev().map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Farm,
-                    edges: vec![
-                        Edge((End, North)),
-                        Edge((Beginning, East)),
-                        Vert(33),
-                        Vert(32),
-                        Vert(31),
-                        Vert(30),
-                        Vert(17),
-                        Vert(16),
-                        Vert(15),
-                        Vert(14),
-                        Vert(13),
-                    ]
+                    edges: empty()
+                        .chain([Edge((End, North)), Edge((Beginning, East))])
+                        .chain((13..=17).chain(30..=33).rev().map(Vert))
+                        .collect()
                 },
                 Segment {
                     stype: Farm,
-                    edges: vec![
-                        Edge((End, East)),
-                        Edge((Beginning, South)),
-                        Vert(24),
-                        Vert(23),
-                        Vert(22),
-                        Vert(21),
-                        Vert(20),
-                        Vert(19),
-                        Vert(18),
-                        Vert(38),
-                        Vert(37),
-                        Vert(36),
-                        Vert(35),
-                        Vert(34),
-                    ]
+                    edges: empty()
+                        .chain([Edge((End, East)), Edge((Beginning, South))])
+                        .chain((34..=38).chain(18..=24).rev().map(Vert))
+                        .collect()
                 }
             ],
             vec![
                 TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2),
+            ]
+        );
+        pub static ref RIVER_CORNER: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.40, 0.80),
+                vec2(0.45, 0.75),
+                vec2(0.45, 0.65),
+                vec2(0.30, 0.50),
+                vec2(0.24, 0.50),
+                vec2(0.15, 0.60),
+                vec2(0.07, 0.40),
+                vec2(0.17, 0.30),
+                vec2(0.40, 0.30),
+                vec2(0.66, 0.56),
+                vec2(0.66, 0.75),
+                vec2(0.60, 0.90),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, South))])
+                        .chain((0..=5).map(Vert))
+                        .chain([Edge((Middle, West))])
+                        .chain((6..=11).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([Edge((End, South)), Edge((Beginning, West))])
+                        .chain((0..=5).rev().map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([
+                            Edge((End, West)),
+                            Edge((Full, North)),
+                            Edge((Full, East)),
+                            Edge((Beginning, South))
+                        ])
+                        .chain((6..=11).rev().map(Vert))
+                        .collect()
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(West, 0.2),
                 TileAttribute::MiddleSegmentWidth(South, 0.2),
             ]
         );
@@ -490,16 +401,7 @@ lazy_static! {
         vec![
             Segment {
                 stype: Village,
-                edges: vec![
-                    Vert(0),
-                    Vert(1),
-                    Vert(2),
-                    Vert(3),
-                    Vert(4),
-                    Vert(5),
-                    Vert(6),
-                    Vert(7)
-                ]
+                edges: (0..=7).map(Vert).collect()
             },
             Segment {
                 stype: Farm,

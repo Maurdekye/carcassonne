@@ -17,7 +17,7 @@ use crate::multiplayer::message::server::User;
 use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
-use crate::tile::tile_definitions::rivers_1::{MONASTARY_POND, RIVER_CROSSING};
+use crate::tile::tile_definitions::rivers_1::{MONASTARY_POND, RIVER_CORNER, RIVER_CROSSING};
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::tile::{Orientation, SegmentType};
 use crate::{game_client, Shared};
@@ -241,7 +241,7 @@ impl GameExpansions {
     pub fn rivers(&self) -> Option<Vec<Tile>> {
         let mut rivers = Vec::new();
         if self.rivers_1 {
-            rivers.extend([MONASTARY_POND.clone(), RIVER_CROSSING.clone()]);
+            rivers.extend([MONASTARY_POND.clone(), RIVER_CROSSING.clone(), RIVER_CORNER.clone()]);
         }
         (!rivers.is_empty()).then_some(rivers)
     }

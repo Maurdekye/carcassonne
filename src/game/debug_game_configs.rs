@@ -1,16 +1,16 @@
 use super::{player::Player, Game};
 use clap::ValueEnum;
 use ggez::{graphics::Color, GameError, GameResult};
+use ggez_no_re::checker_spiral::CheckerSpiral;
 
 use crate::{
-    game_client::PLAYER_COLORS,
+    game_client::{GameExpansions, PLAYER_COLORS},
     pos::GridPos,
     tile::{
         tile_definitions::{
-            rivers_1::MONASTARY_POND, ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS,
-            CURVE_ROAD, FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY,
-            FOUR_WAY_CROSSROADS, OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE,
-            STRAIGHT_ROAD, THREE_QUARTER_CITY,
+            ADJACENT_EDGE_CITIES, BRIDGE_CITY, CORNER_CITY, CROSSROADS, CURVE_ROAD,
+            FORITIFED_THREE_QUARTER_CITY_ENTRANCE, FORTIFIED_CORNER_CITY, FOUR_WAY_CROSSROADS,
+            OPPOSING_EDGE_CITIES, ROAD_MONASTARY, STARTING_TILE, STRAIGHT_ROAD, THREE_QUARTER_CITY,
         },
         Tile,
     },
@@ -227,10 +227,16 @@ fn group_coallation() -> GameResult<Game> {
 }
 
 pub fn river_test() -> GameResult<Game> {
-    let mut this = Game::new_with_library(vec![MONASTARY_POND.clone()]);
+    let mut this = Game::new_with_library(vec![STARTING_TILE.clone()]);
     this.players.insert(Player::new(Color::BLUE));
 
-    this.place_tile(STARTING_TILE.clone(), GridPos(0, 0))?;
+    for (pos, tile) in CheckerSpiral::new().zip(
+        GameExpansions { rivers_1: true }
+            .rivers()
+            .unwrap_or_default(),
+    ) {
+        this.place_tile(tile, pos.into())?;
+    }
 
     Ok(this)
 }
