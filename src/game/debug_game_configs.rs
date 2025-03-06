@@ -1,7 +1,7 @@
 use super::{player::Player, Game};
 use clap::ValueEnum;
 use ggez::{graphics::Color, GameError, GameResult};
-use ggez_no_re::checker_spiral::CheckerSpiral;
+use ggez_no_re::checker_spiral::checker_spiral;
 
 use crate::{
     game_client::{GameExpansions, PLAYER_COLORS},
@@ -230,7 +230,7 @@ pub fn river_test() -> GameResult<Game> {
     let mut this = Game::new_with_library(vec![STARTING_TILE.clone()]);
     this.players.insert(Player::new(Color::BLUE));
 
-    for (pos, tile) in CheckerSpiral::new().zip(
+    for (pos, tile) in checker_spiral().zip(
         GameExpansions { rivers_1: true }
             .rivers()
             .unwrap_or_default(),

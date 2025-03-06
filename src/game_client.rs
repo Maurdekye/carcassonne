@@ -17,11 +17,13 @@ use crate::multiplayer::message::server::User;
 use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
-use crate::tile::tile_definitions::rivers_1::{MONASTARY_POND, RIVER_CORNER, RIVER_CROSSING};
+use crate::tile::tile_definitions::rivers_1::{
+    CITY_RIVER_CROSSING, CORNER_CITY_RIVER, CORNER_ROAD_CORNER_RIVER, CURVY_STRAIGHT_RIVER, MONASTARY_POND, RIVER_CORNER, RIVER_CROSSING, RIVER_MONASTARY_BRIDGE, STRAIGHT_RIVER, STRAIGHT_RIVER_DUELING_CITIES
+};
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::tile::{Orientation, SegmentType};
 use crate::{game_client, Shared};
-use ggez_no_re::checker_spiral::CheckerSpiral;
+use ggez_no_re::checker_spiral::checker_spiral;
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
 use ggez_no_re::ui_manager::{button::Button, Bounds, UIElement, UIElementState, UIManager};
@@ -241,7 +243,19 @@ impl GameExpansions {
     pub fn rivers(&self) -> Option<Vec<Tile>> {
         let mut rivers = Vec::new();
         if self.rivers_1 {
-            rivers.extend([MONASTARY_POND.clone(), RIVER_CROSSING.clone(), RIVER_CORNER.clone()]);
+            rivers.extend([
+                MONASTARY_POND.clone(),
+                RIVER_CROSSING.clone(),
+                RIVER_CORNER.clone(),
+                CORNER_CITY_RIVER.clone(),
+                RIVER_MONASTARY_BRIDGE.clone(),
+                CURVY_STRAIGHT_RIVER.clone(),
+                CORNER_ROAD_CORNER_RIVER.clone(),
+                STRAIGHT_RIVER.clone(),
+                RIVER_CORNER.clone().rotated(),
+                STRAIGHT_RIVER_DUELING_CITIES.clone(),
+                CITY_RIVER_CROSSING.clone()
+            ]);
         }
         (!rivers.is_empty()).then_some(rivers)
     }
@@ -304,7 +318,7 @@ impl GameClient {
             }
         };
         let turn_phase = if let Some(river_tiles) = config.expansions.rivers() {
-            let tiles: HashMap<GridPos, Tile> = CheckerSpiral::new()
+            let tiles: HashMap<GridPos, Tile> = checker_spiral()
                 .map(GridPos::from)
                 .zip(river_tiles)
                 .collect();

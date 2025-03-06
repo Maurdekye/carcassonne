@@ -164,28 +164,28 @@ pub mod rivers_1 {
                 Segment {
                     stype: Farm,
                     edges: empty()
-                        .chain([Edge((End, South)), Edge((Beginning, West))])
+                        .chain([(End, South), (Beginning, West)].map(Edge))
                         .chain((0..=5).chain(40..=41).rev().map(Vert))
                         .collect()
                 },
                 Segment {
                     stype: Farm,
                     edges: empty()
-                        .chain([Edge((End, West)), Edge((Beginning, North))])
+                        .chain([(End, West), (Beginning, North)].map(Edge))
                         .chain((25..=28).chain(6..=11).rev().map(Vert))
                         .collect()
                 },
                 Segment {
                     stype: Farm,
                     edges: empty()
-                        .chain([Edge((End, North)), Edge((Beginning, East))])
+                        .chain([(End, North), (Beginning, East)].map(Edge))
                         .chain((13..=17).chain(30..=33).rev().map(Vert))
                         .collect()
                 },
                 Segment {
                     stype: Farm,
                     edges: empty()
-                        .chain([Edge((End, East)), Edge((Beginning, South))])
+                        .chain([(End, East), (Beginning, South)].map(Edge))
                         .chain((34..=38).chain(18..=24).rev().map(Vert))
                         .collect()
                 }
@@ -223,7 +223,7 @@ pub mod rivers_1 {
                 Segment {
                     stype: Farm,
                     edges: empty()
-                        .chain([Edge((End, South)), Edge((Beginning, West))])
+                        .chain([(End, South), (Beginning, West)].map(Edge))
                         .chain((0..=5).rev().map(Vert))
                         .collect()
                 },
@@ -245,6 +245,440 @@ pub mod rivers_1 {
                 TileAttribute::MiddleSegmentWidth(South, 0.2),
             ]
         );
+        pub static ref CORNER_CITY_RIVER: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.90, 0.60),
+                vec2(0.75, 0.70),
+                vec2(0.60, 0.90),
+                vec2(0.40, 0.91),
+                vec2(0.50, 0.70),
+                vec2(0.75, 0.45),
+                vec2(0.90, 0.40),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, East))])
+                        .chain((0..=2).map(Vert))
+                        .chain([Edge((Middle, South))])
+                        .chain((3..=6).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: City,
+                    edges: vec![Edge((Full, West)), Edge((Full, North))]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, South), (Beginning, East)].map(Edge))
+                        .chain((3..=6).rev().map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, East), (Beginning, South)].map(Edge))
+                        .chain((0..=2).rev().map(Vert))
+                        .collect()
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(East, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2),
+            ]
+        );
+        pub static ref RIVER_MONASTARY_BRIDGE: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.60, 0.09),
+                vec2(0.72, 0.11),
+                vec2(0.82, 0.23),
+                vec2(0.83, 0.42),
+                vec2(0.69, 0.79),
+                vec2(0.60, 0.92),
+                vec2(0.40, 0.89),
+                vec2(0.51, 0.81),
+                vec2(0.64, 0.57),
+                vec2(0.69, 0.35),
+                vec2(0.65, 0.25),
+                vec2(0.53, 0.22),
+                vec2(0.40, 0.10),
+                vec2(0.91, 0.55),
+                vec2(0.85, 0.65),
+                vec2(0.77, 0.63),
+                vec2(0.66, 0.41),
+                vec2(0.60, 0.37),
+                vec2(0.53, 0.38),
+                vec2(0.53, 0.32),
+                vec2(0.59, 0.31),
+                vec2(0.79, 0.57),
+                vec2(0.82, 0.57),
+                vec2(0.90, 0.45),
+                vec2(0.53, 0.30),
+                vec2(0.53, 0.60),
+                vec2(0.20, 0.60),
+                vec2(0.05, 0.45),
+                vec2(0.20, 0.30),
+                vec2(0.67, 0.43),
+                vec2(0.76, 0.61),
+                vec2(0.78, 0.55),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, North))])
+                        .chain((0..=5).map(Vert))
+                        .chain([Edge((Middle, South))])
+                        .chain((6..=8).chain([29]).chain(9..=12).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Road,
+                    edges: empty()
+                        .chain([Edge((Middle, East))])
+                        .chain((13..=20).chain([9]).chain(21..=23).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Monastary,
+                    edges: (24..=28).map(Vert).collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, South), (Full, West), (Beginning, North)].map(Edge))
+                        .chain(
+                            (6..=8)
+                                .chain([29])
+                                .chain(16..=18)
+                                .chain(25..=28)
+                                .chain([24])
+                                .chain(19..=20)
+                                .chain(9..=12)
+                                .rev()
+                                .map(Vert)
+                        )
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, East), (Beginning, South)].map(Edge))
+                        .chain([5, 4, 30, 15, 14, 13].map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, North), (Beginning, East)].map(Edge))
+                        .chain([23, 22, 21, 31, 3, 2, 1, 0].map(Vert))
+                        .collect()
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2),
+            ]
+        );
+        pub static ref CURVY_STRAIGHT_RIVER: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.40, 0.93),
+                vec2(0.51, 0.82),
+                vec2(0.65, 0.82),
+                vec2(0.70, 0.79),
+                vec2(0.70, 0.75),
+                vec2(0.65, 0.72),
+                vec2(0.45, 0.75),
+                vec2(0.30, 0.75),
+                vec2(0.16, 0.61),
+                vec2(0.16, 0.50),
+                vec2(0.25, 0.39),
+                vec2(0.35, 0.35),
+                vec2(0.40, 0.30),
+                vec2(0.60, 0.34),
+                vec2(0.47, 0.47),
+                vec2(0.35, 0.47),
+                vec2(0.28, 0.53),
+                vec2(0.28, 0.58),
+                vec2(0.35, 0.61),
+                vec2(0.50, 0.55),
+                vec2(0.74, 0.55),
+                vec2(0.90, 0.68),
+                vec2(0.90, 0.75),
+                vec2(0.85, 0.85),
+                vec2(0.60, 0.95),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, South))])
+                        .chain((0..=12).map(Vert))
+                        .chain([Edge((Middle, North))])
+                        .chain((13..=24).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, South), (Full, West), (Beginning, North)].map(Edge))
+                        .chain((0..=12).rev().map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, North), (Full, East), (Beginning, South)].map(Edge))
+                        .chain((13..=24).rev().map(Vert))
+                        .collect()
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2),
+            ]
+        );
+        pub static ref CORNER_ROAD_CORNER_RIVER: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.60, 0.20),
+                vec2(0.80, 0.40),
+                vec2(0.70, 0.60),
+                vec2(0.40, 0.35),
+                vec2(0.25, 0.45),
+                vec2(0.55, 0.80),
+                vec2(0.45, 0.83),
+                vec2(0.20, 0.55),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: vec![
+                        Edge((Middle, North)),
+                        Vert(0),
+                        Vert(1),
+                        Edge((Middle, East)),
+                        Vert(2),
+                        Vert(3),
+                    ]
+                },
+                Segment {
+                    stype: Road,
+                    edges: vec![
+                        Edge((Middle, West)),
+                        Vert(4),
+                        Vert(5),
+                        Edge((Middle, South)),
+                        Vert(6),
+                        Vert(7)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, South)),
+                        Edge((Beginning, West)),
+                        Vert(7),
+                        Vert(6)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, West)),
+                        Edge((Beginning, North)),
+                        Vert(3),
+                        Vert(2),
+                        Edge((End, East)),
+                        Edge((Beginning, South)),
+                        Vert(5),
+                        Vert(4)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, North)),
+                        Edge((Beginning, East)),
+                        Vert(1),
+                        Vert(0)
+                    ]
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(East, 0.2),
+            ],
+        );
+        pub static ref STRAIGHT_RIVER: Tile = Tile::new_with_attributes(
+            vec![],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: vec![Edge((Middle, West)), Edge((Middle, East))]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, West)),
+                        Edge((Full, North)),
+                        Edge((Beginning, East))
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, East)),
+                        Edge((Full, South)),
+                        Edge((Beginning, West))
+                    ]
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(East, 0.2),
+                TileAttribute::MiddleSegmentWidth(West, 0.2),
+            ]
+        );
+        pub static ref STRAIGHT_RIVER_DUELING_CITIES: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.25, 0.25),
+                vec2(0.25, 0.75),
+                vec2(0.75, 0.75),
+                vec2(0.75, 0.25),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: vec![Edge((Middle, South)), Edge((Middle, North))]
+                },
+                Segment {
+                    stype: City,
+                    edges: vec![Edge((Full, West)), Vert(0), Vert(1)]
+                },
+                Segment {
+                    stype: City,
+                    edges: vec![Edge((Full, East)), Vert(2), Vert(3)]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((Beginning, North)),
+                        Edge((End, South)),
+                        Vert(1),
+                        Vert(0)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((Beginning, South)),
+                        Edge((End, North)),
+                        Vert(3),
+                        Vert(2)
+                    ]
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2),
+            ]
+        );
+        pub static ref CITY_RIVER_CROSSING: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.60, 0.40),
+                vec2(0.40, 0.70),
+                vec2(0.40, 0.75),
+                vec2(0.60, 0.90),
+                vec2(0.40, 0.95),
+                vec2(0.20, 0.75),
+                vec2(0.20, 0.60),
+                vec2(0.40, 0.30),
+                vec2(0.09, 0.45),
+                vec2(0.15, 0.30),
+                vec2(0.35, 0.30),
+                vec2(0.54, 0.49),
+                vec2(0.54, 0.65),
+                vec2(0.57, 0.65),
+                vec2(0.65, 0.45),
+                vec2(0.75, 0.45),
+                vec2(0.75, 0.55),
+                vec2(0.70, 0.55),
+                vec2(0.60, 0.75),
+                vec2(0.50, 0.75),
+                vec2(0.44, 0.68),
+                vec2(0.44, 0.49),
+                vec2(0.30, 0.35),
+                vec2(0.20, 0.35),
+                vec2(0.10, 0.55),
+                vec2(0.75, 0.75),
+                vec2(0.75, 0.25),
+                vec2(0.34, 0.39),
+                vec2(0.38, 0.33),
+                vec2(0.54, 0.49),
+                vec2(0.44, 0.64),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, North))])
+                        .chain((0..=3).map(Vert))
+                        .chain([Edge((Middle, South))])
+                        .chain((4..=7).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Road,
+                    edges: empty()
+                        .chain([Edge((Middle, West))])
+                        .chain((8..=24).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: City,
+                    edges: vec![Edge((Full, East)), Vert(25), Vert(26)]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, South), (Beginning, West)].map(Edge))
+                        .chain([24, 23, 22, 27, 6, 5, 4].map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, West), (Beginning, North)].map(Edge))
+                        .chain([7, 28, 10, 9, 8].map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([Edge((End, North))])
+                        .chain([26, 15, 14, 13, 12, 29, 0].map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([Edge((Beginning, South))])
+                        .chain(
+                            [3, 2, 1, 30]
+                                .into_iter()
+                                .chain((16..=20).rev())
+                                .chain([25])
+                                .map(Vert)
+                        )
+                        .collect()
+                }
+            ],
+            vec![
+                TileAttribute::MiddleSegmentWidth(North, 0.2),
+                TileAttribute::MiddleSegmentWidth(South, 0.2)
+            ]
+        );
     }
 }
 
@@ -258,7 +692,7 @@ lazy_static! {
             },
             Segment {
                 stype: Road,
-                edges: vec![Edge((Middle, West)), Edge((Middle, East)),]
+                edges: vec![Edge((Middle, West)), Edge((Middle, East))]
             },
             SpecialSegment {
                 stype: Farm,
