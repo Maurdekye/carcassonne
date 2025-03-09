@@ -57,11 +57,11 @@ impl TryFrom<Message> for ServerMessage {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum GameMessage {
     BeginGame,
-    PlaceTile {
-        selected_square: GridPos,
-        rotation: usize,
-    },
-    PreviewTile(Option<TilePreview>),
+    PlaceTile(TilePose),
+    PreviewTile(Option<TilePose>),
+    PregamePreview(Option<TilePose>),
+    PregamePlace(TilePose),
+    PregamePickUp(GridPos),
     PlaceMeeple {
         seg_ident: SegmentIdentifier,
     },
@@ -71,7 +71,7 @@ pub enum GameMessage {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct TilePreview {
-    pub selected_square: GridPos,
+pub struct TilePose {
+    pub position: GridPos,
     pub rotation: usize,
 }

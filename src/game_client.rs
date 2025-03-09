@@ -14,7 +14,7 @@ use crate::game::{
 };
 use crate::main_client::MainEvent;
 use crate::multiplayer::message::server::User;
-use crate::multiplayer::message::{GameMessage, TilePreview};
+use crate::multiplayer::message::{GameMessage, TilePose};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
 use crate::tile::tile_definitions::rivers_1::{
@@ -121,6 +121,7 @@ enum TurnPhase {
     Pregame {
         tiles: HashMap<GridPos, Tile>,
         held: Option<Tile>,
+        preview_location: Option<GridPos>,
         open_edges: Vec<(GridPos, Orientation)>,
     },
     TilePlacement {
@@ -301,23 +302,33 @@ impl GameClient {
         let mut library = Tile::default_library();
         let mut rng = StdRng::seed_from_u64(config.seed);
         library.shuffle(&mut rng);
-        let mut game = match config.players {
+        let (mut game, turn_order) = match config.players {
             PlayerConfiguration::Local(colors) => {
                 let mut game = Game::new_with_library(library);
                 for color in colors {
                     game.players.insert(Player::new(color));
                 }
-                game
+                let turn_order = game.players.keys().collect();
+                (game, turn_order)
             }
             PlayerConfiguration::Multiplayer {
                 local_player,
                 players,
             } => {
                 let mut game = Game::new_inner(library, local_player);
+                let mut host_id = None;
                 for (color, ptype) in players {
-                    game.players.insert(Player::new_inner(color, ptype));
+                    if matches!(ptype, PlayerType::MultiplayerHost { .. }) {
+                        host_id = Some(game.players.insert(Player::new_inner(color, ptype)));
+                    } else {
+                        game.players.insert(Player::new_inner(color, ptype));
+                    }
                 }
-                game
+                let mut turn_order: VecDeque<_> = game.players.keys().collect();
+                while turn_order.front() != host_id.as_ref() {
+                    turn_order.rotate_right(turn_order.len() - 1);
+                }
+                (game, turn_order)
             }
         };
         let turn_phase = if let Some(mut river_tiles) = config.expansions.rivers() {
@@ -330,6 +341,7 @@ impl GameClient {
             TurnPhase::Pregame {
                 tiles,
                 held: None,
+                preview_location: None,
                 open_edges,
             }
         } else {
@@ -347,7 +359,7 @@ impl GameClient {
             shared,
             GameState {
                 turn_phase,
-                turn_order: game.players.keys().collect(),
+                turn_order,
                 game,
             },
             parent_channel,
@@ -808,6 +820,7 @@ impl GameClient {
             tiles,
             held,
             open_edges,
+            ..
         } = &mut self.state.turn_phase
         {
             if open_edges.is_empty() && held.is_none() {
@@ -869,13 +882,10 @@ impl GameClient {
     pub fn handle_message(&mut self, ctx: &mut Context, message: GameMessage) -> GameResult<()> {
         trace!("received {message:?}");
         match message {
-            GameMessage::PlaceTile {
-                selected_square,
-                rotation,
-            } => {
+            GameMessage::PlaceTile(TilePose { position, rotation }) => {
                 if let TurnPhase::TilePlacement { tile, .. } = &mut self.state.turn_phase {
                     tile.rotate_to(rotation);
-                    self.place_tile(ctx, selected_square)?;
+                    self.place_tile(ctx, position)?;
                 }
             }
             GameMessage::PlaceMeeple { seg_ident } => {
@@ -899,13 +909,40 @@ impl GameClient {
                     ..
                 } = &mut self.state.turn_phase
                 {
-                    if let Some(TilePreview {
-                        selected_square,
+                    if let Some(TilePose {
+                        position: selected_square,
                         rotation,
                     }) = tile_preview
                     {
                         *preview_location = Some(selected_square);
                         tile.rotate_to(rotation);
+                    } else {
+                        *preview_location = None;
+                    }
+                }
+            }
+            GameMessage::PregamePickUp(pos) => {
+                self.pregame_pickup_tile(pos);
+            }
+            GameMessage::PregamePlace(TilePose { position, rotation }) => {
+                self.pregame_place_tile(position, rotation);
+            }
+            GameMessage::PregamePreview(tile_preview) => {
+                if let TurnPhase::Pregame {
+                    held,
+                    preview_location,
+                    ..
+                } = &mut self.state.turn_phase
+                {
+                    if let Some(TilePose {
+                        position: selected_square,
+                        rotation,
+                    }) = tile_preview
+                    {
+                        *preview_location = Some(selected_square);
+                        if let Some(held) = held {
+                            held.rotate_to(rotation);
+                        }
                     } else {
                         *preview_location = None;
                     }
@@ -1043,17 +1080,30 @@ impl GameClient {
     }
 
     fn update_preview(&mut self) {
-        if let TurnPhase::TilePlacement {
-            tile: Tile { rotation, .. },
-            ..
-        } = self.state.turn_phase
-        {
-            self.broadcast_action(GameMessage::PreviewTile(self.selected_square.map(
-                |selected_square| TilePreview {
-                    selected_square,
-                    rotation,
-                },
-            )));
+        match self.state.turn_phase {
+            TurnPhase::TilePlacement {
+                tile: Tile { rotation, .. },
+                ..
+            } => {
+                self.broadcast_action(GameMessage::PreviewTile(self.selected_square.map(
+                    |selected_square| TilePose {
+                        position: selected_square,
+                        rotation,
+                    },
+                )));
+            }
+            TurnPhase::Pregame {
+                held: Some(Tile { rotation, .. }),
+                ..
+            } => {
+                self.broadcast_action(GameMessage::PregamePreview(self.selected_square.map(
+                    |selected_square| TilePose {
+                        position: selected_square,
+                        rotation,
+                    },
+                )));
+            }
+            _ => {}
         }
     }
 
@@ -1197,6 +1247,8 @@ impl GameClient {
                 tiles,
                 held,
                 open_edges,
+                preview_location,
+                ..
             } => {
                 for (pos, tile) in tiles {
                     tile.render(ctx, canvas, self.grid_pos_rect(pos, ctx))?;
@@ -1214,7 +1266,9 @@ impl GameClient {
                     };
                     Mesh::new_line(ctx, &[start, end], 2.0, Color::BLUE)?.draw(canvas);
                 }
-                if let (Some(tile), Some(pos)) = (held, self.selected_square) {
+                if let (Some(tile), (Some(pos), _) | (_, Some(pos))) =
+                    (held, (self.selected_square, *preview_location))
+                {
                     let cursor_color = if tiles.contains_key(&pos) {
                         Color::RED
                     } else {
@@ -1226,8 +1280,10 @@ impl GameClient {
                         .draw(canvas);
                 }
             }
-            TurnPhase::TilePlacement { .. } => {
-                if let Some(pos) = self.selected_square {
+            TurnPhase::TilePlacement {
+                preview_location, ..
+            } => {
+                if let (Some(pos), _) | (_, Some(pos)) = (self.selected_square, *preview_location) {
                     self.draw_held_tile_at_pos(ctx, canvas, pos)?;
                 }
             }
@@ -1423,8 +1479,13 @@ impl GameClient {
         Ok(())
     }
 
-    fn keyboard_movement_update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        // sliding
+    fn board_movement_update(&mut self, ctx: &mut Context) -> GameResult<()> {
+        // dragging
+        if self.keybinds.drag_camera.pressed(ctx) {
+            self.offset -= Vec2::from(ctx.mouse.delta());
+        }
+
+        // keyboard sliding
         let mut movement_vector: Vec2 = [
             (&self.keybinds.move_up, vec2(0.0, -1.0)),
             (&self.keybinds.move_up_alternate, vec2(0.0, -1.0)),
@@ -1474,6 +1535,37 @@ impl GameClient {
         }
     }
 
+    fn pregame_place_tile(&mut self, pos: GridPos, rotation: usize) {
+        if let TurnPhase::Pregame {
+            tiles,
+            held,
+            open_edges,
+            ..
+        } = &mut self.state.turn_phase
+        {
+            if let Some(mut tile) = held.take() {
+                tile.rotate_to(rotation);
+                tiles.insert(pos, tile);
+                *open_edges = recalculate_open_edges(tiles);
+            }
+        }
+    }
+
+    fn pregame_pickup_tile(&mut self, pos: GridPos) {
+        if let TurnPhase::Pregame {
+            tiles,
+            held: held @ None,
+            open_edges,
+            ..
+        } = &mut self.state.turn_phase
+        {
+            if let Some(tile) = tiles.remove(&pos) {
+                *held = Some(tile);
+                *open_edges = recalculate_open_edges(tiles);
+            }
+        }
+    }
+
     fn turn_phase_update(&mut self, ctx: &mut Context, on_clickable: &mut bool) -> GameResult<()> {
         let can_play = self.can_play();
         let GridSelectionInfo {
@@ -1491,39 +1583,47 @@ impl GameClient {
 
                 self.set_selected_square(Some(focused_pos));
 
-                let TurnPhase::Pregame {
-                    tiles,
-                    held,
-                    open_edges,
-                } = &mut self.state.turn_phase
-                else {
+                let TurnPhase::Pregame { tiles, held, .. } = &mut self.state.turn_phase else {
                     panic!();
                 };
 
+                let mut preview_update = false;
                 if let Some(pos) = self.selected_square {
                     if let Some(tile) = held.as_mut() {
                         if self.keybinds.rotate_clockwise.just_pressed(ctx) {
                             tile.rotate_clockwise();
+                            preview_update = true;
                         }
 
                         if self.keybinds.rotate_counterclockwise.just_pressed(ctx) {
                             tile.rotate_counterclockwise();
+                            preview_update = true;
                         }
 
                         if self.keybinds.place_tile.just_pressed(ctx) {
                             if !tiles.contains_key(&pos) {
-                                tiles.insert(pos, held.take().unwrap());
-                                *open_edges = recalculate_open_edges(tiles);
+                                let rotation = tile.rotation;
+                                let pose = TilePose {
+                                    position: pos,
+                                    rotation,
+                                };
+                                self.pregame_place_tile(pos, rotation);
+                                self.broadcast_action(GameMessage::PregamePlace(pose));
+                                preview_update = true;
                             }
                         }
                     } else {
                         if self.keybinds.place_tile.just_pressed(ctx) {
-                            if let Some(tile) = tiles.remove(&pos) {
-                                *held = Some(tile);
-                                *open_edges = recalculate_open_edges(tiles);
+                            if tiles.contains_key(&pos) {
+                                self.pregame_pickup_tile(pos);
+                                self.broadcast_action(GameMessage::PregamePickUp(pos));
+                                preview_update = true;
                             }
                         }
                     }
+                }
+                if preview_update {
+                    self.update_preview();
                 }
             }
             TurnPhase::TilePlacement {
@@ -1567,10 +1667,10 @@ impl GameClient {
                     if let Some(selected_square) = self.selected_square {
                         let rotation = self.get_held_tile_mut().unwrap().rotation;
                         self.place_tile(ctx, selected_square)?;
-                        self.broadcast_action(GameMessage::PlaceTile {
-                            selected_square,
+                        self.broadcast_action(GameMessage::PlaceTile(TilePose {
+                            position: selected_square,
                             rotation,
-                        });
+                        }));
                     }
                 }
 
@@ -1743,6 +1843,23 @@ impl GameClient {
 
         Ok(())
     }
+
+    fn button_state_update(&mut self) {
+        self.skip_meeples_button.borrow_mut().state = UIElementState::invisible_if(
+            !matches!(self.state.turn_phase, TurnPhase::MeeplePlacement { .. }) || !self.can_play(),
+        );
+        self.return_to_main_menu_button.borrow_mut().state =
+            UIElementState::invisible_if(!matches!(
+                self.state.turn_phase,
+                TurnPhase::EndGame { next_tick: None }
+            ));
+        self.begin_game_button.borrow_mut().state = match &self.state.turn_phase {
+            TurnPhase::Pregame {
+                open_edges, held, ..
+            } if self.can_play() => UIElementState::disabled_if(!(open_edges.is_empty() && held.is_none())),
+            _ => UIElementState::Invisible,
+        };
+    }
 }
 
 impl SubEventHandler for GameClient {
@@ -1762,28 +1879,9 @@ impl SubEventHandler for GameClient {
             return Ok(());
         }
 
-        // update button states
-        self.skip_meeples_button.borrow_mut().state = UIElementState::invisible_if(
-            !matches!(self.state.turn_phase, TurnPhase::MeeplePlacement { .. }) || !self.can_play(),
-        );
-        self.return_to_main_menu_button.borrow_mut().state =
-            UIElementState::invisible_if(!matches!(
-                self.state.turn_phase,
-                TurnPhase::EndGame { next_tick: None }
-            ));
-        self.begin_game_button.borrow_mut().state = match &self.state.turn_phase {
-            TurnPhase::Pregame {
-                open_edges, held, ..
-            } => UIElementState::disabled_if(!(open_edges.is_empty() && held.is_none())),
-            _ => UIElementState::Invisible,
-        };
+        self.button_state_update();
 
-        // dragging
-        if self.keybinds.drag_camera.pressed(ctx) {
-            self.offset -= Vec2::from(ctx.mouse.delta());
-        }
-
-        self.keyboard_movement_update(ctx)?;
+        self.board_movement_update(ctx)?;
 
         self.pause_menu_activation_update(ctx);
 
@@ -1818,15 +1916,6 @@ impl SubEventHandler for GameClient {
 
         if self.inspecting_groups.is_none() {
             self.draw_turn_phase(ctx, canvas)?;
-        }
-
-        // draw tile preview
-        if let TurnPhase::TilePlacement {
-            preview_location: Some(pos),
-            ..
-        } = self.state.turn_phase
-        {
-            self.draw_held_tile_at_pos(ctx, canvas, pos)?;
         }
 
         self.draw_group_inspection_ui(ctx, canvas)?;
