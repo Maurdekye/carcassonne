@@ -1,5 +1,3 @@
-use std::net::IpAddr;
-
 use ggez::winit::{event::MouseButton, keyboard::NamedKey};
 use ggez_no_re::{
     discord::DiscordPresence, keybinds, persist::PersistenceManager, util::ResultExt,
@@ -56,8 +54,8 @@ keybinds! {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SaveData {
-    pub ip: Option<IpAddr>,
-    pub port: u16,
+    pub destination_address: Option<String>,
+    pub host_port: u16,
     pub username: String,
     pub keybinds: Keybinds,
 }
@@ -65,8 +63,8 @@ pub struct SaveData {
 impl Default for SaveData {
     fn default() -> Self {
         Self {
-            ip: None,
-            port: 11069,
+            destination_address: None,
+            host_port: 11069,
             username: String::new(),
             keybinds: Keybinds::default(),
         }

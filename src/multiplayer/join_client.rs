@@ -31,7 +31,7 @@ use crate::{
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
     transport::{ClientNetworkEvent, ClientsideTransport, MessageClient, NetworkEvent},
-    ui_manager::{Bounds, button::Button, UIElement, UIElementState, UIManager},
+    ui_manager::{button::Button, Bounds, UIElement, UIElementState, UIManager},
 };
 
 use super::message::Message;
@@ -78,10 +78,11 @@ pub struct JoinClient {
     last_ping: Instant,
     latency: Option<Duration>,
     phase: Option<MultiplayerPhase<JoinEvent>>,
-    socket: SocketAddr,
+    _socket: SocketAddr,
     back_button: Rc<RefCell<Button<UIEvent>>>,
     users: Option<Vec<User>>,
     username: String,
+    destination_name: String,
 }
 
 impl JoinClient {
@@ -90,6 +91,7 @@ impl JoinClient {
         shared: Shared,
         username: String,
         socket: SocketAddr,
+        destination_name: String,
     ) -> Self {
         let (event_sender, event_receiver) = channel();
         let (ui, [UIElement::Button(back_button)]) = UIManager::new_and_rc_elements(
@@ -114,10 +116,11 @@ impl JoinClient {
             last_ping: Instant::now(),
             latency: None,
             phase: None,
-            socket,
+            _socket: socket,
             back_button,
             users: None,
             username,
+            destination_name,
         }
     }
 
@@ -188,7 +191,10 @@ impl JoinClient {
                                 _ => {}
                             }
                         }
-                        ServerMessage::StartGame { game_seed, expansions } => {
+                        ServerMessage::StartGame {
+                            game_seed,
+                            expansions,
+                        } => {
                             if let Some(users) = &self.users {
                                 self.start_game(ctx, users.clone(), game_seed, expansions);
                             }
@@ -301,7 +307,7 @@ impl SubEventHandler for JoinClient {
     fn draw(&mut self, ctx: &mut Context, canvas: &mut Canvas) -> Result<(), GameError> {
         match &mut self.phase {
             None => {
-                Text::new(format!("Connecting to {}...", self.socket))
+                Text::new(format!("Connecting to {}...", self.destination_name))
                     .size(36.0)
                     .anchored_by(
                         ctx,
@@ -312,7 +318,7 @@ impl SubEventHandler for JoinClient {
                     .draw(canvas);
             }
             Some(MultiplayerPhase::Lobby(lobby)) => {
-                Text::new("Connected")
+                Text::new(format!("Connected to {}", self.destination_name))
                     .size(36.0)
                     .anchored_by(
                         ctx,

@@ -1,6 +1,6 @@
 use std::{
     cell::RefCell,
-    net::{IpAddr, SocketAddr},
+    net::{SocketAddr, ToSocketAddrs},
     rc::Rc,
     sync::mpsc::{channel, Receiver, Sender},
     time::{Duration, Instant},
@@ -20,7 +20,9 @@ use crate::{
 };
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, button::Button, text_input::TextInput, UIElement, UIManager},
+    ui_manager::{
+        button::Button, text_input::TextInput, Bounds, UIElement, UIElementRenderable, UIManager,
+    },
 };
 
 const ERROR_DISPLAY_PERIOD: Duration = Duration::from_secs(10);
@@ -39,7 +41,7 @@ pub struct MultiplayerMenuClient {
     event_receiver: Receiver<MultiplayerMenuEvent>,
     ui: UIManager<MultiplayerMenuEvent, MultiplayerMenuEvent>,
     username_input: Rc<RefCell<TextInput>>,
-    ip_input: Rc<RefCell<TextInput>>,
+    destination_input: Rc<RefCell<TextInput>>,
     port_input: Rc<RefCell<TextInput>>,
     join_button: Rc<RefCell<Button<MultiplayerMenuEvent>>>,
     host_button: Rc<RefCell<Button<MultiplayerMenuEvent>>>,
@@ -47,29 +49,27 @@ pub struct MultiplayerMenuClient {
 }
 
 impl MultiplayerMenuClient {
-    pub fn new(
-        parent_channel: Sender<MainEvent>,
-        shared: Shared,
-    ) -> MultiplayerMenuClient {
+    pub fn new(parent_channel: Sender<MainEvent>, shared: Shared) -> MultiplayerMenuClient {
+        let relative = Rect::new(0.5, 0.5, 0.0, 0.0);
         let (event_sender, event_receiver) = channel();
         let (
             ui,
-            [UIElement::TextInput(username_input), UIElement::TextInput(ip_input), UIElement::TextInput(port_input), _, UIElement::Button(join_button), UIElement::Button(host_button)],
+            [UIElement::TextInput(username_input), UIElement::TextInput(destination_input), UIElement::TextInput(port_input), _, UIElement::Button(join_button), UIElement::Button(host_button)],
         ) = UIManager::new_and_rc_elements(
             event_sender.clone(),
             [
                 UIElement::TextInput(TextInput::new(Bounds {
-                    relative: Rect::new(0.5, 0.5, 0.0, 0.0),
-                    absolute: Rect::new(10.0, -52.0, 240.0, 24.0),
+                    relative,
+                    absolute: Rect::new(-300.0, -122.0, 240.0, 24.0),
                 })),
                 UIElement::TextInput(TextInput::new(Bounds {
-                    relative: Rect::new(0.5, 0.5, 0.0, 0.0),
-                    absolute: Rect::new(10.0, -12.0, 240.0, 24.0),
+                    relative,
+                    absolute: Rect::new(-300.0, -12.0, 240.0, 24.0),
                 })),
                 UIElement::TextInput(TextInput::new_masked(
                     Bounds {
-                        relative: Rect::new(0.5, 0.5, 0.0, 0.0),
-                        absolute: Rect::new(10.0, 32.0, 80.0, 24.0),
+                        relative,
+                        absolute: Rect::new(160.0, -12.0, 80.0, 24.0),
                     },
                     char::is_numeric,
                 )),
@@ -80,18 +80,18 @@ impl MultiplayerMenuClient {
                 )),
                 UIElement::Button(Button::new(
                     Bounds {
-                        relative: Rect::new(0.5, 0.5, 0.0, 0.0),
-                        absolute: Rect::new(-200.0, 80.0, 400.0, 45.0),
+                        relative,
+                        absolute: Rect::new(-300.0, 16.0, 240.0, 45.0),
                     },
-                    Text::new("Join lobby at"),
+                    Text::new("Join"),
                     MultiplayerMenuEvent::JoinLobby,
                 )),
                 UIElement::Button(Button::new(
                     Bounds {
-                        relative: Rect::new(0.5, 0.5, 0.0, 0.0),
-                        absolute: Rect::new(-200.0, 155.0, 400.0, 45.0),
+                        relative,
+                        absolute: Rect::new(60.0, 16.0, 240.0, 45.0),
                     },
-                    Text::new("Host lobby on port "),
+                    Text::new("Host"),
                     MultiplayerMenuEvent::HostLobby,
                 )),
             ],
@@ -102,15 +102,16 @@ impl MultiplayerMenuClient {
         {
             let mut username_input = username_input.borrow_mut();
             username_input.text = shared.persistent.borrow().username.clone();
-            let mut ip_input = ip_input.borrow_mut();
+            let mut ip_input = destination_input.borrow_mut();
             ip_input.text = shared
                 .persistent
                 .borrow()
-                .ip
-                .map_or(String::new(), |ip| ip.to_string());
+                .destination_address
+                .clone()
+                .unwrap_or_default();
             let mut port_input = port_input.borrow_mut();
             port_input.maxlen = Some(5);
-            port_input.text = shared.persistent.borrow().port.to_string();
+            port_input.text = shared.persistent.borrow().host_port.to_string();
         }
 
         MultiplayerMenuClient {
@@ -120,7 +121,7 @@ impl MultiplayerMenuClient {
             event_receiver,
             ui,
             username_input,
-            ip_input,
+            destination_input,
             port_input,
             join_button,
             host_button,
@@ -144,12 +145,14 @@ impl MultiplayerMenuClient {
             .map_err(|e| format!("Invalid port: {e}"))
     }
 
-    fn parse_ip(&self) -> Result<IpAddr, String> {
-        self.ip_input
-            .borrow()
-            .text
-            .parse()
-            .map_err(|e| format!("Invalid IP address: {e}"))
+    fn parse_destination(&self) -> Result<(SocketAddr, String), String> {
+        let text = &self.destination_input.borrow().text;
+        Ok((
+            text.to_socket_addrs()
+                .map_err(|e| format!("Invalid destination address: {e}"))
+                .map(|x| x.into_iter().next().ok_or("Invalid destination address"))??,
+            text.clone(),
+        ))
     }
 
     fn handle_event(&mut self, _ctx: &mut Context, event: MultiplayerMenuEvent) -> GameResult<()> {
@@ -161,15 +164,15 @@ impl MultiplayerMenuClient {
             MultiplayerMenuEvent::JoinLobby => {
                 let result = try {
                     let username = self.parse_username()?;
-                    let ip = self.parse_ip()?;
-                    let port = self.parse_port()?;
+                    let (destination, destination_name) = self.parse_destination()?;
                     let mut persistent = self.shared.persistent.borrow_mut();
                     persistent.username = username.clone();
-                    persistent.ip = Some(ip);
-                    persistent.port = port;
+                    persistent.destination_address = Some(destination_name.clone());
+                    let (ip, port) = (destination.ip(), destination.port());
                     self.parent_channel.send(MainEvent::MultiplayerJoin {
                         username,
                         socket: SocketAddr::new(ip, port),
+                        destination_name,
                     })
                 };
                 if let Err(errmsg) = result {
@@ -182,7 +185,7 @@ impl MultiplayerMenuClient {
                     let port = self.parse_port()?;
                     let mut persistent = self.shared.persistent.borrow_mut();
                     persistent.username = username.clone();
-                    persistent.port = port;
+                    persistent.host_port = port;
                     self.parent_channel
                         .send(MainEvent::MultiplayerHost { username, port })
                 };
@@ -208,17 +211,6 @@ impl SubEventHandler for MultiplayerMenuClient {
             }
         }
 
-        {
-            let ip_input = self.ip_input.borrow();
-            let port_input = self.port_input.borrow();
-            self.join_button.borrow_mut().text = Text::new(format!(
-                "Join lobby at {}:{}",
-                ip_input.text, port_input.text
-            ));
-            self.host_button.borrow_mut().text =
-                Text::new(format!("Host lobby on port {}", port_input.text));
-        }
-
         Ok(())
     }
 
@@ -235,58 +227,62 @@ impl SubEventHandler for MultiplayerMenuClient {
             .color(Color::BLACK)
             .draw(canvas);
 
-        Text::new("Username:")
+        self.username_input.borrow().render_label(
+            ctx,
+            canvas,
+            &Text::new("Username:"),
+            AnchorPoint::CenterWest,
+        )?;
+
+        Text::new("Join Lobby")
+            .size(24.0)
             .anchored_by(
                 ctx,
-                self.username_input
+                self.join_button
                     .borrow()
                     .bounds
                     .corrected_bounds(res)
-                    .parametric(vec2(0.0, 0.5))
-                    - vec2(6.0, 0.0),
-                AnchorPoint::CenterEast,
+                    .parametric(vec2(0.5, 0.0))
+                    - vec2(0.0, 40.0),
+                AnchorPoint::SouthCenter,
             )?
             .color(Color::BLACK)
             .draw(canvas);
 
-        Text::new("IP:")
+        self.destination_input.borrow().render_label(
+            ctx,
+            canvas,
+            &Text::new("Destination address:"),
+            AnchorPoint::CenterWest,
+        )?;
+
+        Text::new("Host Lobby")
+            .size(24.0)
             .anchored_by(
                 ctx,
-                self.ip_input
+                self.host_button
                     .borrow()
                     .bounds
                     .corrected_bounds(res)
-                    .parametric(vec2(0.0, 0.5))
-                    - vec2(6.0, 0.0),
-                AnchorPoint::CenterEast,
+                    .parametric(vec2(0.5, 0.0))
+                    - vec2(0.0, 40.0),
+                AnchorPoint::SouthCenter,
             )?
             .color(Color::BLACK)
             .draw(canvas);
 
-        Text::new("Port:")
-            .anchored_by(
-                ctx,
-                self.port_input
-                    .borrow()
-                    .bounds
-                    .corrected_bounds(res)
-                    .parametric(vec2(0.0, 0.5))
-                    - vec2(6.0, 0.0),
-                AnchorPoint::CenterEast,
-            )?
-            .color(Color::BLACK)
-            .draw(canvas);
+        self.port_input.borrow().render_label(
+            ctx,
+            canvas,
+            &Text::new("Port:"),
+            AnchorPoint::CenterWest,
+        )?;
 
         if let Some((err_msg, _)) = &self.error_message {
             Text::new(err_msg)
                 .anchored_by(
                     ctx,
-                    self.host_button
-                        .borrow()
-                        .bounds
-                        .corrected_bounds(res)
-                        .parametric(vec2(0.5, 1.0))
-                        + vec2(0.0, 20.0),
+                    ctx.res() * vec2(0.5, 0.5) + vec2(0.0, 80.0),
                     AnchorPoint::NorthCenter,
                 )?
                 .color(Color::from_rgb(96, 0, 0))

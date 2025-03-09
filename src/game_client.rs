@@ -28,13 +28,14 @@ use crate::{game_client, Shared};
 use ggez_no_re::checker_spiral::checker_spiral;
 use ggez_no_re::line::LineExt;
 use ggez_no_re::sub_event_handler::SubEventHandler;
+use ggez_no_re::ui_manager::set_cursor_icon;
 use ggez_no_re::ui_manager::{button::Button, Bounds, UIElement, UIElementState, UIManager};
 use ggez_no_re::util::{
     point_in_polygon, refit_to_rect, AnchorPoint, ContextExt, DrawableWihParamsExt, MinByF32Key,
     RectExt, ResultExt, ResultExtToGameError, SystemTimeExt, TextExt,
 };
 
-use ggez::input::mouse::{set_cursor_type, CursorIcon};
+use ggez::input::mouse::CursorIcon;
 use ggez::{
     glam::{vec2, Vec2, Vec2Swizzles},
     graphics::{Canvas, Color, DrawMode, DrawParam, Mesh, Rect, Text},
@@ -1856,7 +1857,9 @@ impl GameClient {
         self.begin_game_button.borrow_mut().state = match &self.state.turn_phase {
             TurnPhase::Pregame {
                 open_edges, held, ..
-            } if self.can_play() => UIElementState::disabled_if(!(open_edges.is_empty() && held.is_none())),
+            } if self.can_play() => {
+                UIElementState::disabled_if(!(open_edges.is_empty() && held.is_none()))
+            }
             _ => UIElementState::Invisible,
         };
     }
@@ -1899,7 +1902,7 @@ impl SubEventHandler for GameClient {
         }
 
         if on_clickable {
-            set_cursor_type(ctx, CursorIcon::Pointer);
+            set_cursor_icon(CursorIcon::Pointer);
         }
 
         Ok(())

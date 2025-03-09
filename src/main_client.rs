@@ -7,18 +7,21 @@ use std::{
 use ggez::{
     event::EventHandler,
     graphics::{Canvas, Color},
-    input::mouse::{set_cursor_type, CursorIcon},
     Context, GameError,
 };
 use log::{info, trace};
 
 use crate::{
-    game::debug_game_configs::DebugGameConfiguration, game_client::{GameClient, GameClientConfiguration}, main_menu_client::MainMenuClient, multiplayer::{
+    game::debug_game_configs::DebugGameConfiguration,
+    game_client::{GameClient, GameClientConfiguration},
+    main_menu_client::MainMenuClient,
+    multiplayer::{
         host_client::HostClient, join_client::JoinClient, multiplayer_menu::MultiplayerMenuClient,
-    }, Shared
+    },
+    Shared,
 };
 
-use ggez_no_re::sub_event_handler::SubEventHandler;
+use ggez_no_re::{sub_event_handler::SubEventHandler, ui_manager};
 
 #[derive(Clone, Debug)]
 pub enum MainEvent {
@@ -34,6 +37,7 @@ pub enum MainEvent {
     MultiplayerJoin {
         username: String,
         socket: SocketAddr,
+        destination_name: String,
     },
     Close,
 }
@@ -115,12 +119,17 @@ impl MainClient {
                     port,
                 ));
             }
-            MainEvent::MultiplayerJoin { username, socket } => {
+            MainEvent::MultiplayerJoin {
+                username,
+                socket,
+                destination_name,
+            } => {
                 self.scene = Box::new(JoinClient::new(
                     self.event_sender.clone(),
                     self.shared.clone(),
                     username,
                     socket,
+                    destination_name,
                 ));
             }
             MainEvent::MultiplayerMenu => {
@@ -140,11 +149,12 @@ impl EventHandler<Context> for MainClient {
     }
 
     fn update(&mut self, ctx: &mut Context) -> Result<(), GameError> {
-        set_cursor_type(ctx, CursorIcon::Default);
+        ui_manager::begin_context(ctx);
         self.scene.update(ctx)?;
         while let Ok(event) = self.event_receiver.try_recv() {
             self.handle_event(ctx, event)?;
         }
+        ui_manager::end_context(ctx);
         Ok(())
     }
 

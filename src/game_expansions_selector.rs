@@ -1,13 +1,12 @@
 use core::panic;
 use std::{cell::RefCell, rc::Rc, sync::mpsc::channel};
 
-use ggez::graphics::{Color, Rect, Text};
+use ggez::graphics::{Rect, Text};
 use ggez_no_re::{
     sub_event_handler::SubEventHandler,
-    ui_manager::{Bounds, checkbox::Checkbox, UIElement, UIManager},
-    util::{AnchorPoint, ContextExt, RectExt, TextExt},
+    ui_manager::{checkbox::Checkbox, Bounds, UIElement, UIElementRenderable, UIManager},
+    util::AnchorPoint,
 };
-use glam::vec2;
 
 use crate::game_client::GameExpansions;
 
@@ -56,19 +55,12 @@ impl SubEventHandler for GameExpansionsSelector {
     ) -> Result<(), ggez::GameError> {
         self.ui.draw(ctx, canvas)?;
 
-        Text::new("River Expansion 1")
-            .anchored_by(
-                ctx,
-                self.rivers_1_checkbox
-                    .borrow()
-                    .bounds
-                    .corrected_bounds(ctx.res())
-                    .parametric(vec2(1.0, 0.5))
-                    + vec2(6.0, 0.0),
-                AnchorPoint::CenterWest,
-            )?
-            .color(Color::BLACK)
-            .draw(canvas);
+        self.rivers_1_checkbox.borrow().render_label(
+            ctx,
+            canvas,
+            &Text::new(" River Expansion 1"),
+            AnchorPoint::CenterEast,
+        )?;
 
         Ok(())
     }
