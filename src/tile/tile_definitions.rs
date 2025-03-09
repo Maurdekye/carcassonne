@@ -679,6 +679,66 @@ pub mod rivers_1 {
                 TileAttribute::MiddleSegmentWidth(South, 0.2)
             ]
         );
+        pub static ref CORNER_ROAD_WATERFALL: Tile = Tile::new_with_attributes(
+            vec![
+                vec2(0.55, 0.22),
+                vec2(0.78, 0.45),
+                vec2(0.75, 0.55),
+                vec2(0.45, 0.25),
+                vec2(0.40, 0.80),
+                vec2(0.30, 0.70),
+                vec2(0.30, 0.60),
+                vec2(0.55, 0.35),
+                vec2(0.65, 0.45),
+                vec2(0.50, 0.60),
+                vec2(0.50, 0.65),
+                vec2(0.60, 0.75),
+            ],
+            vec![
+                Segment {
+                    stype: River,
+                    edges: empty()
+                        .chain([Edge((Middle, South))])
+                        .chain((4..=11).map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Road,
+                    edges: vec![
+                        Edge((Middle, North)),
+                        Vert(0),
+                        Vert(1),
+                        Edge((Middle, East)),
+                        Vert(2),
+                        Vert(3)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, South), (Full, West), (Beginning, North)].map(Edge))
+                        .chain((4..=7).chain([3]).rev().map(Vert))
+                        .collect()
+                },
+                Segment {
+                    stype: Farm,
+                    edges: vec![
+                        Edge((End, North)),
+                        Edge((Beginning, East)),
+                        Vert(1),
+                        Vert(0)
+                    ]
+                },
+                Segment {
+                    stype: Farm,
+                    edges: empty()
+                        .chain([(End, East), (Beginning, South)].map(Edge))
+                        .chain((8..=11).rev().chain([2]).map(Vert))
+                        .collect()
+                }
+            ],
+            vec![TileAttribute::MiddleSegmentWidth(South, 0.2)]
+        );
     }
 }
 

@@ -18,7 +18,9 @@ use crate::multiplayer::message::{GameMessage, TilePreview};
 use crate::pos::GridPos;
 use crate::shared::Keybinds;
 use crate::tile::tile_definitions::rivers_1::{
-    CITY_RIVER_CROSSING, CORNER_CITY_RIVER, CORNER_ROAD_CORNER_RIVER, CURVY_STRAIGHT_RIVER, MONASTARY_POND, RIVER_CORNER, RIVER_CROSSING, RIVER_MONASTARY_BRIDGE, STRAIGHT_RIVER, STRAIGHT_RIVER_DUELING_CITIES
+    CITY_RIVER_CROSSING, CORNER_CITY_RIVER, CORNER_ROAD_CORNER_RIVER, CORNER_ROAD_WATERFALL,
+    CURVY_STRAIGHT_RIVER, MONASTARY_POND, RIVER_CORNER, RIVER_CROSSING, RIVER_MONASTARY_BRIDGE,
+    STRAIGHT_RIVER, STRAIGHT_RIVER_DUELING_CITIES,
 };
 use crate::tile::{tile_definitions::STARTING_TILE, Tile};
 use crate::tile::{Orientation, SegmentType};
@@ -254,7 +256,8 @@ impl GameExpansions {
                 STRAIGHT_RIVER.clone(),
                 RIVER_CORNER.clone().rotated(),
                 STRAIGHT_RIVER_DUELING_CITIES.clone(),
-                CITY_RIVER_CROSSING.clone()
+                CITY_RIVER_CROSSING.clone(),
+                CORNER_ROAD_WATERFALL.clone(),
             ]);
         }
         (!rivers.is_empty()).then_some(rivers)
@@ -317,7 +320,8 @@ impl GameClient {
                 game
             }
         };
-        let turn_phase = if let Some(river_tiles) = config.expansions.rivers() {
+        let turn_phase = if let Some(mut river_tiles) = config.expansions.rivers() {
+            river_tiles.shuffle(&mut rng);
             let tiles: HashMap<GridPos, Tile> = checker_spiral()
                 .map(GridPos::from)
                 .zip(river_tiles)
