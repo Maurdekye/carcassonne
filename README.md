@@ -60,7 +60,7 @@ The boardgame Carcassonne implemented in Rust using the ggez game engine.
 * ~~Persistent host ip & port~~
 * ~~Usernames~~
 * ~~Key rebinding~~
-* River tiles
+* ~~River tiles~~
 * Minecraft-style server browser
 * Highlight on most recently placed tile
 * More animations in general
